@@ -749,6 +749,10 @@
         res && ["Last update", `${res.result === "ok" ? '<span class="pill good">installed</span>' : '<span class="pill bad">failed</span>'} ${esc(res.version)} ${when(res.at)}${res.detail ? `<div class="small muted">${esc(res.detail)}</div>` : ""}`],
         u.live.length && ["Show on", `<span class="pill warn">waiting</span> A timer is running or paused in ${esc(u.live.join(", "))}. Nothing installs until it's stopped.`],
         u.requested && ["Install now", `<span class="pill warn">asked</span> ${esc(u.requested)} is installing now${u.live.length ? `, once the show in ${esc(u.live.join(", "))} is over` : ""}. The server restarts by itself in a minute or two. <button class="small" id="updCancel">Cancel</button>`]])}
+        ${u.progress && u.progress.step ? `<div class="panel" style="margin-top:.8rem"><h2>Installation progress</h2>
+          <div style="margin-bottom:.4rem"><b>${esc(u.progress.step)}</b>: ${esc(u.progress.message)}</div>
+          <div style="width:100%;background:var(--line);height:8px;border-radius:4px;overflow:hidden"><div style="width:${u.progress.percent}%;background:var(--accent);height:100%"></div></div>
+          <div class="small muted">${u.progress.percent}% complete</div></div>` : ""}
         <div class="row" style="margin-top:.8rem"><button id="updCheck">Check now</button>${u.available && !u.requested ? `<button class="primary" id="updInstall">Install ${esc(L.version)} now</button>` : ""}</div>
         <p class="small" id="updSaid" role="status" style="margin:.4rem 0 0"></p>
         ${u.host_updater ? "" : `<p class="small" style="color:var(--warn)">This server's automatic updater hasn't been in touch${u.host_seen_at ? ` since ${when(new Date(u.host_seen_at * 1000).toISOString())}` : ""}. Install now and Install by itself need it: on the server, run <code>sudo ./install.sh --updater</code> in the AT-SUITE folder once.</p>`}
@@ -760,7 +764,26 @@
         <p class="small muted">A read-only token (Contents: read; for the published image also read:packages). It stays on this server.${u.has_token ? ' <a href="#" id="updForget">Remove it</a>' : ""}</p>
         <div class="row" style="margin-top:.8rem"><button class="primary">Save</button></div></form></div>`;
     const again = () => admUpdates(a);
-    // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
+  let progressInterval = null;
+  // Auto-refresh when installation is in progress
+  if (u.progress && u.progress.step && u.progress.step !== "complete" && u.progress.step !== "failed") {
+    progressInterval = setInterval(() => {
+      guard(() => api("/api/admin/updates")).then((s) => {
+        if (s.progress && (s.progress.step === "complete" || s.progress.step === "failed")) {
+          clearInterval(progressInterval);
+        }
+        again();
+      }, () => {});
+    }, 2000);  // Refresh every 2 seconds during installation
+  }
+  // Clean up interval when leaving the tab
+  const originalAgain = again;
+  const cleanup = () => {
+    if (progressInterval) clearInterval(progressInterval);
+    removeEventListener("hashchange", cleanup);
+  };
+  addEventListener("hashchange", cleanup);
+  // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
     const said = (s) => s.helper ? ["This is a helper server. It updates with its main server.", ""]
       : s.error ? [`Couldn't check: ${s.error}`, "bad"]
       : s.available ? [`${s.latest.version} is out.`, "good"]
