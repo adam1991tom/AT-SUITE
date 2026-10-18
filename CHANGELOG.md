@@ -5,6 +5,19 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.3
+
+**UI improvements and visual enhancements**
+
+- Timer display now shows negative time with "-" instead of "+"
+- Quick timer shortcuts made bigger for better touch targets
+- Pre-made message buttons enlarged for better visibility
+- Standard view links changed from "Room name ↗" to "Preview"
+- Removed logo upload from Standard view (now uses Settings → General only)
+- Buttons more responsive with hover lift effect and active depression
+- Added color-coded button classes: .btn-stop (red) and .btn-go (green)
+- Improved tactile feedback and visual hierarchy
+
 ## 1.20.2
 
 **Installer-like progress display for updates**
