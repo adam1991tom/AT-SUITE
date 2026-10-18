@@ -5,6 +5,14 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release.
 
+## 1.20.1
+
+The tech workspace gets its bottom strip back, and the laptop app opens full size.
+
+- The taskbar along the bottom of the workspace is gone. Its buttons are now the **Layout** menu in the top bar: every window is listed there (click one to open it, bring it forward or minimise it), with the saved layouts underneath. A window with something unread still shows its count, on the menu button too.
+- Saving, deleting, resetting and sharing a layout ask in the menu itself. In the Windows app those buttons used to do nothing, because the app turns off the browser's question boxes.
+- The Windows app opens maximised (like pressing the maximise button, not full screen), and maximises again when a tech signs in or starts the day.
+
 ## 1.20.0
 
 Major security hardening release. All tokens and passwords are now stronger, with backward compatibility maintained.
@@ -53,6 +61,7 @@ Report a bug goes to the console instead of an email app. Security hardening.
 - Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
 - Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
 - Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
+>>>>>>> ATSUITE
 
 ## 1.10.3
 
