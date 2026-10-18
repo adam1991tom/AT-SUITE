@@ -213,8 +213,6 @@ MIGRATIONS: list[str] = [
     ALTER TABLE nodes ADD COLUMN hash_algorithm TEXT DEFAULT 'sha256';
     -- Session key rotation tracking for future implementation
     ALTER TABLE sessions ADD COLUMN key_version INTEGER DEFAULT 1;
-    -- Update password_hash comments to reflect new iteration count
-    COMMENT ON COLUMN accounts.password_hash IS 'PBKDF2-SHA256 with 300,000 iterations';
     -- Password migration tracking: rehash passwords with new iteration count on next sign-in
     ALTER TABLE accounts ADD COLUMN password_needs_rehash INTEGER DEFAULT 1;
     """,
