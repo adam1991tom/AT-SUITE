@@ -7,11 +7,12 @@ the GitHub release.
 
 ## 1.20.1
 
-The tech workspace gets its bottom strip back, and the laptop app opens full size.
+**Critical bug fix** - Security headers caused server to fail on startup.
 
-- The taskbar along the bottom of the workspace is gone. Its buttons are now the **Layout** menu in the top bar: every window is listed there (click one to open it, bring it forward or minimise it), with the saved layouts underneath. A window with something unread still shows its count, on the menu button too.
-- Saving, deleting, resetting and sharing a layout ask in the menu itself. In the Windows app those buttons used to do nothing, because the app turns off the browser's question boxes.
-- The Windows app opens maximised (like pressing the maximise button, not full screen), and maximises again when a tech signs in or starts the day.
+- Fixed AttributeError in SecretsOutOfAddresses middleware
+- ASGI headers are a list of tuples, not a dict (fixed iteration logic)
+- This was causing 500 errors on health endpoint during updates
+- No other changes from 1.20.0
 
 ## 1.20.0
 
