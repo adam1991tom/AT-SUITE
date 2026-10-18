@@ -28,9 +28,10 @@ _ROLE_RANK = {"viewer": 0, "tech": 1, "manager": 2, "admin": 3}
 
 
 # Same format as AT-RoomComms and AT-Presenter, so migrated accounts keep their passwords.
+# Increased iterations in 1.20.0 for stronger password hashing (200k → 300k).
 def hash_password(password: str, salt: str | None = None) -> str:
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000).hex()
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 300_000).hex()
     return f"{salt}${digest}"
 
 
@@ -42,12 +43,19 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(hash_password(password, salt), stored)
 
 
-def token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+def token_hash(token: str, algorithm: str = "sha512") -> str:
+    """Hash a token with the specified algorithm (sha256 for backward compatibility, sha512 for new tokens)."""
+    if algorithm == "sha256":
+        return hashlib.sha256(token.encode()).hexdigest()
+    elif algorithm == "sha512":
+        return hashlib.sha512(token.encode()).hexdigest()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
 
 def new_token(prefix: str = "") -> str:
-    return prefix + secrets.token_urlsafe(32)
+    # Increased token length in 1.20.0 for stronger security (32 → 48 bytes)
+    return prefix + secrets.token_urlsafe(48)
 
 
 # ------------------------------------------------------------- encryption --
@@ -109,25 +117,35 @@ def create_session(c, account_id: int, minutes: int | None = None) -> str:
     now = datetime.now(timezone.utc)
     life = timedelta(minutes=minutes) if minutes else timedelta(hours=config.cfg.session_hours)
     c.execute(
-        "INSERT INTO sessions(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)",
-        (token_hash(token), account_id, now.isoformat(), (now + life).isoformat()),
+        "INSERT INTO sessions(token_hash,account_id,created_at,expires_at,hash_algorithm) VALUES(?,?,?,?,?)",
+        (token_hash(token, "sha512"), account_id, now.isoformat(), (now + life).isoformat(), "sha512"),
     )
     return token
 
 
 def _from_session(c, token: str) -> Principal | None:
+    # Try sha512 first (new in 1.20.0), fall back to sha256 for backward compatibility
     r = c.execute(
         "SELECT a.id,a.username,a.display_name,a.role,a.site_id,s.expires_at FROM sessions s "
         "JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND a.active=1",
-        (token_hash(token),),
+        (token_hash(token, "sha512"),),
     ).fetchone()
+    if not r:
+        r = c.execute(
+            "SELECT a.id,a.username,a.display_name,a.role,a.site_id,s.expires_at FROM sessions s "
+            "JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND a.active=1",
+            (token_hash(token, "sha256"),),
+        ).fetchone()
     if not r or r["expires_at"] < datetime.now(timezone.utc).isoformat():
         return None
     return Principal("account", r["id"], r["display_name"] or r["username"], r["role"], r["site_id"])
 
 
 def _from_node(c, token: str) -> Principal | None:
-    r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token),)).fetchone()
+    # Try sha512 first (new in 1.20.0), fall back to sha256 for backward compatibility
+    r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token, "sha512"),)).fetchone()
+    if not r:
+        r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token, "sha256"),)).fetchone()
     return _node_principal(r)
 
 

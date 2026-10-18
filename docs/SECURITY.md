@@ -11,14 +11,16 @@ AT-SUITE is designed with security as a core principle. The application handles 
 ### Authentication & Authorization
 
 #### Password Security
-- **Hashing:** PBKDF2-SHA256 with 200,000 iterations
+- **Hashing:** PBKDF2-SHA256 with 300,000 iterations (increased from 200,000 in 1.20.0)
 - **Salting:** Random 16-byte salt per password
 - **Comparison:** Constant-time HMAC comparison to prevent timing attacks
 - **Policy:** Tech passwords require changing if set by another user
+- **Migration:** Automatic rehashing on next sign-in when migrating from older versions
 
 #### Session Management
-- **Token Generation:** cryptographically secure random tokens (`secrets.token_urlsafe(32)`)
-- **Storage:** Tokens stored as SHA-256 hashes in the database
+- **Token Generation:** cryptographically secure random tokens (`secrets.token_urlsafe(48)`, increased from 32 in 1.20.0)
+- **Storage:** Tokens stored as SHA-512 hashes in the database (upgraded from SHA-256 in 1.20.0)
+- **Backward Compatibility:** Old SHA-256 tokens continue to work until renewed
 - **Expiration:** Configurable session lifetime (default: hours-based)
 - **Node Authentication:** Token-based with operator assignment
 - **WebSocket Authentication:** Single-use tickets (60-second expiry) to prevent token leakage in logs
@@ -37,6 +39,12 @@ AT-SUITE is designed with security as a core principle. The application handles 
 - **Key Management:** Auto-generated key file with 0o600 permissions
 - **Encrypted Fields:** Messages, presenter emails/phones, bug reports
 - **Key Rotation:** Supported via `reset_keys()` function
+
+#### Database Security
+- **Hash Algorithm Tracking:** Database tracks which hash algorithm (sha256/sha512) was used for each token
+- **Password Migration:** Automatic rehashing with new iteration count on next sign-in
+- **Schema Version:** Current schema 14 (1.20.0)
+- **Migration:** Non-breaking - existing tokens remain valid, new tokens use stronger hashing
 
 #### Data in Transit
 - **HTTPS:** Supported via Caddy reverse proxy (docker-compose TLS profile)
@@ -234,6 +242,7 @@ AT-SUITE is designed with security as a core principle. The application handles 
 
 ## Version History
 
+- **1.20.0 (2026-10-18):** Major security hardening - PBKDF2 iterations 200k→300k, tokens 32→48 bytes, SHA-256→SHA-512 hashing with backward compatibility
 - **1.10.4 (2026-10-18):** Added security headers, rate limiting, SSH host key verification
 - **1.10.3:** Earlier security improvements (see CHANGELOG.md)
 

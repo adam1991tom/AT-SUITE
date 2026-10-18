@@ -5,6 +5,40 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release.
 
+## 1.20.0
+
+Major security hardening release. All tokens and passwords are now stronger, with backward compatibility maintained.
+
+**Password security**
+- PBKDF2-SHA256 iterations increased from 200,000 to 300,000 for stronger password hashing
+- Automatic password rehashing on next sign-in when migrating from older versions
+- Passwords flagged for rehashing when created with older iteration counts
+
+**Token security**
+- Token length increased from 32 to 48 bytes (secrets.token_urlsafe) for stronger tokens
+- Token hashing upgraded from SHA-256 to SHA-512 for new tokens
+- Database tracks hash algorithm used per token (sha256 for backward compatibility, sha512 for new)
+- Session, API key, and node tokens all use the new stronger hashing
+- Backward compatibility: old SHA-256 tokens continue to work until renewed
+
+**Database schema (14)**
+- Added `hash_algorithm` column to sessions, api_keys, and nodes tables
+- Added `key_version` column to sessions for future key rotation support
+- Added `password_needs_rehash` column to accounts for automatic password migration
+- Non-breaking migration: existing tokens continue to work, new tokens use stronger hashing
+
+**Security posture**
+- Maintains all security headers from 1.10.4 (HSTS, CSP, X-Frame-Options)
+- Maintains API rate limiting from 1.10.4 (20 login/min, 200 requests/min)
+- Maintains SSH host key verification from 1.10.4
+- Maintains comprehensive SECURITY.md documentation
+
+**Migration notes**
+- Existing sessions, API keys, and node tokens remain valid (backward compatible)
+- New tokens automatically use SHA-512 hashing
+- Passwords rehash on next sign-in with new iteration count
+- No action required from administrators; migration is transparent
+
 ## 1.10.4
 
 Report a bug goes to the console instead of an email app. Security hardening.
