@@ -79,7 +79,10 @@ class SecretsOutOfAddresses:
         no_store = path.startswith(("/api/auth/", "/api/setup", "/api/nodes/enrol", "/api/screens/pair", "/api/present/", "/present/"))
         referrer = b"no-referrer" if path.startswith(("/present/", "/api/present/")) else b"same-origin"
         # Detect HTTPS from the scope (when behind a reverse proxy like Caddy)
-        is_https = scope.get("scheme", "") == "https" or scope.get("headers", {}).get(b"x-forwarded-proto", b"") == b"https"
+        # ASGI headers are a list of tuples, not a dict
+        headers_list = scope.get("headers", [])
+        x_forwarded_proto = next((v for k, v in headers_list if k == b"x-forwarded-proto"), b"")
+        is_https = scope.get("scheme", "") == "https" or x_forwarded_proto == b"https"
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
