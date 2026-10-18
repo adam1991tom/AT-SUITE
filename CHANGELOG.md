@@ -3,7 +3,18 @@
 Versions follow [semantic versioning](https://semver.org). To release, set
 `VERSION`, add a section here, merge to `ATSUITE`, then push a tag `vX.Y.Z` (or
 publish that release on GitHub); the release workflow publishes the image and
-the GitHub release.
+the GitHub release).
+
+## 1.20.2
+
+**Installer-like progress display for updates**
+
+- Updates now show detailed progress like a real installer
+- Progress bar shows percentage complete
+- Step-by-step status: checking, downloading, building, stopping, starting, health check
+- Settings page auto-refreshes every 2 seconds during installation
+- update.sh reports progress at each stage of the update process
+- Clear visual feedback when installation completes or fails
 
 ## 1.20.1
 
