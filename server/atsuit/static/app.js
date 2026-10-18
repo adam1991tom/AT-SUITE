@@ -389,10 +389,10 @@
       const builtins = views.filter((v) => v.builtin && !v.test);
       const bdngView = custom.find((v) => v.slug === "bdng");
       const looks = Object.fromEntries(await Promise.all([...builtins, ...custom].map((v) => api(`/api/timers-views/look/${encodeURIComponent(v.id)}`).then((l) => [v.id, l]).catch(() => [v.id, null]))));
-      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">${esc(r.name)} ↗</a>`).join(" · ");
+      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">Preview</a>`).join(" · ");
       const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">${label}</span>
         ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : `<span class="muted">${view === "bdng" ? "none" : "site logo"}</span>`}
-        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
+        ${isAdmin && view === "bdng" ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
       const D = { name: "", background: "#000000", text: "#ffffff", timer_size: 24, title_size: 4, show_logo: false, show_title: true, show_next: false, show_progress: true, show_clock: false, show_message: true, show_status: true, show_secondary: true };
       const SHOW = { show_logo: "Logo", show_title: "Title", show_next: "Next cue", show_progress: "Progress bar", show_clock: "Time of day", show_message: "Stage message", show_status: "Status bar", show_secondary: "Second line" };
       box.innerHTML = `<p class="small muted">Built in: ${views.filter((v) => v.builtin && !v.test).map((v) => esc(v.name)).join(", ")}. All of them turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Overlay window is see-through, for a small window on a laptop or a bar across a screen.</p>
@@ -400,7 +400,7 @@
           ${builtins.map((v) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>${esc(v.name)}</label>`).join("")}</div>
         <p class="small muted">Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to override it there.</p>
         <h3>Standard and BDNG</h3>
-        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">No logo uploaded: the site logo from Settings → General.</p></td></tr>
+        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">Uses the site logo from Settings → General.</p></td></tr>
           <tr><td><b>BDNG sponsor clock</b> <span class="pill">imported view</span>
             <div class="small">${bdngView ? boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/bdng/">${esc(r.name)} ↗</a>`).join(" · ") : '<span class="muted">Not imported yet: screens set to BDNG show the Standard view.</span>'}</div>
             <div class="small" style="margin-top:.3rem">${isAdmin ? `<button class="small${bdngView ? "" : " primary"}" data-impbdng>${bdngView ? "Import again" : "Import BDNG view"}</button> ` : ""}<a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></div></td>
