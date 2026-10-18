@@ -5,7 +5,7 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release.
 
-## 1.10.6
+## 1.20.2
 
 The AI helper is a chat now, and it knows a lot more about fixing shows.
 
@@ -24,6 +24,72 @@ The AI helper is a chat now, and it knows a lot more about fixing shows.
 **Admins can read and change it**
 - Settings → AI helper → Tech guide lists every topic. Change one and your copy is used instead of the built-in one (Reset brings it back), or add your own topic. It points out questions that are written wrong.
 - Venue notes still come first, ahead of the guide.
+
+## 1.20.1
+
+The tech workspace gets its bottom strip back, and the laptop app opens full size.
+
+- The taskbar along the bottom of the workspace is gone. Its buttons are now the **Layout** menu in the top bar: every window is listed there (click one to open it, bring it forward or minimise it), with the saved layouts underneath. A window with something unread still shows its count, on the menu button too.
+- Saving, deleting, resetting and sharing a layout ask in the menu itself. In the Windows app those buttons used to do nothing, because the app turns off the browser's question boxes.
+- The Windows app opens maximised (like pressing the maximise button, not full screen), and maximises again when a tech signs in or starts the day.
+
+## 1.20.0
+
+Major security hardening release. All tokens and passwords are now stronger, with backward compatibility maintained.
+
+**Password security**
+- PBKDF2-SHA256 iterations increased from 200,000 to 300,000 for stronger password hashing
+- Automatic password rehashing on next sign-in when migrating from older versions
+- Passwords flagged for rehashing when created with older iteration counts
+
+**Token security**
+- Token length increased from 32 to 48 bytes (secrets.token_urlsafe) for stronger tokens
+- Token hashing upgraded from SHA-256 to SHA-512 for new tokens
+- Database tracks hash algorithm used per token (sha256 for backward compatibility, sha512 for new)
+- Session, API key, and node tokens all use the new stronger hashing
+- Backward compatibility: old SHA-256 tokens continue to work until renewed
+
+**Database schema (14)**
+- Added `hash_algorithm` column to sessions, api_keys, and nodes tables
+- Added `key_version` column to sessions for future key rotation support
+- Added `password_needs_rehash` column to accounts for automatic password migration
+- Non-breaking migration: existing tokens continue to work, new tokens use stronger hashing
+
+**Security posture**
+- Maintains all security headers from 1.10.4 (HSTS, CSP, X-Frame-Options)
+- Maintains API rate limiting from 1.10.4 (20 login/min, 200 requests/min)
+- Maintains SSH host key verification from 1.10.4
+- Maintains comprehensive SECURITY.md documentation
+
+**Migration notes**
+- Existing sessions, API keys, and node tokens remain valid (backward compatible)
+- New tokens automatically use SHA-512 hashing
+- Passwords rehash on next sign-in with new iteration count
+- No action required from administrators; migration is transparent
+
+## 1.10.4
+
+Report a bug goes to the console instead of an email app. Security hardening.
+
+- **Report a bug** opens a form in AT SUITE: what went wrong, what you were doing, and a screenshot if you like (choose a file, or press Print Screen and paste it with Ctrl+V). It's on Settings → About in the console, and in the Help menu on tech laptops. The version, server, page and browser are added for you. Nothing is emailed.
+- **Bug reports** is a new page in the console for admins. It shows every report with its screenshot and details, says how many are still open in the side bar, and pops up a note when a new one arrives. Admins mark a report resolved, open it again, or delete it.
+- **Send to GitHub (optional)**: add a GitHub repository and token on the Bug reports page and a report can open a GitHub issue, when an admin presses Send to GitHub or for every new report by itself. It's off until set up, so nothing leaves the server by default. The issue gets the title, the details, the version and the system, never names, the organisation, rooms, addresses or the screenshot, because repositories can be public.
+- Reports are stored encrypted on the server (database schema 13). One person or laptop can send up to 10 an hour.
+
+**Security hardening**
+- Added security headers: HSTS (HTTPS only), Content-Security-Policy, and X-Frame-Options to prevent clickjacking and XSS attacks.
+- Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
+- Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
+- Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
+
+## 1.10.3
+
+Check now in Settings → Updates says what it found.
+
+- Check now shows its answer next to the button: up to date, a new version is out, or why it couldn't check. Before, a check that changed nothing on the page looked like the button did nothing, and an error stayed hidden once the server had seen a release.
+- Check now asks GitHub even when updates are set to Off. Off still stops the checks the server does by itself.
+- The GitHub repository field is gone. Updates always come from AT SUITE's own releases, and a repository saved by an older version is ignored. The GitHub token stays.
+>>>>>>> ATSUITE
 
 ## 1.10.2
 

@@ -27,6 +27,7 @@
     people: { title: "People", role: "manager", tabs: { people: ["People", admAccounts] } },
     links: { title: "Links", role: "manager", mod: "dashboard", tabs: { links: ["Links", admLinks] } },
     settings: { title: "Settings", role: "admin", tabs: { general: ["General", admGeneral], appearance: ["Look", admAppearance], chat: ["Chat", admChat], ai: ["AI helper", admAi], keys: ["API keys", admKeys], updates: ["Updates", admUpdates], info: ["About", admInfo] } },
+    bugs: { title: "Bug reports", role: "admin", tabs: { bugs: ["Bug reports", admBugs] } },
     licence: { title: "Licence", role: "admin", tabs: { licence: ["Licence", admLicence] } },
     servers: { title: "Servers", role: "admin", tabs: { servers: ["Servers", admServers] } },
     backups: { title: "Backups & import", role: "admin", tabs: { backups: ["Backups", admData] } },
@@ -68,7 +69,7 @@
 
   function topics() {
     return [...boot.sites.map((s) => `site:${s.id}`), ...boot.rooms.map((r) => `room:${r.id}`), `dm:${boot.me.id}`, "fleet",
-      ...boot.rooms.map((r) => `timer:${r.id}`), ...boot.rooms.map((r) => `captions:${r.id}`), ...(boot.modules.presenter ? ["presenter"] : []), ...(isManager ? ["managers"] : [])];
+      ...boot.rooms.map((r) => `timer:${r.id}`), ...boot.rooms.map((r) => `captions:${r.id}`), ...(boot.modules.presenter ? ["presenter"] : []), ...(isManager ? ["managers"] : []), ...(isAdminRole ? ["admins"] : [])];
   }
 
   function start() {
@@ -88,6 +89,7 @@
       sock = AT.socket(topics(), onEvent);
       if (boot.modules.comms) { refreshHelpCount(); refreshUnread(); }
       if (isManager) setResets(boot.reset_asks || []);
+      if (isAdminRole) refreshBugs();
     }
     route();
   }
@@ -95,6 +97,11 @@
   // People in the side bar shows how many are waiting for a password reset.
   function setResets(asks) { const u = document.getElementById("resetCount"); u.textContent = asks.length; u.classList.toggle("hidden", !asks.length); }
   function refreshResets() { if (isManager) api("/api/bootstrap").then((b) => { boot.reset_asks = b.reset_asks; setResets(b.reset_asks || []); }).catch(() => {}); }
+
+  // Bug reports in the side bar shows how many are still open (admins only).
+  function refreshBugs() {
+    api("/api/admin/bugs?status=open").then((d) => { const u = document.getElementById("bugCount"); u.textContent = d.open; u.classList.toggle("hidden", !d.open); }).catch(() => {});
+  }
 
   // The Chat badge in the side bar, on every page (the Chat page keeps it up to date while it's open).
   function setUnread(n) { const u = document.getElementById("unreadAll"); u.textContent = n > 99 ? "99+" : n; u.classList.toggle("hidden", !n); }
@@ -109,6 +116,8 @@
     if (evt.type === "help.new") { toast(`Help needed in ${evt.data.room_name}: ${evt.data.description || evt.data.category}`, "bad"); refreshHelpCount(); }
     if (evt.type === "help.escalated") { toast(`Still no answer: help in ${evt.data.room_name} (${Math.max(1, Math.round((evt.data.waited_s || 0) / 60))} min). ${evt.data.description || evt.data.category}`, "bad"); refreshHelpCount(); }
     if (evt.type === "help.updated") refreshHelpCount();
+    if (evt.type === "bug.new") { if (evt.data.reporter !== boot.me.name) toast(`Bug report from ${evt.data.reporter}${evt.data.room_name ? ` in ${evt.data.room_name}` : ""}: ${evt.data.title}`); refreshBugs(); }
+    if (evt.type === "bug.updated") refreshBugs();
     if (evt.type === "rooms.changed") api("/api/bootstrap").then((b) => { boot = b; });
     if (evt.type === "account.reset") {
       const d = evt.data;
@@ -726,7 +735,9 @@
     const MODES =[["auto", "Install by itself", "When a new version is out and no show is on, the server updates itself: backup first, health check, rolled back if it isn't healthy."],
       ["notify", "Tell me only", "Shows here when a new version is out. Press Install now to update."],
       ["off", "Off", "Doesn't check. Update with sudo ./update.sh on the server."]];
-    const state = !u.latest ? (u.error ? `<span class="pill bad">Couldn't check</span> ${esc(u.error)}` : '<span class="muted">Not checked yet.</span>')
+    const state = u.helper ? '<span class="muted">A helper server updates with its main server.</span>'
+      : u.error ? `<span class="pill bad">Couldn't check</span> ${esc(u.error)}${L.version ? `<div class="small muted">The newest release it saw before was ${esc(L.version)}.</div>` : ""}`
+      : !u.latest ? '<span class="muted">Not checked yet.</span>'
       : u.available ? `<span class="pill warn">${esc(L.version)} is out</span> ${L.published_at ? `<span class="muted small">released ${when(L.published_at)}</span>` : ""}`
       : u.ahead ? `<span class="pill">Ahead of GitHub</span><div class="small muted">This server runs ${esc(u.current)}, newer than the newest release on GitHub (${esc(L.version)}). It updates again once a release newer than ${esc(u.current)} is published. Press Check now if one just came out.</div>`
       : `<span class="pill good">Up to date</span>`;
@@ -739,23 +750,38 @@
         u.live.length && ["Show on", `<span class="pill warn">waiting</span> A timer is running or paused in ${esc(u.live.join(", "))}. Nothing installs until it's stopped.`],
         u.requested && ["Install now", `<span class="pill warn">asked</span> ${esc(u.requested)} is installing now${u.live.length ? `, once the show in ${esc(u.live.join(", "))} is over` : ""}. The server restarts by itself in a minute or two. <button class="small" id="updCancel">Cancel</button>`]])}
         <div class="row" style="margin-top:.8rem"><button id="updCheck">Check now</button>${u.available && !u.requested ? `<button class="primary" id="updInstall">Install ${esc(L.version)} now</button>` : ""}</div>
+        <p class="small" id="updSaid" role="status" style="margin:.4rem 0 0"></p>
         ${u.host_updater ? "" : `<p class="small" style="color:var(--warn)">This server's automatic updater hasn't been in touch${u.host_seen_at ? ` since ${when(new Date(u.host_seen_at * 1000).toISOString())}` : ""}. Install now and Install by itself need it: on the server, run <code>sudo ./install.sh --updater</code> in the AT-SUITE folder once.</p>`}
         ${L.notes && u.available ? `<details style="margin-top:.6rem"><summary>What's new in ${esc(L.version)}</summary><pre class="small" style="white-space:pre-wrap">${esc(L.notes)}</pre></details>` : ""}</div>
       <form class="panel" id="updForm"><h2>When to update</h2>
         ${MODES.map(([v, t, d]) => `<label class="opt" style="display:block;margin:.3rem 0"><input type="radio" name="mode" value="${v}" ${u.mode === v ? "checked" : ""} style="width:auto"> <b>${t}</b><div class="small muted" style="margin-left:1.6rem">${d}</div></label>`).join("")}
         <p class="small muted">Laptops update from this server: after the server updates, it fetches the same version's Windows app, so laptops need no internet.</p>
-        <label>GitHub repository</label><input name="repo" value="${esc(u.repo)}">
         <label>GitHub token ${u.has_token ? '<span class="pill good">saved</span>' : ""}</label><input name="token" type="password" autocomplete="off" placeholder="${u.has_token ? "Leave empty to keep it" : "Only for a private repository"}">
         <p class="small muted">A read-only token (Contents: read; for the published image also read:packages). It stays on this server.${u.has_token ? ' <a href="#" id="updForget">Remove it</a>' : ""}</p>
         <div class="row" style="margin-top:.8rem"><button class="primary">Save</button></div></form></div>`;
     const again = () => admUpdates(a);
-    a.querySelector("#updCheck").onclick = (e) => { e.target.disabled = true; e.target.textContent = "Checking…"; guard(() => post("/api/admin/updates/check")).then(again, again); };
+    // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
+    const said = (s) => s.helper ? ["This is a helper server. It updates with its main server.", ""]
+      : s.error ? [`Couldn't check: ${s.error}`, "bad"]
+      : s.available ? [`${s.latest.version} is out.`, "good"]
+      : s.ahead ? [`This server runs ${s.current}, newer than the newest release (${s.latest.version}).`, ""]
+      : s.latest ? [`Up to date: ${s.current} is the newest release.`, "good"] : ["Checked, but GitHub has no release yet.", ""];
+    a.querySelector("#updCheck").onclick = (e) => {
+      e.target.disabled = true; e.target.textContent = "Checking…";
+      a.querySelector("#updSaid").textContent = "Asking GitHub for the newest release…";
+      guard(() => post("/api/admin/updates/check")).then(async (s) => {
+        const [msg, kind] = said(s);
+        await again();
+        const out = a.querySelector("#updSaid");
+        if (out) { out.textContent = `${msg} Checked at ${new Date().toLocaleTimeString()}.`; out.style.color = kind ? `var(--${kind}-ink)` : ""; }
+      }, () => { e.target.disabled = false; e.target.textContent = "Check now"; a.querySelector("#updSaid").textContent = "Couldn't reach this server. Try again."; });
+    };
     a.querySelector("#updInstall")?.addEventListener("click", () => confirm(`Install ${L.version} now? The server restarts for about a minute, and only when no timer is running.`) && guard(() => post("/api/admin/updates/install")).then(again));
     a.querySelector("#updCancel")?.addEventListener("click", () => guard(() => del("/api/admin/updates/install")).then(again));
     a.querySelector("#updForget")?.addEventListener("click", (e) => { e.preventDefault(); guard(() => put("/api/admin/updates", { token: "" })).then(again); });
     a.querySelector("#updForm").onsubmit = (e) => {
       e.preventDefault();
-      const f = new FormData(e.target), body = { mode: f.get("mode"), repo: f.get("repo") };
+      const f = new FormData(e.target), body = { mode: f.get("mode") };
       if (f.get("token")) body.token = f.get("token");
       guard(() => put("/api/admin/updates", body)).then(() => { toast("Saved", "good"); again(); });
     };
@@ -851,6 +877,7 @@ Keywords: lectern, gooseneck, mic dead
   // Where Report a bug sends people, for now.
   const BUG_EMAIL = "adam.tomlinson@outlook.com";
 
+
   async function admInfo(a) {
     const i = await api("/api/admin/info"), sv = i.server, st = i.storage, n = i.nodes, c = i.counts;
     const kinds = { tech: "Tech laptops", screen: "Linux screens", caption: "Caption sources", kiosk: "Old kiosk agents" };
@@ -858,11 +885,8 @@ Keywords: lectern, gooseneck, mic dead
     const pill = (ok, yes, no) => `<span class="pill ${ok ? "good" : "warn"}">${ok ? yes : no}</span>`;
     a.innerHTML = `<div class="row" style="margin-bottom:1rem"><a class="btn primary" href="/api/admin/info?download=1">Download diagnostics</a><button id="copyInfo">Copy for a support ticket</button><button id="refresh">Refresh</button>
         <span class="muted small">No passwords, keys or tokens are included.</span></div>
-      <form class="panel" id="bug" style="margin-bottom:1rem"><h2>Report a bug</h2>
-        <p class="small muted" style="margin-top:0">Opens an email to the AT-SUITE team (${esc(BUG_EMAIL)}) in your email app, with this version and server filled in. Nothing is sent until you press Send there.</p>
-        <label>What went wrong?</label><input name="what" maxlength="120" required placeholder="e.g. The stage timer froze in Hall A">
-        <label>What were you doing, and what did you expect?</label><textarea name="steps" rows="4" maxlength="1500" placeholder="Steps, the room, the time it happened"></textarea>
-        <div class="row" style="margin-top:.6rem;justify-content:flex-end"><button class="primary">Write the email</button></div></form>
+      <div class="panel row" style="margin-bottom:1rem"><span class="grow"><b>Report a bug</b><br><span class="small muted">Say what went wrong, with a screenshot if you like. It's saved in <a href="#/bugs">Bug reports</a> with this version and server filled in. Nothing is emailed.</span></span>
+        <button class="primary" id="bugOpen">Report a bug</button></div>
       <div class="grid">
       <div class="panel"><h2>This app</h2>${kv([["Product", esc(i.product)], ["Organisation", esc(i.organisation) || '<span class="muted">not set</span>'], ["Version", `<b>${esc(i.version)}</b>`],
         ["Build", esc(i.build.number)], ["Commit", `<code>${esc(i.build.commit)}</code>`], i.build.date && ["Built", esc(new Date(i.build.date).toLocaleString())], ["Database schema", i.schema],
@@ -887,16 +911,67 @@ Keywords: lectern, gooseneck, mic dead
         ["Your browser", `<span class="small">${esc(navigator.userAgent)}</span>`]])}</div>
       </div>`;
     a.querySelector("#refresh").onclick = () => admInfo(a);
-    const bug = a.querySelector("#bug");
-    bug.onsubmit = (e) => {
-      e.preventDefault();
-      // Short enough for every email app: the details people need, not the whole diagnostics file.
-      const body = `${bug.steps.value.trim() || "(no steps given)"}\n\n---\n${i.product} ${i.version} (build ${i.build.number}, ${i.build.commit}), schema ${i.schema}\n` +
-        `Organisation: ${i.organisation || "-"}. Licence: ${i.licence.licensee || "-"}\nServer: ${sv.hostname}, ${sv.in_docker ? "Docker" : "Python"}, ${sv.os}\n` +
-        `Nodes online: ${n.online ?? "-"} of ${n.total ?? "-"}. Captions: ${i.captions.state}\nBrowser: ${navigator.userAgent}\nReported by ${boot.me.name} at ${new Date().toString()}`;
-      location.href = `mailto:${BUG_EMAIL}?subject=${encodeURIComponent("AT-SUITE bug: " + bug.what.value.trim())}&body=${encodeURIComponent(body)}`;
-    };
+    a.querySelector("#bugOpen").onclick = () => AT.reportBug();
     a.querySelector("#copyInfo").onclick = () => copyText(`${i.product} ${i.version} (build ${i.build.number}, ${i.build.commit}) on ${sv.hostname}\nOpened as ${location.origin}\n\n${JSON.stringify(i, null, 2)}`, "Copied, paste it into the ticket");
+  }
+
+  // Bug reports: what people sent with Report a bug (About, or the Help menu on a tech laptop).
+  // Admins read them, tick them off, and can open a GitHub issue for one.
+  let bugPick = null, bugAll = false;
+  async function admBugs(a) {
+    const d = await api(`/api/admin/bugs${bugAll ? "" : "?status=open"}`), s = d.settings;
+    if (bugPick && !d.reports.some((r) => r.id === bugPick)) bugPick = null;
+    bugPick ??= d.reports[0]?.id ?? null;
+    const who = (r) => `${esc(r.reporter)}${r.room_name ? ` · ${esc(r.room_name)}` : ""} <span class="muted">(${r.reporter_kind === "node" ? "tech laptop" : "console"})</span>`;
+    a.innerHTML = `<div class="row" style="margin-bottom:1rem"><div class="seg" role="group" aria-label="Show"><button type="button" data-all="0" class="${bugAll ? "" : "on"}" aria-pressed="${!bugAll}">Open (${d.open})</button><button type="button" data-all="1" class="${bugAll ? "on" : ""}" aria-pressed="${bugAll}">All</button></div>
+        <span class="grow"></span><button id="bugNew">Report a bug</button></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))">
+      <div class="panel">${d.reports.length ? `<table><tr><th>Report</th><th>From</th><th>When</th></tr>${d.reports.map((r) => `<tr class="bugrow${r.id === bugPick ? " on" : ""}" data-bug="${r.id}">
+          <td><button type="button" class="bugpick">${esc(r.title)}</button>${r.status === "resolved" ? ' <span class="pill good">resolved</span>' : ""}${r.github_url ? ' <span class="pill">on GitHub</span>' : ""}${r.has_screenshot ? ' <span class="muted small">· screenshot</span>' : ""}
+          <div class="small muted">${esc(r.description.slice(0, 120))}</div></td><td class="small">${who(r)}</td><td class="small muted">${when(r.created_at)}</td></tr>`).join("")}</table>`
+        : `<p class="muted">${bugAll ? "No bug reports yet." : "No open bug reports."} People send them with Report a bug in Settings → About, or in the Help menu on a tech laptop.</p>`}</div>
+      <div class="panel" id="bugOne"><p class="muted">Pick a report to read it.</p></div></div>
+      <form class="panel" id="bugGh" style="margin-top:1rem"><h2>Send to GitHub (optional)</h2>
+        <p class="small muted" style="margin-top:0">Off until you add a repository and token: reports stay on this server. With them, a report can open an issue in your GitHub repository. The issue gets the title, what happened, and the version and system. Never names, the organisation, rooms, addresses or the screenshot, as repositories can be public.</p>
+        <label>Repository (owner/name)</label><input name="repo" placeholder="my-company/at-suite-bugs" value="${esc(s.github_repo)}" autocomplete="off">
+        <label>GitHub token</label><input name="token" type="password" autocomplete="off" placeholder="${s.has_token ? "Saved. Type a new one to replace it" : "A fine-grained token with Issues: read and write"}">
+        ${s.has_token ? '<label><input type="checkbox" name="rmtoken" style="width:auto"> Remove the saved token</label>' : ""}
+        <label><input type="checkbox" name="auto" ${s.auto_github ? "checked" : ""} style="width:auto"> Open an issue for every new report by itself</label>
+        <div class="row" style="margin-top:.8rem"><button class="primary">Save</button>${s.github_ready ? '<span class="pill good">Ready</span>' : '<span class="pill">Off</span>'}</div></form>`;
+    a.querySelectorAll("[data-all]").forEach((b) => b.onclick = () => { bugAll = b.dataset.all === "1"; admBugs(a); });
+    a.querySelector("#bugNew").onclick = () => AT.reportBug();
+    a.querySelectorAll("[data-bug]").forEach((tr) => tr.onclick = () => { bugPick = +tr.dataset.bug; a.querySelectorAll(".bugrow").forEach((x) => x.classList.toggle("on", x === tr)); one(); });
+    const g = a.querySelector("#bugGh");
+    g.onsubmit = (e) => {
+      e.preventDefault();
+      const token = g.rmtoken?.checked ? "" : (g.token.value.trim() || null);
+      guard(() => put("/api/admin/bugs/settings", { github_repo: g.repo.value.trim(), token, auto_github: g.auto.checked })).then(() => { toast("Saved", "good"); admBugs(a); });
+    };
+    async function one() {
+      const box = a.querySelector("#bugOne");
+      if (!bugPick) return;
+      const r = await api(`/api/admin/bugs/${bugPick}`), sy = r.system || {};
+      box.innerHTML = `<h2>${esc(r.title)}</h2><p class="small muted" style="margin-top:0">From ${who(r)}, ${when(r.created_at)}${r.status === "resolved" ? `. Resolved by ${esc(r.resolved_by || "")} ${when(r.resolved_at)}` : ""}</p>
+        <div style="white-space:pre-wrap">${esc(r.description) || '<span class="muted">No details given.</span>'}</div>
+        ${r.has_screenshot ? `<p><a href="/api/admin/bugs/${r.id}/screenshot" target="_blank" rel="noopener"><img class="bugshot" src="/api/admin/bugs/${r.id}/screenshot" alt="Screenshot sent with the report"></a></p>` : ""}
+        ${kv([["Version", `${esc(sy.version || "?")} <span class="muted small">build ${esc(sy.build || "?")}, ${esc(sy.commit || "?")}, schema ${esc(sy.schema ?? "?")}</span>`], ["Server", `<span class="small">${esc(sy.running_in || "")} on ${esc(sy.os || "?")}</span>`],
+          r.app_version && ["Laptop app", esc(r.app_version)], r.page && ["Page", `<code>${esc(r.page)}</code>`], r.user_agent && ["Browser", `<span class="small">${esc(r.user_agent)}</span>`],
+          r.github_url && ["GitHub", `<a href="${esc(r.github_url)}" target="_blank" rel="noopener">${esc(r.github_url.replace("https://github.com/", ""))}</a>`],
+          !r.github_url && r.github_error && ["GitHub", `<span class="pill bad">not sent</span> <span class="small">${esc(r.github_error)}</span>`]])}
+        <div class="row" style="margin-top:.8rem">${r.status === "open" ? '<button class="primary" data-st="resolved">Mark resolved</button>' : '<button data-st="open">Open again</button>'}
+          ${s.github_ready && !r.github_url ? '<button id="bugGhSend">Send to GitHub</button>' : ""}<span class="grow"></span><button class="danger" id="bugDel">Delete</button></div>`;
+      box.querySelector("[data-st]").onclick = (e) => guard(() => put(`/api/admin/bugs/${r.id}`, { status: e.target.dataset.st })).then(() => admBugs(a));
+      box.querySelector("#bugGhSend")?.addEventListener("click", (e) => { e.target.disabled = true; guard(() => post(`/api/admin/bugs/${r.id}/github`)).then(() => { toast("Issue opened on GitHub", "good"); admBugs(a); }, () => { e.target.disabled = false; one(); }); });
+      // Two presses to delete, so nothing goes by accident (no browser pop-ups: they don't work in the laptop app).
+      const del_ = box.querySelector("#bugDel");
+      del_.onclick = () => {
+        if (!del_.dataset.sure) { del_.dataset.sure = "1"; del_.textContent = "Press again to delete"; setTimeout(() => { if (del_.isConnected) { delete del_.dataset.sure; del_.textContent = "Delete"; } }, 4000); return; }
+        guard(() => del(`/api/admin/bugs/${r.id}`)).then(() => { bugPick = null; admBugs(a); });
+      };
+    }
+    one();
+    // New reports show as they come in, but not while the GitHub settings are being typed.
+    view = { onEvent: (e) => e.type.startsWith("bug.") && !g.contains(document.activeElement) && admBugs(a) };
   }
 
   async function admLicence(a) {
