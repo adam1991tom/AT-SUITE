@@ -26,14 +26,14 @@ var TimerPanel = (() => { // var: cuelist.js looks for window.TimerPanel
       body .tp-h { display: flex; align-items: center; justify-content: space-between; gap: .5rem; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; margin-bottom: .3rem; }
       body .tp-h label { display: inline-flex; align-items: center; gap: .3rem; margin: 0; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: .8rem; }
       body .tp-h input[type=checkbox] { width: auto; }
-      body .tp-q { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.1rem, 1fr)); gap: .3rem; }
-      body .tp-q button { justify-content: center; padding: .45rem 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+      body .tp-q { display: grid; grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr)); gap: .4rem; }
+      body .tp-q button { justify-content: center; padding: .6rem 0; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 1.1rem; }
       body .tp-q button.cur { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-text); }
       body .tp-q button.cur.live { background: var(--accent); color: var(--accent-ink); --glow: color-mix(in srgb, var(--accent) 70%, transparent); }
-      body .tp-clock { grid-column: span 3; font-size: 1.05rem; letter-spacing: .03em; }
+      body .tp-clock { grid-column: span 3; font-size: 1.2rem; letter-spacing: .03em; padding: .6rem 0; }
       body .tp-clock:not(.lit) { border-color: var(--accent); color: var(--accent-text); }
-      body .tp-m { display: flex; flex-wrap: wrap; gap: .3rem; }
-      body .tp-m button { padding: .35rem .6rem; font-size: .88rem; }
+      body .tp-m { display: flex; flex-wrap: wrap; gap: .4rem; }
+      body .tp-m button { padding: .5rem .8rem; font-size: 1rem; font-weight: 600; }
       body .tp-m button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; --glow: color-mix(in srgb, var(--accent) 70%, transparent); }
       body .tp-row { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
       body .tp-row input { flex: 1; min-width: 8rem; width: auto; }
