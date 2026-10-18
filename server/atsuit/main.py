@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import VERSION, asr, config, db, hosted, licence, updates
 from .hub import can_subscribe, hub
-from .modules import aihelper, captions, cluster, comms, core, dashboard, fleet, imports, notes, overlays, pairing, preshow, presenter, reports, timers, weather
+from .modules import aihelper, bugs, captions, cluster, comms, core, dashboard, fleet, imports, notes, overlays, pairing, preshow, presenter, reports, timers, weather
 from .security import redact_logs, secret_params, strip_secrets, ws_principal
 
 STATIC = Path(__file__).parent / "static"
@@ -57,7 +57,8 @@ class SecretsOutOfAddresses:
     """No password, token, key or code travels in a web address. A page opened
     with one (a form the browser sent by itself, or a pasted link) is sent on to
     the same page without it, the API refuses one, and every response says not to
-    pass the address on to other sites. Sign-in pages and answers aren't cached."""
+    pass the address on to other sites. Sign-in pages and answers aren't cached.
+    Also adds security headers (HSTS, CSP, X-Frame-Options)."""
 
     def __init__(self, app):
         self.app = app
@@ -77,12 +78,18 @@ class SecretsOutOfAddresses:
             return await _answer(send, 400, body, [(b"content-type", b"application/json")])
         no_store = path.startswith(("/api/auth/", "/api/setup", "/api/nodes/enrol", "/api/screens/pair", "/api/present/", "/present/"))
         referrer = b"no-referrer" if path.startswith(("/present/", "/api/present/")) else b"same-origin"
+        # Detect HTTPS from the scope (when behind a reverse proxy like Caddy)
+        is_https = scope.get("scheme", "") == "https" or scope.get("headers", {}).get(b"x-forwarded-proto", b"") == b"https"
 
         async def send_with_headers(message):
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 have = {k.lower() for k, _ in headers}
-                extra = [(b"referrer-policy", referrer), (b"x-content-type-options", b"nosniff")]
+                extra = [(b"referrer-policy", referrer), (b"x-content-type-options", b"nosniff"),
+                         (b"x-frame-options", b"SAMEORIGIN"),
+                         (b"content-security-policy", b"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:; font-src 'self' data:;")]
+                if is_https:
+                    extra.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
                 if no_store:
                     headers = [(k, v) for k, v in headers if k.lower() != b"cache-control"]
                     extra.append((b"cache-control", b"no-store"))
@@ -150,7 +157,7 @@ def create_app() -> FastAPI:
         return create_helper_app()
     app = FastAPI(title="AT-SUITE", version=VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None)
     for module in (core, comms, timers, fleet, pairing, captions, cluster, overlays, dashboard, presenter, imports, notes, reports, preshow,
-                   weather, aihelper):
+                   weather, aihelper, bugs):
         app.include_router(module.router)
     app.include_router(fleet.legacy)
     app.include_router(hosted.public)
