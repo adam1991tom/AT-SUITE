@@ -9,6 +9,7 @@ import re
 import secrets
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -286,6 +287,53 @@ def redact_logs() -> None:
         log = logging.getLogger(name)
         if _redacting not in log.filters:
             log.addFilter(_redacting)
+
+
+# ------------------------------------------------------------- rate limiting --
+# Simple in-memory rate limiter for API endpoints. Not persistent across restarts,
+# but sufficient for brute force protection. For production with multiple workers,
+# consider Redis or a database-backed implementation.
+_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_LOCK = threading.Lock()
+
+
+def check_rate_limit(identifier: str, limit: int, window_seconds: int = 60) -> bool:
+    """Return True if the identifier is within limits, False if rate limited."""
+    now = time.monotonic()
+    with _RATE_LIMIT_LOCK:
+        requests = _RATE_LIMITS[identifier]
+        # Remove requests outside the time window
+        requests[:] = [t for t in requests if t > now - window_seconds]
+        if len(requests) >= limit:
+            return False
+        requests.append(now)
+        return True
+
+
+def rate_limit_by_ip(limit: int = 100, window_seconds: int = 60):
+    """FastAPI dependency that rate limits by client IP address."""
+    def dep(request: Request) -> None:
+        # Get IP from X-Forwarded-For if behind proxy, otherwise from direct connection
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            ip = forwarded.split(",")[0].strip()
+        else:
+            ip = request.client.host if request.client else "unknown"
+        if not check_rate_limit(f"ip:{ip}", limit, window_seconds):
+            raise HTTPException(429, "Too many requests. Please try again later.")
+    return dep
+
+
+def rate_limit_by_account(limit: int = 200, window_seconds: int = 60):
+    """FastAPI dependency that rate limits by authenticated account."""
+    def dep(request: Request) -> None:
+        p = principal(request)
+        if not p:
+            # Fall back to IP rate limiting for unauthenticated requests
+            return rate_limit_by_ip(limit, window_seconds)(request)
+        if not check_rate_limit(f"account:{p.id}", limit, window_seconds):
+            raise HTTPException(429, "Too many requests. Please try again later.")
+    return dep
 
 
 def require(role: str = "viewer", kinds: tuple[str, ...] = ("account", "node", "apikey")):
