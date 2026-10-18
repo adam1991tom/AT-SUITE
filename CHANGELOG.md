@@ -7,12 +7,18 @@ the GitHub release.
 
 ## 1.10.4
 
-Report a bug goes to the console instead of an email app.
+Report a bug goes to the console instead of an email app. Security hardening.
 
 - **Report a bug** opens a form in AT SUITE: what went wrong, what you were doing, and a screenshot if you like (choose a file, or press Print Screen and paste it with Ctrl+V). It's on Settings → About in the console, and in the Help menu on tech laptops. The version, server, page and browser are added for you. Nothing is emailed.
 - **Bug reports** is a new page in the console for admins. It shows every report with its screenshot and details, says how many are still open in the side bar, and pops up a note when a new one arrives. Admins mark a report resolved, open it again, or delete it.
 - **Send to GitHub (optional)**: add a GitHub repository and token on the Bug reports page and a report can open a GitHub issue, when an admin presses Send to GitHub or for every new report by itself. It's off until set up, so nothing leaves the server by default. The issue gets the title, the details, the version and the system, never names, the organisation, rooms, addresses or the screenshot, because repositories can be public.
 - Reports are stored encrypted on the server (database schema 13). One person or laptop can send up to 10 an hour.
+
+**Security hardening**
+- Added security headers: HSTS (HTTPS only), Content-Security-Policy, and X-Frame-Options to prevent clickjacking and XSS attacks.
+- Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
+- Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
+- Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
 
 ## 1.10.3
 
