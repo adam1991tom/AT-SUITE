@@ -44,6 +44,7 @@ if [ "${1:-}" = "--auto" ]; then
   ATSUIT_REF="$(plan TAG)"; export ATSUIT_REF
   if [ -f .atsuit-repo ] && [ -n "$(plan REPO)" ]; then plan REPO > .atsuit-repo; fi
   echo "$(date '+%F %T') Installing AT-SUITE ${WANT} (running ${OLD_VERSION:-unknown})"
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "downloading" >/dev/null 2>&1 || true
   trap 'report failed "$WANT" "update.sh stopped at line $LINENO before the new version started"' ERR
 fi
 
@@ -117,21 +118,30 @@ if [ "$IMAGE_INSTALL" = 1 ]; then
     set -a; . ./.env; set +a
     if [ -n "$TOKEN" ]; then printf '%s' "$TOKEN" | docker login ghcr.io -u x-access-token --password-stdin >/dev/null 2>&1 || true; fi
   fi
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "pulling image" >/dev/null 2>&1 || true
   docker compose "${PROFILE[@]}" pull
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "stopping" >/dev/null 2>&1 || true
   docker compose "${PROFILE[@]}" up -d --no-build
 else
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "building" >/dev/null 2>&1 || true
   docker compose "${PROFILE[@]}" build --build-arg VERSION="$(cat VERSION 2>/dev/null || echo dev)"
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "stopping" >/dev/null 2>&1 || true
   docker compose "${PROFILE[@]}" up -d
 fi
 
 # 3. Wait for it to answer healthy five times in a row (database upgrades run
 #    on start, so give it a couple of minutes; a crash loop never gets five).
 echo -n "Waiting for the new version"
+docker exec atsuit python -m atsuit.updates report "" "${WANT}" "health check" >/dev/null 2>&1 || true
 NEW_VERSION="" OK=0
-for _ in $(seq 1 90); do
+TOTAL=90
+for i in $(seq 1 $TOTAL); do
   v="$(health || true)"
   if [ -n "$v" ]; then OK=$((OK + 1)); else OK=0; fi
   if [ "$OK" -ge 5 ]; then NEW_VERSION="$v"; echo; break; fi
+  # Report progress: 50% is starting, health check takes up to 50%
+  PERCENT=$((50 + (i * 50 / TOTAL)))
+  docker exec atsuit python -m atsuit.updates report "" "${WANT}" "health check" "$PERCENT" >/dev/null 2>&1 || true
   echo -n "."; sleep 2
 done
 

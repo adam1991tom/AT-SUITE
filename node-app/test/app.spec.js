@@ -132,6 +132,15 @@ async function start(page, { user, password, newPassword, room, mode }) {
 
 const conf = () => JSON.parse(fs.readFileSync(path.join(userData, "node.json"), "utf8"));
 
+// The workspace window: maximised (the maximise button, not full screen)?
+const maximised = (a) => a.evaluate(({ BrowserWindow }) => {
+  const w = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && w.webContents.getURL().includes("/node"));
+  return !!w && w.isMaximized() && !w.isFullScreen();
+});
+const unmaximise = (a) => a.evaluate(({ BrowserWindow }) => {
+  BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && w.webContents.getURL().includes("/node")).unmaximize();
+});
+
 test("after enrolment the tech signs in with their account, picks the room and Main or Backup, and sets their own password", async () => {
   app = await launch();
   const page = await mainPage(app);
@@ -140,10 +149,15 @@ test("after enrolment the tech signs in with their account, picks the room and M
   await expect(page.locator("#login")).toBeHidden();
   if (process.env.ATSUIT_SHOTS) await page.screenshot({ path: path.join(process.env.ATSUIT_SHOTS, "start.png") });
   await expect(page.locator("#startForm [name=operator]")).toBeHidden(); // no name-only sign-in on a new site
+  await expect.poll(() => maximised(app)).toBe(true); // the app opens maximised
+  await unmaximise(app);
+  await expect.poll(() => maximised(app)).toBe(false);
   await start(page, { user: "amy", password: "amy-password-1", newPassword: "amy-own-pass-1", room: "HD", mode: "main" });
-  await expect(page.locator("#room option:checked")).toHaveText("HD");
+  await expect(page.locator("#room")).toHaveText("HD");
+  await expect(page.locator("select#room")).toHaveCount(0); // the room is a name, not a picker
   await expect(page.locator("#who")).toHaveText("Amy on TESTLAP1");
   await expect(page.locator("#modePill")).toHaveText("Main PC");
+  await expect.poll(() => maximised(app)).toBe(true); // signing in maximises it again
   expect(conf().popups).toBe(false);
   // The app's version is in the top bar; This laptop has the updates (off here: not an installed app).
   const version = require("../package.json").version;
@@ -192,6 +206,38 @@ test("a workspace window pops out into a window of its own, stays on top if aske
   await pop.click("[data-back]");
   await expect(page.locator(".dk-pane #chat")).toBeVisible();
   await expect.poll(popped).toEqual([]);
+});
+
+test("the Layout menu in the top bar opens windows and saves layouts, with no dialog boxes", async () => {
+  app = await launch();
+  const page = await mainPage(app);
+  await expect(page.locator(".dk-win:has(#chat)")).toBeVisible();
+  await expect(page.locator(".dk-task")).toHaveCount(0); // no taskbar along the bottom any more
+  const menu = page.locator("#layoutMenu .dk-start");
+  await expect(menu).toHaveText(/^Layout/);
+  if (process.env.ATSUIT_SHOTS) await page.screenshot({ path: path.join(process.env.ATSUIT_SHOTS, "workspace.png") });
+  await menu.click();
+  await expect(menu).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#dk-layout-menu .dk-item", { hasText: "Chat" })).toHaveClass(/front|open/);
+  if (process.env.ATSUIT_SHOTS) await page.screenshot({ path: path.join(process.env.ATSUIT_SHOTS, "layout-menu.png") });
+  // A closed window opens from the menu.
+  const links = page.locator("#dk-layout-menu .dk-item", { hasText: "Links" });
+  if (await links.count()) {
+    await expect(links).toHaveClass(/closed/);
+    await links.click();
+    await expect(links).toHaveClass(/front/);
+  }
+  // Saving asks for the name in the menu (the app turns prompt() off).
+  await page.click("#dk-layout-menu >> text=Save this layout…");
+  await page.fill("#dk-layout-name", "Plenary");
+  await page.click("#dk-layout-menu .dk-ask button[type=submit]");
+  await expect(menu).toHaveText(/Layout: Plenary/);
+  await menu.click();
+  await page.click("#dk-layout-menu >> text=Reset to the starting layout");
+  await page.click("#dk-layout-menu .dk-ask >> text=Reset");
+  await expect(menu).toHaveText(/^Layout ▾/);
+  if (await links.count()) { await menu.click(); await expect(links).toHaveClass(/closed/); await page.keyboard.press("Escape"); }
+  await expect(page.locator("#dk-layout-menu")).toHaveCount(0);
 });
 
 test("the laptop reports its health, and shows its screens only while a manager looks", async () => {
@@ -514,18 +560,10 @@ test("the next day the tech starts again, without enrolling again", async () => 
   await expect(page.locator("#startForm [name=username]")).toBeVisible();
   await expect(page.locator("#startForm [name=mode][value=backup]")).toBeChecked();
   await start(page, { user: "ben", password: "ben-password-1", room: "CC" });
-  await expect(page.locator("#room option:checked")).toHaveText("CC");
+  await expect(page.locator("#room")).toHaveText("CC");
   await expect(page.locator("#who")).toHaveText("Ben on TESTLAP1");
-  // The room is the tech's call: Ben moves the laptop to RH from the top bar, then back.
-  for (const room of ["RH", "CC"]) {
-    await page.selectOption("#room", { label: room });
-    await expect(page.locator("#roomAskText")).toHaveText(`Move this laptop to ${room}?`);
-    const reloaded = page.waitForEvent("load"); // the workspace starts over in the new room
-    await page.click("#roomMove");
-    await reloaded;
-    await expect(page.locator("#ws")).toBeVisible();
-    await expect(page.locator("#room option:checked")).toHaveText(room);
-  }
+  // The room is picked at the start of the day and stays: the top bar names it, with nothing to change it.
+  await expect(page.locator("#ws select#room, #roomAsk")).toHaveCount(0);
   // Sign out at the end of the day: back to the start screen, and nothing pops up.
   await page.click("#out");
   await expect(page.locator("#start")).toBeVisible();

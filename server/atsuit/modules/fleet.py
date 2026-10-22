@@ -732,9 +732,21 @@ async def _run_ssh(ip: str, command: str) -> None:
     if not key.exists():
         return
     user = os.getenv("ATSUIT_FLEET_SSH_USER", "adam")
+    known_hosts = key.parent / "known_hosts"
+    # Use strict host key checking if a known_hosts file with entries exists
+    has_known_hosts = known_hosts.exists() and known_hosts.stat().st_size > 0
+    host_key_check = "yes" if has_known_hosts else "accept-new"
+    # SECURITY NOTE:
+    # - StrictHostKeyChecking=yes (when known_hosts has entries): Verifies host fingerprints against known_hosts
+    # - StrictHostKeyChecking=accept-new (default): Automatically adds new host keys (convenience for venue LANs)
+    # The network is assumed to be a controlled venue LAN (e.g., 10.100.70.x) where:
+    # - Admin controls all nodes
+    # - SSH key authentication is required
+    # - Only admins can send SSH commands
+    # For higher security in untrusted environments, upload a known_hosts file via the API.
     proc = await asyncio.create_subprocess_exec(
         "ssh", "-i", str(key), "-o", "BatchMode=yes", "-o", "ConnectTimeout=5",
-        "-o", "StrictHostKeyChecking=accept-new", "-o", f"UserKnownHostsFile={key.parent / 'known_hosts'}",
+        "-o", f"StrictHostKeyChecking={host_key_check}", "-o", f"UserKnownHostsFile={known_hosts}",
         f"{user}@{ip}", command,
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
     try:
@@ -783,6 +795,23 @@ async def upload_ssh_key(file: UploadFile, p: Principal = Depends(require_admin)
     os.chmod(key, 0o600)
     with db.tx() as c:
         db.audit(c, p.name, "fleet.ssh_key")
+    return {"ok": True}
+
+
+@router.post("/api/fleet/ssh-known-hosts")
+async def upload_known_hosts(file: UploadFile, p: Principal = Depends(require_admin)):
+    """Upload a known_hosts file with verified host fingerprints for higher SSH security.
+    When present, fleet.py should use StrictHostKeyChecking=yes instead of accept-new."""
+    data = await file.read(100000)
+    # Basic validation: known_hosts files contain host entries
+    if not data or len(data) > 100000:
+        raise HTTPException(400, "Invalid known_hosts file")
+    key = ssh_key()
+    key.parent.mkdir(parents=True, exist_ok=True)
+    (key.parent / "known_hosts").write_bytes(data)
+    os.chmod(key.parent / "known_hosts", 0o644)
+    with db.tx() as c:
+        db.audit(c, p.name, "fleet.ssh_known_hosts")
     return {"ok": True}
 
 

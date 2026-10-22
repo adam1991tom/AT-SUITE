@@ -9,6 +9,7 @@ import re
 import secrets
 import threading
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -27,9 +28,10 @@ _ROLE_RANK = {"viewer": 0, "tech": 1, "manager": 2, "admin": 3}
 
 
 # Same format as AT-RoomComms and AT-Presenter, so migrated accounts keep their passwords.
+# Increased iterations in 1.20.0 for stronger password hashing (200k → 300k).
 def hash_password(password: str, salt: str | None = None) -> str:
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000).hex()
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 300_000).hex()
     return f"{salt}${digest}"
 
 
@@ -41,12 +43,19 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(hash_password(password, salt), stored)
 
 
-def token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+def token_hash(token: str, algorithm: str = "sha512") -> str:
+    """Hash a token with the specified algorithm (sha256 for backward compatibility, sha512 for new tokens)."""
+    if algorithm == "sha256":
+        return hashlib.sha256(token.encode()).hexdigest()
+    elif algorithm == "sha512":
+        return hashlib.sha512(token.encode()).hexdigest()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
 
 
 def new_token(prefix: str = "") -> str:
-    return prefix + secrets.token_urlsafe(32)
+    # Increased token length in 1.20.0 for stronger security (32 → 48 bytes)
+    return prefix + secrets.token_urlsafe(48)
 
 
 # ------------------------------------------------------------- encryption --
@@ -108,25 +117,35 @@ def create_session(c, account_id: int, minutes: int | None = None) -> str:
     now = datetime.now(timezone.utc)
     life = timedelta(minutes=minutes) if minutes else timedelta(hours=config.cfg.session_hours)
     c.execute(
-        "INSERT INTO sessions(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)",
-        (token_hash(token), account_id, now.isoformat(), (now + life).isoformat()),
+        "INSERT INTO sessions(token_hash,account_id,created_at,expires_at,hash_algorithm) VALUES(?,?,?,?,?)",
+        (token_hash(token, "sha512"), account_id, now.isoformat(), (now + life).isoformat(), "sha512"),
     )
     return token
 
 
 def _from_session(c, token: str) -> Principal | None:
+    # Try sha512 first (new in 1.20.0), fall back to sha256 for backward compatibility
     r = c.execute(
         "SELECT a.id,a.username,a.display_name,a.role,a.site_id,s.expires_at FROM sessions s "
         "JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND a.active=1",
-        (token_hash(token),),
+        (token_hash(token, "sha512"),),
     ).fetchone()
+    if not r:
+        r = c.execute(
+            "SELECT a.id,a.username,a.display_name,a.role,a.site_id,s.expires_at FROM sessions s "
+            "JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND a.active=1",
+            (token_hash(token, "sha256"),),
+        ).fetchone()
     if not r or r["expires_at"] < datetime.now(timezone.utc).isoformat():
         return None
     return Principal("account", r["id"], r["display_name"] or r["username"], r["role"], r["site_id"])
 
 
 def _from_node(c, token: str) -> Principal | None:
-    r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token),)).fetchone()
+    # Try sha512 first (new in 1.20.0), fall back to sha256 for backward compatibility
+    r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token, "sha512"),)).fetchone()
+    if not r:
+        r = c.execute("SELECT id,name,kind,operator,site_id,room_id FROM nodes WHERE token_hash=?", (token_hash(token, "sha256"),)).fetchone()
     return _node_principal(r)
 
 
@@ -286,6 +305,53 @@ def redact_logs() -> None:
         log = logging.getLogger(name)
         if _redacting not in log.filters:
             log.addFilter(_redacting)
+
+
+# ------------------------------------------------------------- rate limiting --
+# Simple in-memory rate limiter for API endpoints. Not persistent across restarts,
+# but sufficient for brute force protection. For production with multiple workers,
+# consider Redis or a database-backed implementation.
+_RATE_LIMITS: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_LOCK = threading.Lock()
+
+
+def check_rate_limit(identifier: str, limit: int, window_seconds: int = 60) -> bool:
+    """Return True if the identifier is within limits, False if rate limited."""
+    now = time.monotonic()
+    with _RATE_LIMIT_LOCK:
+        requests = _RATE_LIMITS[identifier]
+        # Remove requests outside the time window
+        requests[:] = [t for t in requests if t > now - window_seconds]
+        if len(requests) >= limit:
+            return False
+        requests.append(now)
+        return True
+
+
+def rate_limit_by_ip(limit: int = 100, window_seconds: int = 60):
+    """FastAPI dependency that rate limits by client IP address."""
+    def dep(request: Request) -> None:
+        # Get IP from X-Forwarded-For if behind proxy, otherwise from direct connection
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            ip = forwarded.split(",")[0].strip()
+        else:
+            ip = request.client.host if request.client else "unknown"
+        if not check_rate_limit(f"ip:{ip}", limit, window_seconds):
+            raise HTTPException(429, "Too many requests. Please try again later.")
+    return dep
+
+
+def rate_limit_by_account(limit: int = 200, window_seconds: int = 60):
+    """FastAPI dependency that rate limits by authenticated account."""
+    def dep(request: Request) -> None:
+        p = principal(request)
+        if not p:
+            # Fall back to IP rate limiting for unauthenticated requests
+            return rate_limit_by_ip(limit, window_seconds)(request)
+        if not check_rate_limit(f"account:{p.id}", limit, window_seconds):
+            raise HTTPException(429, "Too many requests. Please try again later.")
+    return dep
 
 
 def require(role: str = "viewer", kinds: tuple[str, ...] = ("account", "node", "apikey")):
