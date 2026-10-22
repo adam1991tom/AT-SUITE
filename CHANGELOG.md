@@ -5,6 +5,17 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.22.0
+
+**The licence checks in with the website every day**
+
+- Keys from the website name it (`checkin`), and the server sends its key there once a day. A renewed key installs itself, so monthly customers no longer paste a key every month.
+- A key revoked on the website locks at the server's next quiet moment (never during a show). A server that can't reach the website for 14 days locks the same way, and unlocks as soon as it checks in again.
+- Admins are told after 2 days without a check-in, everyone in the last week. Keys that renew themselves no longer show an "ends soon" banner for the whole month: it starts 7 days before the end.
+- Licence shows the daily check, when it last got through and the deadline, with a **Check now** button.
+- Offline keys (Admin → Licences → "Offline key" on the website, or `tools/licence.py` without `--checkin`) never check in, for venues whose server has no internet. Keys made before this version are offline keys too, so nothing changes for servers already running.
+- Website: the check-in answers `"status": "revoked"` for a revoked key (or one whose renewal was revoked), with rate limits per key and a higher one per address for hosting servers.
+
 ## 1.21.0
 
 A layout designer for timer views, and BDNG is built in.

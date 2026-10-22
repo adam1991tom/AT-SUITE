@@ -250,7 +250,7 @@ keys). Room 3 here; the room number is in its stage screen address
 ## Licences (for resellers)
 
 AT-SUITE does nothing until a valid licence key is installed (in setup, or
-**Licence** afterwards). Keys are checked offline against the vendor public
+**Licence** afterwards). Keys are checked against the vendor public
 key in `server/atsuit/vendor_pubkey.txt`, the only key AT-SUITE trusts. The
 private half is never in the repo and never on a venue server: keep it
 offline and backed up, because losing it means no new keys for existing
@@ -279,6 +279,15 @@ python tools/licence.py show <key>
 It prints the key for the customer to paste into **Licence**. Renewing is
 issuing a key for the next period; pasting it replaces the old one and keeps
 everything else.
+
+**Daily check-in.** A key made with `--checkin https://<website>` (every key the
+website makes, unless an admin ticks "Offline key") checks in with that website
+once a day. The server picks up renewed keys by itself, and a key revoked on the
+website locks at the server's next quiet moment. A server that can't reach the
+website for 14 days locks the same way, and unlocks as soon as it checks in again
+(**Licence → Check now**). Admins are warned after 2 days without a check-in,
+everyone in the last week. Keys made without `--checkin` are offline keys: they
+never check in, so give them a fixed end date (venues with no internet).
 
 **When a subscription runs out:**
 

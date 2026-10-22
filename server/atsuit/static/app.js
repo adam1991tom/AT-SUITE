@@ -1037,21 +1037,33 @@ Keywords: lectern, gooseneck, mic dead
   async function admLicence(a) {
     const l = await api("/api/admin/licence");
     const lim = (k) => { const used = l.usage[k], max = l.limits[k]; return `${used} used of ${max || "unlimited"}${max && used >= max ? ' <span class="pill warn">full</span>' : ""}`; };
-    const STATES = { active: ["good", "Licensed"], expiring: ["warn", "Ending soon"], grace: ["bad", "In grace period"], lapsed: ["bad", "Expired"], invalid: ["bad", "Not valid"], none: ["bad", "Not licensed"] };
+    const STATES = { active: ["good", "Licensed"], expiring: ["warn", "Ending soon"], grace: ["bad", "In grace period"], lapsed: ["bad", "Expired"], invalid: ["bad", "Not valid"], none: ["bad", "Not licensed"], revoked: ["bad", "Cancelled"], unchecked: ["bad", "Not checked in"] };
     const [tone, label] = STATES[l.state] || STATES.none;
     const state = `<span class="pill ${tone}">${label}</span>${l.locked ? ' <span class="pill bad">Locked</span>' : ""}`;
-    const extra = Object.entries(l.payload).filter(([k]) => !["licensee", "edition", "expires", "issued", "max_nodes", "max_sites", "modules", "serial", "id"].includes(k));
+    const extra = Object.entries(l.payload).filter(([k]) => !["licensee", "edition", "expires", "issued", "max_nodes", "max_sites", "modules", "serial", "id", "checkin"].includes(k));
+    // Keys from the website check in with it every day; offline keys don't.
+    const ci = l.checkin;
+    const ciRows = !l.installed ? [] : !ci ? [["Daily check", '<span class="muted small">Offline key: never checks in</span>']] : [
+      ["Daily check", `${ci.revoked ? '<span class="pill bad">cancelled</span>' : ci.error ? '<span class="pill warn">failing</span>' : ci.last_ok ? '<span class="pill good">ok</span>' : '<span class="pill">not yet</span>'} <span class="muted small">${esc(ci.url)}</span>`],
+      ["Last reached", ci.last_ok ? date(ci.last_ok) : "Not yet"],
+      ci.error && ["Last try", `${date(ci.last_try)} <span class="small">${esc(ci.error)}</span>`],
+      ["Must reach it by", `${date(ci.deadline)} <span class="muted small">then it locks, never during a show</span>`]];
     a.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))"><div class="panel"><h2>Licence</h2><p>${state} ${l.reason ? `<span class="muted">${esc(l.reason)}</span>` : ""}</p>
       ${kv([["Licensed to", `<b>${esc(l.licensee)}</b>`], ["Edition", esc(l.edition)], ["Serial", l.serial ? `<code>${esc(l.serial)}</code>` : "–"], ["Issued", date(l.issued) || "–"],
         ["Expires", l.expires ? `${date(l.expires)} <span class="pill ${l.days_left < 30 ? "warn" : ""}">${l.days_left} days left</span>` : l.installed ? "Never" : "–"],
         l.grace_until && ["Grace until", `${date(l.grace_until)} <span class="muted small">then it locks, never during a show</span>`],
-        ["Modules", l.modules.map((m) => `<span class="pill">${esc(m)}</span>`).join(" ")], ...extra.map(([k, v]) => [k, esc(typeof v === "object" ? JSON.stringify(v) : String(v))])])}</div>
+        ["Modules", l.modules.map((m) => `<span class="pill">${esc(m)}</span>`).join(" ")], ...ciRows, ...extra.map(([k, v]) => [k, esc(typeof v === "object" ? JSON.stringify(v) : String(v))])])}
+      ${ci ? '<div class="row" style="margin-top:.6rem"><button class="small" id="checkNow">Check now</button><span class="muted small">Fetches a renewed key, if there is one</span></div>' : ""}</div>
       <div class="panel"><h2>Limits</h2>${kv([["Sites", lim("sites")], ["Nodes", lim("nodes")], ["Rooms", `${l.usage.rooms} (no limit)`]])}
       <h2 style="margin-top:1rem">Check</h2>${kv([["Signature", l.installed ? (l.signature_valid ? '<span class="pill good">valid</span>' : '<span class="pill bad">not valid</span>') : "no key installed"],
         ["Vendor key", `<code>${esc(l.vendor_key_id || "none")}</code> <span class="muted small">${esc(l.vendor_key_source)}</span>`], ["Stored in", `<span class="small">${esc(l.stored_in)}</span>`]])}</div></div>
       <div class="panel" style="margin-top:1rem"><h2>Licence key</h2>${l.raw ? `<textarea rows="3" readonly id="raw" aria-label="Licence key">${esc(l.raw)}</textarea><div class="row" style="margin-top:.4rem"><button class="small" id="copyKey">Copy key</button><button class="small danger" id="rmKey">Remove licence</button></div>` : '<p class="muted small">No key installed. AT-SUITE needs a licence key to work.</p>'}
       <label style="margin-top:1rem">Install a new key</label><textarea id="key" rows="3" placeholder="Paste the key from your supplier"></textarea><div class="row" style="margin-top:.6rem"><button class="primary" id="save">Install licence</button></div></div>`;
     a.querySelector("#copyKey") && (a.querySelector("#copyKey").onclick = () => copyText(l.raw, "Key copied"));
+    a.querySelector("#checkNow")?.addEventListener("click", (e) => {
+      e.target.disabled = true;
+      guard(() => post("/api/admin/licence/checkin")).then((r) => { toast(r.error ? r.error : "Checked in", r.error ? "bad" : "good"); admLicence(a); }, () => { e.target.disabled = false; });
+    });
     a.querySelector("#save").onclick = () => {
       if (!a.querySelector("#key").value.trim()) return toast("Paste the licence key first", "bad");
       guard(() => put("/api/admin/licence", { key: a.querySelector("#key").value })).then(() => location.reload());

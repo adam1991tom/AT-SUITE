@@ -127,10 +127,12 @@ def latest_licence(c, sub_id: str):
 
 
 def issue(ctx, acc, *, source: str, edition: str, max_nodes: int, expires: int, sub_id: str | None = None,
-          txn_id: str | None = None, max_sites: int = 1, note: str = "", actor: str = "system") -> dict:
-    """Sign a key, store it, and mark the key it replaces. Returns the licence row as a dict."""
+          txn_id: str | None = None, max_sites: int = 1, note: str = "", actor: str = "system",
+          offline: bool = False) -> dict:
+    """Sign a key, store it, and mark the key it replaces. Returns the licence row as a dict.
+    Keys check in with this website every day, unless an admin makes an offline one."""
     key, body = ctx.signer.sign(licensee=licensee(acc), edition=edition, max_nodes=max_nodes, expires=expires,
-                                max_sites=max_sites)
+                                max_sites=max_sites, checkin=None if offline else ctx.s.site_url)
     c = ctx.c
     prev = latest_licence(c, sub_id) if sub_id else None
     c.execute("INSERT INTO licences (serial, account_id, subscription_id, transaction_id, source, edition, licensee,"
@@ -140,7 +142,8 @@ def issue(ctx, acc, *, source: str, edition: str, max_nodes: int, expires: int, 
     if prev:
         c.execute("UPDATE licences SET replaced_by=? WHERE id=?", (body["serial"], prev["id"]))
     audit(c, actor, "licence.issue", body["serial"], {"account": acc["id"], "source": source, "edition": edition,
-                                                     "nodes": max_nodes, "expires": expires, "subscription": sub_id})
+                                                     "nodes": max_nodes, "expires": expires, "subscription": sub_id,
+                                                     "offline": offline})
     return {**body, "key": key, "source": source, "subscription_id": sub_id}
 
 

@@ -1,6 +1,7 @@
 """Setup wizard, sign-in, sites, rooms, accounts, settings, licence, API keys."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -534,6 +535,7 @@ def get_licence(p: Principal = Depends(require_admin)):
         lic = licence.current(c)
         now, is_locked, note = licence.clock(c), licence.locked(c), licence.notice(c, "admin")
         used = usage(c)
+        ci = licence.checkin_info(c)
     d = licence.details(key)
     pl = d["payload"] if isinstance(d["payload"], dict) else {}
     expires = lic.expires or int(pl.get("expires", 0) or 0)
@@ -554,7 +556,17 @@ def get_licence(p: Principal = Depends(require_admin)):
         "stored_in": f"Settings table (licence_key) in {config.cfg.db_path}",
         "payload": pl,
         "raw": d["raw"],
+        "checkin": ci,
     }
+
+
+@router.post("/api/admin/licence/checkin")
+async def licence_checkin(p: Principal = Depends(require_admin)):
+    """Check in with the licence server now (after the internet comes back, or to fetch a renewal)."""
+    info = await asyncio.to_thread(licence.checkin, True)
+    if info is None:
+        raise HTTPException(400, "This is an offline licence: it doesn't check in")
+    return info
 
 
 class LicenceIn(BaseModel):
@@ -576,6 +588,11 @@ def put_licence(body: LicenceIn, p: Principal = Depends(require_admin)):
         else:
             db.audit(c, p.name, "licence.remove", "")
             licence.forget()
+    if lic.checkin:
+        try:  # check in straight away, so Licence shows it worked (and picks up any newer key)
+            licence.checkin(force=True)
+        except Exception as exc:  # the daily check tries again; installing the key still worked
+            print("licence check-in:", exc)
     return lic.public()
 
 

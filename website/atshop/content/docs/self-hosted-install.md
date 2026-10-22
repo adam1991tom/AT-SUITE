@@ -1,6 +1,6 @@
 # Install on your own server
 
-Run AT SUITE on a server at your venue. It works with no internet at all, licence included.
+Run AT SUITE on a server at your venue. It needs to reach the internet once a day for its licence check-in; everything else works on the venue network alone. For a venue with no internet at all, [ask us](/contact) for an offline key.
 
 ## What you need
 

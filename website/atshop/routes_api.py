@@ -58,11 +58,14 @@ async def paddle_webhook(request: Request):
 
 @router.post("/api/v1/licence/refresh")
 async def licence_refresh(request: Request):
-    """An AT SUITE server that has internet can swap its key for the newest one of the same subscription.
-    It proves it holds the current key by sending it; it gets back only that subscription's newest key.
-    For a future "renew automatically" setting in the app; the app doesn't call this yet."""
+    """Every AT SUITE server with a key from here calls this once a day (the key's `checkin`).
+    It proves it holds the key by sending it, and gets back that subscription's newest key, or
+    "revoked" when an admin cancelled the key or one that replaced it. A server that hears
+    "revoked" locks at its next quiet moment, never during a show."""
     sh = shop(request)
-    if auth.limited(sh.db, f"refresh:{ip(request)}", 30, 3600):
+    # A hosting server sends every venue's check-in from one address, so the per-address limit is
+    # generous and each key has its own.
+    if auth.limited(sh.db, f"refresh:{ip(request)}", 600, 3600):
         return JSONResponse({"error": "slow down"}, 429)
     try:
         key = str((await request.json()).get("key", ""))[:4096]
@@ -71,16 +74,22 @@ async def licence_refresh(request: Request):
     body = sh.signer.verify(key)
     if not body:
         return JSONResponse({"error": "not a key we issued"}, 400)
+    if auth.limited(sh.db, f"refresh-key:{body.get('serial', '')}", 20, 3600):
+        return JSONResponse({"error": "slow down"}, 429)
     lic = sh.db.one("SELECT * FROM licences WHERE serial=?", body.get("serial", ""))
-    if not lic or lic["revoked_at"]:
+    if not lic:
         return JSONResponse({"key": None, "status": "unknown"})
+    if lic["revoked_at"]:
+        return JSONResponse({"key": None, "status": "revoked"})
     newest = lic
     for _ in range(100):
         if not newest["replaced_by"]:
             break
         nxt = sh.db.one("SELECT * FROM licences WHERE serial=?", newest["replaced_by"])
-        if not nxt or nxt["revoked_at"]:
+        if not nxt:
             break
+        if nxt["revoked_at"]:  # revoking a renewal cancels the keys it replaced too
+            return JSONResponse({"key": None, "status": "revoked"})
         newest = nxt
     sub = sh.db.one("SELECT status FROM subscriptions WHERE id=?", lic["subscription_id"]) if lic["subscription_id"] else None
     if newest["serial"] == lic["serial"]:

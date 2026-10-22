@@ -96,6 +96,8 @@ def main() -> None:
     i.add_argument("--until", help="last day of the paid period, YYYY-MM-DD, instead of --months")
     i.add_argument("--spare", type=int, help=f"extra days after the period (default {SPARE_DAYS}; 0 for trial and event)")
     i.add_argument("--modules", default="*", help="comma-separated, or * for every module (including future ones)")
+    i.add_argument("--checkin", help="the website's address (https://...): the server checks in there every day for "
+                   "renewals and cancellations. Leave out for an offline key")
     s = sub.add_parser("show")
     s.add_argument("licence")
     a = ap.parse_args()
@@ -123,6 +125,8 @@ def main() -> None:
             "expires": expiry(a.plan, a), "modules": mods, "issued": now,
             "serial": f"AT-{datetime.now(timezone.utc):%y%m%d}-{secrets.token_hex(2).upper()}",
         }
+        if a.checkin:
+            body["checkin"] = a.checkin.rstrip("/")
         raw = json.dumps(body, separators=(",", ":")).encode()
         ends = datetime.fromtimestamp(body["expires"], timezone.utc).date().isoformat() if body["expires"] else "never"
         print(f"{body['serial']}: {a.licensee}, {a.plan}, {body['max_nodes'] or 'unlimited'} laptops, ends {ends}", file=sys.stderr)
