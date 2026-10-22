@@ -143,7 +143,6 @@ def status(c) -> dict:
         "last_result": st.get("last_result") or None,
         "host_updater": bool(seen) and time.time() - seen < HOST_SEEN_S, "host_seen_at": seen or None,
         "live": live_rooms(c), "app": app_release().get("version"), "app_error": st.get("app_error") or "",
-        "helper": config.cfg.role != "main",
         "progress": prog,  # Installer-like progress: step, message, percent
     }
 
@@ -201,7 +200,7 @@ def check(manual: bool = False) -> dict:
     manual: an admin pressed Check now, which checks even when updates are off."""
     with db.ro() as c:
         cf = conf(c)
-    if config.cfg.role != "main" or (cf["mode"] == "off" and not manual):
+    if cf["mode"] == "off" and not manual:
         with db.ro() as c:
             return status(c)
     try:
@@ -347,8 +346,6 @@ def plan() -> dict:
         version, requested = latest.get("version"), st.get("requested")
         asked = bool(requested) and requested == version
         none = lambda why: {"ACTION": "none", "REASON": why}  # noqa: E731
-        if config.cfg.role != "main":
-            return none("a helper server updates with its main server")
         if not latest or not newer(version, VERSION):
             return none(f"up to date ({VERSION})")
         if cf["mode"] == "off" and not asked:

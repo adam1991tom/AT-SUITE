@@ -23,6 +23,6 @@ fi
 docker compose stop atsuit
 DIR="$(cd "$(dirname "$FILE")" && pwd)"
 docker run --rm -v "$VOL":/data -v "$DIR":/backup alpine \
-  sh -c "find /data -mindepth 1 -maxdepth 1 ! -name models -exec rm -rf {} + && tar xzf /backup/$(basename "$FILE") -C /data && chown -R \$(stat -c %u:%g /data) /data"
+  sh -c "find /data -mindepth 1 -maxdepth 1 ! -name models ! -name backups -exec rm -rf {} + && tar xzf /backup/$(basename "$FILE") -C /data && chown -R \$(stat -c %u:%g /data) /data"
 [ "$START" = 1 ] && docker compose start atsuit
 echo "Restored $FILE."

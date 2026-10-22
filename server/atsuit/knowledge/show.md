@@ -55,4 +55,4 @@ Keywords: backup, redundancy, spare, plan b, failover
 ## Show report
 Keywords: show report, incident report, notes, end of day, handover
 1. Write down what went wrong, what was done, and anything the next crew needs to know.
-2. AT-SUITE's show report collects timer runs, help calls and stage messages for each room; add handover notes for the next shift.
+2. AT-SUITE's show report collects timer runs, help calls and stage messages for each room, or for the full venue in one PDF (Show reports in the console); add handover notes for the next shift.

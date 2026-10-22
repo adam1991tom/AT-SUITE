@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import VERSION, asr, config, db, hosted, licence, updates
 from .hub import can_subscribe, hub
-from .modules import aihelper, bugs, captions, cluster, comms, core, dashboard, fleet, imports, notes, overlays, pairing, preshow, presenter, reports, timers, weather
+from .modules import aihelper, backups, bugs, captions, comms, core, dashboard, fleet, notes, overlays, pairing, preshow, presenter, reports, timers, weather
 from .security import redact_logs, secret_params, strip_secrets, ws_principal
 
 STATIC = Path(__file__).parent / "static"
@@ -133,7 +133,10 @@ async def housekeeping() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     redact_logs()
+    restored = backups.apply_pending()  # a backup an admin asked to restore goes in before anything opens the database
     db.migrate()
+    if restored:
+        print("Restored the backup", restored)
     with db.tx() as c:
         licence.prepare(c)
         if config.cfg.hosted:
@@ -141,12 +144,12 @@ async def lifespan(app: FastAPI):
     licence.forget()
     asr.engine = asr.Engine()
     captions.rooms.clear()
-    cluster.reset()
     pairing.reset()
     tasks = [asyncio.create_task(housekeeping()), asyncio.create_task(captions.load_engine()),
              asyncio.create_task(timers.end_actions()),
              asyncio.create_task(licence.watch()), asyncio.create_task(comms.escalate_loop()),
-             asyncio.create_task(reports.save_loop()), asyncio.create_task(captions.retention_loop())]
+             asyncio.create_task(reports.save_loop()), asyncio.create_task(captions.retention_loop()),
+             asyncio.create_task(backups.nightly_loop())]
     if not config.cfg.hosted:  # hosted venues are updated by their provider
         tasks.append(asyncio.create_task(updates.loop()))
     yield
@@ -155,11 +158,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    if config.cfg.role == "helper":
-        from .helper import create_helper_app
-        return create_helper_app()
     app = FastAPI(title="AT-SUITE", version=VERSION, lifespan=lifespan, docs_url="/api/docs", redoc_url=None)
-    for module in (core, comms, timers, fleet, pairing, captions, cluster, overlays, dashboard, presenter, imports, notes, reports, preshow,
+    for module in (core, comms, timers, fleet, pairing, captions, overlays, dashboard, presenter, backups, notes, reports, preshow,
                    weather, aihelper, bugs):
         app.include_router(module.router)
     app.include_router(fleet.legacy)
@@ -168,7 +168,6 @@ def create_app() -> FastAPI:
         app.include_router(hosted.updates_router)  # ahead of the updater's own routes
     app.include_router(updates.router)
     app.include_router(captions.ws_router)
-    app.include_router(cluster.ws_router)
     app.include_router(timers.public)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.add_middleware(LicenceGate)

@@ -68,21 +68,18 @@ and Companion. On ATSERVER1, ports 4001-4020, 5050, 5070, 8000, 16622 and
 sudo ./install.sh --port 8180 --tls --tls-host 10.100.70.101
 ```
 
-## Bringing data across
+## Moving to a new server
 
-Everything is on the console's Backups page. Imports only add; they never change the old
-apps.
+Back up the old server (**Backups → Download a backup**), install AT SUITE on the
+new one, set it up, then on its **Backups** page choose the file under **Restore**
+and type RESTORE. The new server checks the file, keeps a backup of what it had,
+restarts and comes back as the old one: rooms, people, chat, timers, laptops and
+screens, settings and the licence. Speech models download again by themselves,
+and the Windows app comes with the next release (or upload it in Laptops &
+screens). Point the laptops and screens at the new address if it changed.
 
-| Old app | What to upload | How to get it |
-|---|---|---|
-| RoomComms | a zip of its data folder | `docker cp at-roomcomms:/data ./roomcomms-data && zip -r roomcomms-data.zip roomcomms-data` |
-| Device Suite | `rooms.txt` | `/opt/device-suite/rooms.txt` |
-| Device Suite | `state.json` | `/opt/device-suite/state.json` |
-| Homarr | link export TSV | the `homarr-links.tsv` from the server snapshot |
-
-RoomComms accounts keep their passwords. Messages are re-encrypted with
-AT-SUITE's own key. Direct messages and operator logins (name only, no
-password) aren't brought across; the import report says how many.
+AT SUITE no longer imports from RoomComms, Device Suite or Homarr (removed in
+1.21.0). To bring data from those, use 1.20.x, then back up and restore.
 
 ## Pointing kiosks at AT-SUITE
 
@@ -90,32 +87,6 @@ Kiosks running the Device Suite agent can report to AT-SUITE without being
 reinstalled: change the server address in their agent config to
 `http://SERVER:8180`. They appear in Laptops & screens as "old agent". To reboot or
 update them from AT-SUITE, upload the fleet SSH key in Laptops & screens → Add laptops.
-
-## Helper servers
-
-One server is the **main** server: it holds the rooms, people, chat and every
-screen. Any other machine can run the same install as a **helper** and take
-heavy work off it. Today that is live caption speech recognition; each helper
-adds the rooms it can caption to the total.
-
-1. On the main server, go to **Servers → Make a join code**. A code
-   works once, for 15 minutes.
-2. On the helper, install AT-SUITE as above with `ATSUIT_ROLE=helper` in `.env`,
-   then open `http://<helper>:8080` and type the main server's address and the
-   code. Or set `ATSUIT_MAIN_URL` and `ATSUIT_JOIN_CODE` in `.env` before the
-   first start. Use the main server's plain `http://` address on the venue
-   network.
-3. The helper connects out to the main server, so it needs no open ports of
-   its own, and reconnects by itself after a restart.
-
-On **Servers** choose how rooms are spread:
-
-- **Share**: each room goes to whichever server is least busy, the main one included.
-- **Offload**: helpers take rooms first, and the main server only steps in when they are full or offline.
-
-If a helper goes offline mid-show, its rooms move to another helper or the
-main server within a second, and the laptops keep sending audio as before.
-**Remove** on that page disconnects a helper; it needs a new code to join again.
 
 ## Backups and updates
 
@@ -166,8 +137,27 @@ the repository, plus *read:packages* for an install that uses the published
 image. The token stays on the server and is never sent to laptops. A laptop's
 own GitHub fallback only works with public releases.
 
-Admins can also download a backup zip from the Backups page. A backup
-contains the encryption key, so store it somewhere safe.
+### The server's own backups
+
+Every night (02:00 venue time unless an admin changes it on the **Backups**
+page) the server backs itself up into `backups/` in its data volume and keeps
+the newest 14. A backup is one zip of the whole server: the database, the
+encryption key, chat files, presenters' files, timer views, kept show reports,
+the agents and the fleet SSH key. Speech models, caption transcripts and the
+Windows app are left out. If the server is off at that time it backs up when it
+comes back, up to six hours later.
+
+On the Backups page an admin can back up now, download any backup, delete it,
+or restore it. A restore can also be a file downloaded from this or another
+AT SUITE server. Restoring checks the file, saves a backup of what is there now,
+then restarts the server (Docker starts it again) and puts the backup in place
+before the database opens. A backup from a newer version is refused.
+
+The server's backups sit on the same disk as the server, so they don't help if
+the disk dies: download one now and then, or use `./backup.sh` and copy it
+elsewhere. A backup contains the encryption key and can read every message, so
+store it somewhere safe. `backup.sh` leaves the server's own backups out of its
+file, and `restore.sh` leaves them in place.
 
 ## Offline sites
 

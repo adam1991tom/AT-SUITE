@@ -216,6 +216,13 @@ MIGRATIONS: list[str] = [
     -- Password migration tracking: rehash passwords with new iteration count on next sign-in
     ALTER TABLE accounts ADD COLUMN password_needs_rehash INTEGER DEFAULT 1;
     """,
+    # 15: a show report for the whole venue (no room, its site); helper servers are gone
+    """
+    ALTER TABLE show_reports ADD COLUMN site_id INTEGER REFERENCES sites(id) ON DELETE CASCADE;
+    CREATE UNIQUE INDEX show_reports_venue_day ON show_reports(site_id, day) WHERE room_id IS NULL AND site_id IS NOT NULL;
+    DROP TABLE IF EXISTS helpers;
+    DELETE FROM settings WHERE key LIKE 'cluster.%';
+    """,
 ]
 
 

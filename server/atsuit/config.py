@@ -20,11 +20,6 @@ class Config:
         self.asr_model = os.getenv(
             "ATSUIT_ASR_MODEL", "sherpa-onnx-streaming-zipformer-en-2023-06-21"
         )
-        # "main" runs the whole suite; "helper" only lends its CPU to a main server.
-        self.role = "helper" if os.getenv("ATSUIT_ROLE", "main").strip().lower() == "helper" else "main"
-        self.main_url = os.getenv("ATSUIT_MAIN_URL", "").rstrip("/")
-        self.join_code = os.getenv("ATSUIT_JOIN_CODE", "")
-        self.helper_name = os.getenv("ATSUIT_HELPER_NAME", "")
         self.asr_max_rooms = int(os.getenv("ATSUIT_ASR_MAX_ROOMS", "0")) or (os.cpu_count() or 2)
         # Hosted: run for a venue by its AT-SUIT provider (cloud/), not on the venue's own server.
         self.hosted = os.getenv("ATSUIT_HOSTED", "0") == "1"

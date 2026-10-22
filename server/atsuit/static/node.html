@@ -842,7 +842,7 @@
         rows.forEach((l) => seen.add(l.id));
         return rows.length ? `<h4 style="margin:.6rem 0 .3rem">${name}</h4><div class="tiles">${rows.map((l) => `<a class="tile" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")}</div>` : "";
       }).join("");
-      $("links").innerHTML = html || '<p class="muted small">No links yet. An admin adds them in Links, or imports the old Homarr board.</p>';
+      $("links").innerHTML = html || '<p class="muted small">No links yet. An admin adds them in Links.</p>';
     };
     $("linkFind").oninput = drawLinks; drawLinks();
   }

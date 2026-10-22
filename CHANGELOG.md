@@ -5,6 +5,27 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.21.0
+
+Backups of the whole server every night, the full venue's show report, and the audit log as a PDF. The Servers page is gone.
+
+**Backups and restore**
+- A backup is now the whole server in one zip: rooms, people, chat and its files, timers and views, presenters' files, kept show reports, laptops and screens, settings, the licence and the encryption key. Before, it was only the database, chat files and the key. Speech models, caption transcripts and the Windows app are left out; they come back by themselves.
+- The server backs itself up every night at 02:00 venue time and keeps the newest 14 on its own disk. The time, how many to keep, or turning it off are on the Backups page. If the server is off at 02:00 it backs up when it's back, up to six hours later. A hosted venue's provider still keeps its own nightly backup as well.
+- The Backups page lists the backups on the server: download, delete or restore each one, or back up now.
+- **Restore** puts the whole server back from a backup on the list or a file uploaded from this or another AT SUITE server (to move to a new machine). Type RESTORE to go ahead. The server checks the file, saves a backup of what's there first, restarts by itself and comes back as it was in the backup. A backup from a newer version is refused.
+- Importing from RoomComms, Device Suite and Homarr is gone. Use 1.20.x for that, then back up and restore.
+
+**Show reports**
+- **Full venue** report: every room's timer runs, help calls, stage messages and captions side by side, then each room that had a show in full, in one PDF. It's kept each morning with the rooms' reports.
+- Reports download as PDF (before, they opened in a browser tab).
+
+**Audit log**
+- **Download as PDF**: every entry, newest first, or only the ones matching the filter.
+
+**Removed**
+- The Servers page and helper servers. Captions are made on the tech laptops, so the server needs no help. `ATSUIT_ROLE`, `ATSUIT_MAIN_URL`, `ATSUIT_JOIN_CODE` and `ATSUIT_HELPER_NAME` do nothing now.
+
 ## 1.20.5
 
 Fixes for everyone on 1.20.0 to 1.20.4: passwords and API keys from before 1.20.0 work again, and so do laptop captions.
