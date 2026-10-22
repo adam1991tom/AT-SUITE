@@ -168,8 +168,8 @@ def test_restore_an_uploaded_backup(admin, tmp_path, monkeypatch):
     assert backups.apply_pending().startswith("atsuite-upload-")
 
 
-def test_a_backup_from_before_1_21_restores(admin, tmp_path, monkeypatch):
-    """The console's backups used to hold just the database, the key, uploads and VERSION."""
+def test_a_backup_from_before_1_23_restores(admin, tmp_path, monkeypatch):
+    """The console's backups before 1.23 held just the database, the key, uploads and VERSION."""
     from atsuit import config
     from atsuit.modules import backups
 

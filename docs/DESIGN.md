@@ -255,7 +255,7 @@ fails if any of this comes back.
 
 ## 5. Data migration
 
-The importers below were removed in 1.21.0 (the Backups page now backs up and
+The importers below were removed in 1.23.0 (the Backups page now backs up and
 restores the whole server); this section is kept as the record of the cut-over.
 
 All importers were on the Backups page (and the `atsuit-import` CLI), ran

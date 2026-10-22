@@ -79,7 +79,7 @@ and the Windows app comes with the next release (or upload it in Laptops &
 screens). Point the laptops and screens at the new address if it changed.
 
 AT SUITE no longer imports from RoomComms, Device Suite or Homarr (removed in
-1.21.0). To bring data from those, use 1.20.x, then back up and restore.
+1.23.0). To bring data from those, use 1.20.x, then back up and restore.
 
 ## Pointing kiosks at AT-SUITE
 

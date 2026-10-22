@@ -5,7 +5,7 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
-## 1.21.0
+## 1.23.0
 
 Backups of the whole server every night, the full venue's show report, and the audit log as a PDF. The Servers page is gone.
 
@@ -26,10 +26,27 @@ Backups of the whole server every night, the full venue's show report, and the a
 **Removed**
 - The Servers page and helper servers. Captions are made on the tech laptops, so the server needs no help. `ATSUIT_ROLE`, `ATSUIT_MAIN_URL`, `ATSUIT_JOIN_CODE` and `ATSUIT_HELPER_NAME` do nothing now.
 
-## 1.20.5
+## 1.20.4
 
-Fixes for everyone on 1.20.0 to 1.20.4: passwords and API keys from before 1.20.0 work again, and so do laptop captions.
+The AI helper is a chat now, and it knows a lot more about fixing shows.
 
+**Talk to it**
+- Asking the AI helper opens its own workspace window. Say what's wrong, then keep going: answer its questions, say "still not working" or "what if the cable's fine?", and it carries on from what you've already said.
+- Without an AI model it still talks. It offers the best entry from the tech guide and walks you through it with questions ("Does the channel's meter move? Yes / No"), shown as buttons. If that doesn't fix it, it tries something else on the same subject, then tells you to call for help.
+- With a model (Ollama) the whole conversation, the matching venue notes and the matching guide entries go to it, so it answers in context.
+- "This fixed it" saves the fix for next time; "Call for help" sends a help call with the first thing you asked. A help call sent from the Help menu starts a chat while the crew is on the way.
+- The conversation stays in that window only. The server keeps nothing of it.
+
+**A bigger tech guide**
+- New entries: no sound from the whole PA, one speaker down, gain structure, a frozen desk, in-ear monitor dropouts, projector lamp and filter warnings, a blank confidence monitor, fixtures not patching, DMX dropouts, haze machines, a network switch down, a device not on the network, wired or Wi-Fi, slides that won't advance, intercom down and run of show basics.
+- A new topic, Staging and rigging: anything overhead ("check with your rigger"), truss basics, stage decks and steps, drapes and screens.
+- 24 entries now have questions that narrow the fault down, step by step.
+
+**Admins can read and change it**
+- Settings → AI helper → Tech guide lists every topic. Change one and your copy is used instead of the built-in one (Reset brings it back), or add your own topic. It points out questions that are written wrong.
+- Venue notes still come first, ahead of the guide.
+
+**Fixes for 1.20.0 to 1.20.3**
 - 1.20.0 checked passwords a new way and no longer recognised ones saved before it, so every existing account, admins included, got "wrong password" after the update. Old passwords sign in again, and each one is saved the new way the next time that person signs in. Nobody needs a reset.
 - Companion's API keys made before 1.20.0 work again.
 - Signing out, and changing your password (which signs you out everywhere else), work for sign-ins from before 1.20.0 too.
@@ -67,6 +84,14 @@ Fixes for everyone on 1.20.0 to 1.20.4: passwords and API keys from before 1.20.
 - ASGI headers are a list of tuples, not a dict (fixed iteration logic)
 - This was causing 500 errors on health endpoint during updates
 - No other changes from 1.20.0
+
+## 1.20.1
+
+The tech workspace gets its bottom strip back, and the laptop app opens full size.
+
+- The taskbar along the bottom of the workspace is gone. Its buttons are now the **Layout** menu in the top bar: every window is listed there (click one to open it, bring it forward or minimise it), with the saved layouts underneath. A window with something unread still shows its count, on the menu button too.
+- Saving, deleting, resetting and sharing a layout ask in the menu itself. In the Windows app those buttons used to do nothing, because the app turns off the browser's question boxes.
+- The Windows app opens maximised (like pressing the maximise button, not full screen), and maximises again when a tech signs in or starts the day.
 
 ## 1.20.0
 
@@ -116,7 +141,6 @@ Report a bug goes to the console instead of an email app. Security hardening.
 - Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
 - Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
 - Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
->>>>>>> ATSUITE
 
 ## 1.10.3
 
