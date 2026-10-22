@@ -827,8 +827,8 @@
   }
   if (boot.modules.presenter) {
     $("sessDay").onchange = (e) => { sessDay = e.target.value; renderSessions(); };
-    $("sessTimer").onclick = () => confirm("Replace this room's cue list with this day's sessions?") &&
-      guard(() => post(`/api/presenter/rooms/${roomId}/to-timer`, { day: sessDay || "" })).then((r) => toast(`${r.cues} cues in the timer`, "good"));
+    $("sessTimer").onclick = async () => (await AT.ask("Replace this room's cue list with this day's sessions?", { yes: "Replace the cue list" })) &&
+      guard(() => post(`/api/presenter/rooms/${roomId}/to-timer`, { day: sessDay || "" })).then((r) => toast(`${r.cues} cues in the timer`, "good"), () => {});
     renderSessions();
     setInterval(renderSessions, 60000); // keeps "now" moving
   }

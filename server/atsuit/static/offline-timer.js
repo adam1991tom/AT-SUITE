@@ -93,7 +93,7 @@ var TimerLink = (() => { // var: cuelist.js and timerpanel.js look for window.Ti
         if (q) load(q, path === "go");
         else if (x.cue && cues.length) throw new Refused("That's the last cue");
       } else if (path === "previous") { const q = neighbour(cues, x.cue?.id, -1); if (q) load(q, false); }
-      else if (path === "stop") { set({ cue: null, title: "", duration_ms: 0, running: false, started_at: null, added_ms: 0, timer_type: "count-down", end_action: "none" }); left = 0; }
+      else if (path === "stop") { set({ cue: null, title: "", duration_ms: 0, running: false, started_at: null, added_ms: 0, timer_type: "count-down", end_action: "none", message_blink: false }); left = 0; }
       else if (SWITCHES[path]) x[SWITCHES[path]] = body.on != null ? !!body.on : !x[SWITCHES[path]];
     } else throw new Refused("This can't be done while the server is out of reach");
     x.remaining_ms = Math.round(left);
