@@ -5,6 +5,22 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.6
+
+**Chat, notes, links, help calls and notifications feel like Messenger and Facebook**
+
+- Chat uses message bubbles: yours on the right in the brand colour, everyone else's on the left with their initials, grouped when they send several in a row
+- Each message shows its time, and your latest one says "Sent" or "Seen by ..." so you know who has read it
+- Urgent and important messages stand out with a red or amber border and a flag
+- Enter sends, Shift+Enter starts a new line; emoji and file buttons sit in the message box
+- The chat list shows each room's latest message and how long ago it was sent
+- Handover notes are posts with the author's face, "5 minutes ago" times, and Pin, Edit and Done buttons
+- Links are cards with a search box
+- Help calls are cards with On my way, Reply and Resolved; resolving asks for the fix inside the card (the app used to fail silently here)
+- In the server console, Help requests is now a help desk: the calls on the left, the room's chat on the right, so admins can answer straight away
+- The bell shows a red count of new chat, help calls, handover notes and problems, with All/Unread tabs and New/Earlier sections; timer warnings still pop up but never go in the count
+- The top bar shows only this laptop's room name; techs can no longer pick another room there
+
 ## 1.20.3
 
 **UI improvements and visual enhancements**
