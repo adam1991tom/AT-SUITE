@@ -5,6 +5,15 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.5
+
+Fixes for everyone on 1.20.0 to 1.20.4: passwords and API keys from before 1.20.0 work again, and so do laptop captions.
+
+- 1.20.0 checked passwords a new way and no longer recognised ones saved before it, so every existing account, admins included, got "wrong password" after the update. Old passwords sign in again, and each one is saved the new way the next time that person signs in. Nobody needs a reset.
+- Companion's API keys made before 1.20.0 work again.
+- Signing out, and changing your password (which signs you out everywhere else), work for sign-ins from before 1.20.0 too.
+- Captions from a tech's microphone start again, in the browser and the Windows app. 1.20.0's security policy blocked the part that reads the microphone.
+
 ## 1.20.3
 
 **UI improvements and visual enhancements**
