@@ -233,7 +233,7 @@
   roomGap(); addEventListener("resize", roomGap);
 
   const pad = (n) => String(n).padStart(2, "0");
-  // Standard style: 4:59, 1:02:03, -0:05 in overtime. The others: 04:59, +00:05.
+  // Standard style: 4:59, 1:02:03, -0:05 in overtime. The others: 04:59, -00:05.
   const fmt = (ms) => {
     if (!strict) return AT.fmtTime(ms);
     const a = Math.abs(ms), h = Math.floor(a / 3600000), m = Math.floor(a % 3600000 / 60000), sec = Math.floor(a % 60000 / 1000);
@@ -244,7 +244,7 @@
     if (s.time_format === "12") return `${h % 12 || 12}:${pad(m)}:${pad(sec)} ${h >= 12 ? "PM" : "AM"}`;
     return `${pad(h)}:${pad(m)}:${pad(sec)}`;
   };
-  const dur = (ms) => AT.fmtTime(ms).replace(/^\+/, "");
+  const dur = (ms) => AT.fmtTime(ms).replace(/^-/, "");
   const hhmm = (ms) => {
     if (ms == null || isNaN(ms)) return "—";
     const t = Math.floor(((ms % 86400000) + 86400000) % 86400000 / 1000), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60);
@@ -328,7 +328,8 @@
       t.textContent = text;
       if (grew) fit(t);
     }
-    const tc = phase + (s.message_blink && !clock ? " blink" : ""); // the time of day never pulses
+    // The numbers pulse only once the time is up, or in danger time with Blink on; the time of day never pulses.
+    const tc = phase + (!clock && !idle && AT.timerBlinks(s, left) ? " blink" : "");
     if (t.className !== tc) t.className = tc; // setting it again would restart the blink
     put($("tod"), todText());
     $("tod").style.visibility = clock ? "hidden" : "";
@@ -359,7 +360,7 @@
     if (lay) {
       const sec = $("sec");
       lay.update({
-        timer: { text, phase, blink: !!(s.message_blink && !clock) },
+        timer: { text, phase, blink: !clock && !idle && AT.timerBlinks(s, left) }, // the same rule as the built-in views
         title: s.title || "", next: s.next ? s.next.title : "", clock: todText(), room: s.room || "",
         message: { on: !!(s.message_visible && s.message), text: s.message || "", blink: !!s.message_blink },
         secondary: { on: sec.classList.contains("on"), text: sec.textContent, over: sec.classList.contains("over") },

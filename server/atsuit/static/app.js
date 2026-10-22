@@ -178,6 +178,7 @@
     });
   }
 
+  const linkHost = (u) => { try { return new URL(u, location.href).host; } catch (_) { return u; } };
   const roomName = (id) => boot.rooms.find((r) => r.id === id)?.name || "";
   const roomOptions = (sel, blank = "No room") => `<option value="">${blank}</option>` + boot.rooms.map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`).join("");
 
@@ -258,8 +259,8 @@
         <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`).join("")}</div>` : "";
     const pre = '<div class="panel" id="preshow" style="margin-top:.6rem"><p class="muted small">Checking every laptop, screen and caption mic…</p></div>';
     el.innerHTML = (strip ? strip.replace('<div class="grid" id="dashRooms"', pre + '<div class="grid" id="dashRooms"') : `<div class="row" style="justify-content:space-between"><h1>Dashboard</h1>${boot.me.role === "admin" ? '<a class="btn" href="#/links">Edit links</a>' : ""}</div>` + pre) + (strip ? '<h2 style="margin-top:1.4rem">Links</h2>' : "") +
-      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 style="margin-top:1.2rem">${esc(g)}</h3><div class="tiles">` +
-        ls.map((l) => `<a class="tile" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="dot" data-ping="${l.id}"></span><span class="grow">${esc(l.label)}</span></a>`).join("") + "</div>").join("")
+      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 class="lk-head">${esc(g)}</h3><div class="lk-grid">` +
+        ls.map((l) => `<a class="lk" href="${esc(l.url)}" target="_blank" rel="noopener">${Chat.avatar(l.label)}<span class="lk-txt"><b>${esc(l.label)}</b><span>${esc(linkHost(l.url))}</span></span><span class="dot" data-ping="${l.id}"></span></a>`).join("") + "</div>").join("")
         : '<p class="muted">No links yet. Admins can import the old Homarr board or add links in Links.</p>');
     const dash = el.querySelector("#dashRooms");
     if (dash) {
@@ -268,7 +269,7 @@
         for (const [id, st] of Object.entries(live)) {
           const card = dash.querySelector(`[data-room="${id}"]`); if (!card || !st) continue;
           const d = AT.timerDisplay(st), c = card.querySelector(".clock");
-          c.textContent = d.text; c.className = "clock " + d.cls;
+          c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
           card.querySelector(".now").textContent = (st.cue?.cue ? st.cue.cue + " · " : "") + (st.title || "") + (st.playback === "pause" ? " (paused)" : "");
           card.querySelector(".next").textContent = (st.next ? `Next: ${st.next.title}` : "") + (st.message_visible ? `  ·  On stage: ${st.message}` : "");
         }
@@ -288,26 +289,65 @@
   }
 
   // --------------------------------------------------------------- help --
+  // Help calls on the left as cards, and the chat of the room the picked one came from on the right,
+  // so an admin answers the tech straight from here ("Swap to the spare mic, on my way").
   async function help(el) {
-    const render = async () => {
-      const rows = await api("/api/comms/help");
-      el.innerHTML = `<h1>Help requests</h1><div class="panel"><table><tr><th>When</th><th>Room</th><th>From</th><th>What</th><th>Status</th><th></th></tr>` +
-        rows.map((h) => `<tr><td>${when(h.created_at)}</td><td>${esc(h.room_name)}</td><td>${esc(h.requested_by)}</td><td>${esc(h.category)}: ${esc(h.description)}</td>` +
-          `<td><span class="pill ${h.status === "open" ? "bad" : h.status === "resolved" ? "good" : "warn"}">${esc(h.status)}</span>${h.status === "open" && h.escalations ? ' <span class="pill bad" title="Nobody answered in time, so it went out again to every laptop and page">no answer</span>' : ""} ${esc(h.assigned_to)}</td>` +
-          `<td class="row">${h.status === "open" ? `<button class="small" data-s="acknowledged" data-id="${h.id}">On my way</button>` : ""}${h.status !== "resolved" ? `<button class="small" data-s="resolved" data-id="${h.id}">Resolved</button>` : ""}</td></tr>`).join("") +
-        "</table></div>";
-      el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => guard(() => put(`/api/comms/help/${b.dataset.id}`, { status: b.dataset.s })));
+    let rows = [], pick = null, filter = "live", roomChat = null, chans = null;
+    el.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Help requests</h1></div>
+      <div class="helpdesk"><div class="hd-left"><div class="hd-filter" role="tablist">
+        <button type="button" class="chip" data-f="live">Open</button><button type="button" class="chip" data-f="all">All</button></div>
+        <div class="hc-list"></div></div>
+        <div class="hd-chat"><div class="chat-mount"></div></div></div>`;
+    const listEl = el.querySelector(".hc-list"), chatEl = el.querySelector(".chat-mount");
+    const draw = () => {
+      el.querySelectorAll("[data-f]").forEach((b) => { b.classList.toggle("on", b.dataset.f === filter); b.setAttribute("aria-selected", String(b.dataset.f === filter)); });
+      const shown = rows.filter((h) => filter === "all" || h.status !== "resolved");
+      listEl.innerHTML = shown.map((h) => HelpCards.card(h, { active: h.id === pick?.id })).join("") ||
+        `<p class="muted">${filter === "all" ? "No help calls yet." : "No open help calls. 🎉"}</p>`;
+      HelpCards.wire(listEl, rows, { onReply: (h) => openChat(h), onPick: (h) => openChat(h) });
     };
-    view = { onEvent: (e) => e.type.startsWith("help.") && render() };
-    render();
+    async function openChat(h) {
+      pick = h; draw();
+      chans ||= await api("/api/comms/channels");
+      const ch = chans.find((c) => c.kind === "room" && c.room_id === h.room_id);
+      if (!ch) { chatEl.innerHTML = '<p class="muted" style="padding:1rem">This room has no chat.</p>'; roomChat = null; return; }
+      roomChat = Chat.mount(chatEl, { me: boot.me, channel: ch.id, quiet: true });
+      setTimeout(() => chatEl.querySelector("textarea")?.focus(), 50);
+    }
+    el.querySelectorAll("[data-f]").forEach((b) => (b.onclick = () => { filter = b.dataset.f; draw(); }));
+    const load = async () => {
+      rows = await api("/api/comms/help");
+      if (pick) pick = rows.find((h) => h.id === pick.id) || pick;
+      draw();
+    };
+    view = { onEvent: (e) => { if (e.type.startsWith("help.")) load(); roomChat && roomChat.onEvent(e); } };
+    await load();
+    const first = rows.find((h) => h.status === "open") || rows.find((h) => h.status !== "resolved") || rows[0];
+    if (first) openChat(first);
+    else chatEl.innerHTML = '<div class="chat-empty" style="padding:2rem"><p class="muted">Pick a help call to answer the tech in their room\'s chat.</p></div>';
   }
 
   // ------------------------------------------------------------- timers --
-  // Live: every room's timer. Screens: what each remote screen shows. Views: every timer
-  // view, with a preview. Layout designer: make your own views (layoutdesigner.js).
+  // The quick messages: one per line, saved on the server for every room until changed again.
+  async function quickMessages(box) {
+    const r = await api("/api/timers-quick-messages").catch(() => null);
+    if (!r) { box.innerHTML = '<p class="muted small">Couldn\'t load the quick messages.</p>'; return; }
+    box.innerHTML = `<label>Quick messages, one per line</label><textarea data-qm rows="10" style="min-height:12rem">${esc(r.messages.join("\n"))}</textarea>
+      <div class="row" style="justify-content:flex-end;margin-top:.5rem"><button data-qmreset>Back to the defaults</button><button class="primary" data-qmsave>Save messages</button></div>`;
+    const save = box.querySelector("[data-qmsave]");
+    save.onclick = () => AT.busy(save, guard(() => put("/api/timers-quick-messages", { messages: box.querySelector("[data-qm]").value.split("\n") })))
+      .then((x) => { if (x) { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast(`${x.messages.length} quick messages saved`, "good"); } }, () => {});
+    box.querySelector("[data-qmreset]").onclick = async () => {
+      if (!(await AT.ask("Put the quick messages back to the defaults? The ones saved now are replaced.", { yes: "Back to the defaults" }))) return;
+      guard(() => del("/api/timers-quick-messages")).then((x) => { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast("Quick messages are back to the defaults", "good"); }, () => {});
+    };
+  }
+
+  // Live: every room's timer. Screens: what each remote screen shows. Quick messages: the ready-made
+  // stage messages. Views: every timer view, with a preview. Layout designer: make your own views (layoutdesigner.js).
   let timersEdit = null; // the designed view to open in the layout designer
   async function timers(el, sub) {
-    const TABS = { live: "Live", screens: "Screens", views: "Views", designer: "Layout designer" };
+    const TABS = { live: "Live", screens: "Screens", messages: "Quick messages", views: "Views", designer: "Layout designer" };
     if (boot.modules.fleet === false) delete TABS.screens;
     const tab = TABS[sub] ? sub : "live";
     el.innerHTML = `<h1>Timers</h1><div class="tabs sect">${Object.entries(TABS).map(([k, l]) => `<a class="btn${k === tab ? " on" : ""}" href="#/timers/${k}">${esc(l)}</a>`).join("")}</div><div id="tpage"></div>`;
@@ -342,7 +382,7 @@
         for (const [id, s] of Object.entries(states)) {
           const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
           const d = AT.timerDisplay(s), c = card.querySelector(".clock");
-          c.textContent = d.text; c.className = "clock " + d.cls;
+          c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
           card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
           card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
         }
@@ -356,6 +396,11 @@
       const d = LayoutDesigner.mount(page.querySelector("#designer"), { boot, slug, onSaved: () => {} });
       view.leaving = () => d.isDirty();
       return;
+    }
+
+    if (tab === "messages") {
+      page.innerHTML = `<p class="muted small">The ready-made messages techs tap to put on stage, in every room's workspace.</p><div class="panel" id="qmsgs"></div>`;
+      return quickMessages(page.querySelector("#qmsgs"));
     }
 
     if (tab === "screens") {
@@ -806,21 +851,23 @@
   async function admAi(a) {
     const d = await api("/api/admin/ai"), s = d.settings;
     a.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))"><form class="panel" id="aif"><h2>AI helper</h2>
-      <p class="small muted" style="margin-top:0">Techs ask it in the Help menu, and it answers each help call while the crew is on the way. It answers from your venue notes, from how past help calls were fixed (${d.help_fixes} so far), and from answers techs marked "This fixed it".</p>
+      <p class="small muted" style="margin-top:0">Techs chat with it from the Help menu, and it picks up each help call while the crew is on the way. It answers from your venue notes, from how past help calls were fixed (${d.help_fixes} so far), and from answers techs marked "This fixed it".</p>
       <label><input type="checkbox" name="enabled" ${s.enabled ? "checked" : ""} style="width:auto"> Turn on the AI helper</label>
       <label>Venue notes</label><textarea name="venue_notes" rows="10" placeholder="One topic per paragraph, its first line a heading. E.g.&#10;Hall A projector&#10;Use input HDMI 2. The remote is on the lectern shelf.">${esc(s.venue_notes)}</textarea>
       <label><input type="checkbox" name="learn_help" ${s.learn_help ? "checked" : ""} style="width:auto"> Learn from how help calls were fixed</label>
       <label><input type="checkbox" name="builtin_guide" ${s.builtin_guide !== false ? "checked" : ""} style="width:auto"> Use the built-in tech guide</label>
-      <p class="small muted" style="margin:.1rem 0 .4rem">Show-day fixes for sound, video, presenters' laptops, hybrid events, lighting, safety and running the show, built into AT-SUITE. It works offline. Your own notes and fixes always come first.</p>
+      <p class="small muted" style="margin:.1rem 0 .4rem">Fault finding for sound, video, lighting, staging and rigging, networks, presenters' laptops, hybrid events, safety and running the show, built into AT-SUITE. It works offline. Your own notes and fixes always come first. You can read and change it under Tech guide.</p>
       <h2 style="margin-top:1rem">Private AI model (optional)</h2>
-      <p class="small muted" style="margin-top:0">With a model on your own network (<a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>), it writes a short answer from those notes. Without one it lists what worked before. Leave the address empty to use the one set in Presenters${d.presenter_ai_url ? ` (${esc(d.presenter_ai_url)})` : ""}.</p>
+      <p class="small muted" style="margin-top:0">With a model on your own network (<a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>), it writes its replies from those notes and the whole conversation. Without one it still chats: it offers the best match and asks the guide's questions to narrow the fault down. Leave the address empty to use the one set in Presenters${d.presenter_ai_url ? ` (${esc(d.presenter_ai_url)})` : ""}.</p>
       <label>Ollama address</label><input name="ai_url" placeholder="http://192.168.1.50:11434" value="${esc(s.ai_url)}">
       <label>Model</label><input name="ai_model" value="${esc(s.ai_model)}">
       <h2 style="margin-top:1rem">Web quick search</h2>
       <label><input type="checkbox" name="web_search" ${s.web_search ? "checked" : ""} style="width:auto"> Look up questions on the web when the venue's notes don't cover them</label>
       <p class="small muted" style="margin:.1rem 0 .4rem">Off by default. When on, only the question is sent (to DuckDuckGo), never your notes, chat, names or rooms. Leave it off for NDA work.</p>
       <div class="row" style="margin-top:.8rem"><button class="primary">Save</button></div></form>
-      <div class="panel"><h2>Learned from techs</h2>${d.learned.length ? `<table><tr><th>Question</th><th>Answer</th><th>By</th><th></th></tr>${d.learned.map((k) => `<tr><td>${esc(k.question)}</td><td class="small" style="white-space:pre-wrap">${esc(k.answer)}</td><td class="small muted">${esc(k.added_by)}<br>${when(k.created_at)}</td><td><button class="small danger" data-forget="${k.id}">Forget</button></td></tr>`).join("")}</table>` : '<p class="muted">Nothing yet. When an answer fixes something, techs press "This fixed it".</p>'}</div></div>`;
+      <div class="panel"><h2>Learned from techs</h2>${d.learned.length ? `<table><tr><th>Question</th><th>Answer</th><th>By</th><th></th></tr>${d.learned.map((k) => `<tr><td>${esc(k.question)}</td><td class="small" style="white-space:pre-wrap">${esc(k.answer)}</td><td class="small muted">${esc(k.added_by)}<br>${when(k.created_at)}</td><td><button class="small danger" data-forget="${k.id}">Forget</button></td></tr>`).join("")}</table>` : '<p class="muted">Nothing yet. When an answer fixes something, techs press "This fixed it".</p>'}</div>
+      <div class="panel" id="aiGuide" style="grid-column:1/-1"></div></div>`;
+    admGuide(a.querySelector("#aiGuide"));
     const f = a.querySelector("#aif");
     f.onsubmit = (e) => {
       e.preventDefault();
@@ -829,6 +876,67 @@
     };
     a.querySelectorAll("[data-forget]").forEach((b) => b.onclick = () => confirm("Forget this answer?") && guard(() => del(`/api/admin/ai/learned/${b.dataset.forget}`)).then(() => admAi(a)));
   }
+
+  // The tech guide the AI helper answers from: AT-SUITE's topics, which admins can change (their copy
+  // replaces the built-in one until they reset it) or add to.
+  const GUIDE_SOURCE = { "built-in": ["Built in", ""], provider: ["From your provider", ""], edited: ["Changed here", "warn"], added: ["Added here", "good"] };
+  async function admGuide(box, open = "") {
+    const { topics } = await api("/api/admin/ai/guide");
+    box.innerHTML = `<h2>Tech guide</h2>
+      <p class="small muted" style="margin-top:0">What the AI helper knows about fault finding, one topic per file. Change a topic and your copy is used instead of the built-in one; Reset brings the built-in one back. Your venue notes still come first. Anyone can read the guide at <a href="/guide/help" target="_blank" rel="noopener">/guide/help</a>, so keep venue details (rooms, inputs, where kit is) in Venue notes.</p>
+      <table><tr><th>Topic</th><th>Entries</th><th>Questions</th><th>Where from</th><th></th></tr>${topics.map((t) => {
+        const [label, cls] = GUIDE_SOURCE[t.source] || [t.source, ""];
+        return `<tr><td><b>${esc(t.title)}</b> <span class="muted small">${esc(t.name)}</span></td><td>${t.entries}</td><td>${t.questions}</td><td><span class="pill ${cls}">${esc(label)}</span></td>
+          <td class="row" style="gap:.3rem"><button class="small" data-gedit="${esc(t.name)}">${t.source === "added" || t.source === "edited" ? "Edit" : "Read or change"}</button>${t.source === "edited" ? `<button class="small" data-greset="${esc(t.name)}">Reset</button>` : ""}${t.source === "added" ? `<button class="small danger" data-greset="${esc(t.name)}">Delete</button>` : ""}</td></tr>`;
+      }).join("")}</table>
+      <div class="row" style="margin-top:.6rem"><button class="small" id="gAdd">Add a topic</button></div>
+      <div id="gEdit"></div>
+      <details style="margin-top:.8rem"><summary>How to write a topic</summary><pre class="small" style="white-space:pre-wrap"># Venue kit
+
+## Lectern mic not working
+Keywords: lectern, gooseneck, mic dead
+1. The lectern mic is a condenser: it needs phantom power on its channel.
+2. Spare goosenecks are in the blue case under the tech desk.
+
+### Ask meter: Does the lectern channel's meter move when someone speaks?
+- Yes: The sound reaches the desk: check the fader and the main mix. → main
+- No: Turn on phantom power, then swap the gooseneck.
+
+### Ask main: Does the master meter move too?
+- Yes: Check the amps are on.
+- No: Check the channel is routed to the main mix.</pre>
+      <p class="small muted">Each "## " heading is one entry: steps first, then optional questions. A question is "### Ask &lt;id&gt;: question", each answer a line "- Answer: what to do", and "→ id" goes on to another question. The helper shows the answers as buttons.</p></details>`;
+    const edit = async (name, fresh = false) => {
+      const t = fresh ? { name: "", markdown: "# New topic\n\n## First entry\nKeywords: \n1. \n", problems: [] } : await api(`/api/admin/ai/guide/${encodeURIComponent(name)}`);
+      const ed = box.querySelector("#gEdit");
+      ed.innerHTML = `<form method="post" class="panel" style="margin-top:.8rem" id="gForm"><h3 style="margin-top:0">${fresh ? "New topic" : esc(name)}${t.edited === false && t.built_in ? ' <span class="pill">built in: saving makes your own copy</span>' : ""}</h3>
+        ${fresh ? '<label for="gName">Name (lower case, numbers and dashes, e.g. venue-kit)</label><input id="gName" name="name" pattern="[a-z0-9][a-z0-9-]{0,39}" required>' : ""}
+        <label for="gText">Topic</label><textarea id="gText" name="markdown" rows="22" style="font-family:ui-monospace,monospace;font-size:.85rem">${esc(t.markdown)}</textarea>
+        <div id="gProblems">${probs(t.problems)}</div>
+        <div class="row" style="margin-top:.5rem"><button class="primary">Save</button><button type="button" class="small" id="gCancel">Close</button></div></form>`;
+      const f = ed.querySelector("#gForm");
+      ed.querySelector("#gCancel").onclick = () => { ed.innerHTML = ""; };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const n = fresh ? f.name.value.trim() : name;
+        guard(() => put(`/api/admin/ai/guide/${encodeURIComponent(n)}`, { markdown: f.markdown.value })).then((r) => {
+          toast(r.problems.length ? "Saved, but some questions need a look" : "Saved", r.problems.length ? "warn" : "good");
+          admGuide(box, r.problems.length ? n : "");
+        }, () => {});
+      };
+      ed.scrollIntoView({ block: "nearest" });
+    };
+    const probs = (p) => p?.length ? `<div class="small" role="alert" style="margin-top:.4rem"><b>Check these:</b><ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+    box.querySelectorAll("[data-gedit]").forEach((b) => b.onclick = () => edit(b.dataset.gedit));
+    box.querySelectorAll("[data-greset]").forEach((b) => b.onclick = () => confirm(b.textContent === "Delete" ? "Delete this topic?" : "Go back to the built-in topic? Your changes are lost.") &&
+      guard(() => del(`/api/admin/ai/guide/${encodeURIComponent(b.dataset.greset)}`)).then(() => admGuide(box)));
+    box.querySelector("#gAdd").onclick = () => edit("", true);
+    if (open) edit(open);
+  }
+
+  // Where Report a bug sends people, for now.
+  const BUG_EMAIL = "adam.tomlinson@outlook.com";
+
 
   async function admInfo(a) {
     const i = await api("/api/admin/info"), sv = i.server, st = i.storage, n = i.nodes, c = i.counts;

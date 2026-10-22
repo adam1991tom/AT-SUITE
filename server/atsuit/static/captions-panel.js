@@ -216,7 +216,7 @@
       k("fields").querySelectorAll("[data-f]").forEach((i) => { if (i.disabled) return; const f = FIELDS.find((x) => x[0] === i.dataset.f); vals[i.dataset.f] = f[2] === "check" ? i.checked : ["number", "range"].includes(f[2]) ? +i.value : i.value; });
       AT.guard(() => save({ appearance: { [surface]: vals } })).then(() => { drawFields(); toast(`${SURF[surface]} updated`, "good"); });
     };
-    k("reset").onclick = () => confirm(`Put the ${SURF[surface].toLowerCase()} back to its default look?`) && AT.guard(() => save({ reset_appearance: surface })).then(drawFields);
+    k("reset").onclick = async () => (await AT.ask(`Put the ${SURF[surface].toLowerCase()} back to its default look?`, { yes: "Back to the default" })) && AT.guard(() => save({ reset_appearance: surface })).then(drawFields, () => {});
 
     // Corrections
     async function correct(word) {
@@ -250,7 +250,7 @@
       const privacy = '<p class="small muted" style="margin:.3rem 0">Private: speech becomes text on your own server, and no audio or text leaves your network. Transcripts are stored encrypted and deleted automatically after they end, so export them for the client before then.</p>';
       k("tx").innerHTML = privacy + (tx.length ? `<table><tr><th>Started</th><th>Ended</th><th>Deleted</th><th></th></tr>${tx.map((t) => `<tr><td>${AT.when(t.started_at)}</td><td>${t.ended_at ? AT.when(t.ended_at) : '<span class="pill bad">recording</span>'}</td><td class="small muted">${t.delete_at ? AT.when(t.delete_at) : ""}</td>
         <td style="white-space:nowrap"><a href="/api/captions/transcripts/${t.id}" target="_blank">Text</a> · <a href="/api/captions/transcripts/${t.id}/export.srt">SRT</a> · <a href="/api/captions/transcripts/${t.id}/export.vtt">VTT</a>${t.ended_at ? ` · <a href="#" data-del="${t.id}">Delete</a>` : ""}</td></tr>`).join("")}</table>` : '<p class="muted">No transcripts for this room yet.</p>');
-      k("tx").querySelectorAll("[data-del]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); confirm("Delete this transcript?") && AT.guard(() => del(`/api/captions/transcripts/${a.dataset.del}`)).then(loadTx); }));
+      k("tx").querySelectorAll("[data-del]").forEach((a) => (a.onclick = async (e) => { e.preventDefault(); (await AT.ask("Delete this transcript?", { yes: "Delete", danger: true })) && AT.guard(() => del(`/api/captions/transcripts/${a.dataset.del}`)).then(loadTx, () => {}); }));
     }
 
     AT.socket([`captions:${roomId}`], (e) => {

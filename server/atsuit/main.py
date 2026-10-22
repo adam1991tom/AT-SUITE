@@ -90,7 +90,7 @@ class SecretsOutOfAddresses:
                 have = {k.lower() for k, _ in headers}
                 extra = [(b"referrer-policy", referrer), (b"x-content-type-options", b"nosniff"),
                          (b"x-frame-options", b"SAMEORIGIN"),
-                         (b"content-security-policy", b"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:; font-src 'self' data:;")]
+                         (b"content-security-policy", b"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws: wss:; font-src 'self' data:;")]
                 if is_https:
                     extra.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
                 if no_store:
@@ -229,6 +229,11 @@ def create_app() -> FastAPI:
     @app.get("/node", include_in_schema=False)
     def node_page():
         return page("node.html")
+
+    @app.get("/manage", include_in_schema=False)
+    def manage_page():
+        # The manager view: what admins and managers get when they sign in on a laptop or phone.
+        return page("manage.html")
 
     @app.get("/screen", include_in_schema=False)
     def screen_page():

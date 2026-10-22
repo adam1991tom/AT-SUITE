@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from .. import config, db, licence
 from ..hub import hub
-from ..security import NODE_COOKIE, Principal, clean_url, new_token, require_admin, require_manager, require_node, require_tech, token_hash
+from ..security import NODE_COOKIE, Principal, clean_url, create_session, new_token, require_admin, require_manager, require_node, require_tech, token_hash
 from .core import require_module, site_ok
 
 router = APIRouter(dependencies=[Depends(require_module("fleet"))])
@@ -548,8 +548,13 @@ class StartIn(BaseModel):
     username: str = Field("", max_length=64)
     password: str = Field("", max_length=256)
     new_password: str | None = Field(None, max_length=256)
-    room_id: int
-    mode: str = Field(pattern="^(main|backup)$")
+    # Not needed when an admin or manager signs in for the manager view; a tech has to give both.
+    room_id: int | None = None
+    mode: str | None = Field(None, pattern="^(main|backup)$")
+    as_tech: bool = False  # an admin or manager working a room as a tech, not the manager view
+
+
+MANAGER_ROLES = ("admin", "manager")
 
 
 class ModeIn(BaseModel):
@@ -563,28 +568,50 @@ def _node_token(request: Request) -> str:
 
 @router.post("/api/nodes/me/start")
 async def node_start(body: StartIn, request: Request, response: Response, p: Principal = Depends(require_node)):
-    """A tech starts the day on a tech laptop: their name, the room, and
+    """Someone starts on a tech laptop. A tech gives their name, the room, and
     whether this is the main PC (no notifications) or the backup (silent
     pop-ups). With tech passwords on (the default) they sign in with their own
-    account; otherwise they just type their name."""
-    from .core import check_login
+    account; otherwise they just type their name.
+
+    An admin or manager who signs in here gets the manager view (/manage) instead
+    of the tech workspace: an account session on this laptop, with no room or
+    main/backup to pick. With as_tech they work a room like any tech."""
+    from .core import _set_cookie, check_login
 
     operator, account_id = " ".join(body.operator.split()), None
+    session = ""
     try:
         with db.tx() as c:
-            if db.get_setting(c, "tech_passwords", True):
+            n = c.execute("SELECT name, site_id, kind FROM nodes WHERE id=?", (p.id,)).fetchone()
+            # An account signs in when tech passwords are on, or when an admin or manager gives theirs.
+            if db.get_setting(c, "tech_passwords", True) or body.username.strip():
                 if not body.username.strip() or not body.password:
                     raise HTTPException(422, "Enter your username and password")
                 a = check_login(c, body.username, body.password, request, body.new_password)
-                n = c.execute("SELECT site_id FROM nodes WHERE id=?", (p.id,)).fetchone()
                 if a["role"] == "viewer" or (a["site_id"] is not None and n["site_id"] is not None and a["site_id"] != n["site_id"]):
                     raise HTTPException(403, "This account can't run a tech laptop here")
-                operator, account_id = a["display_name"] or a["username"], a["id"]
+                if a["role"] in MANAGER_ROLES and not body.as_tech:
+                    if n["kind"] != "tech":
+                        raise HTTPException(400, "Only tech laptops start a day")
+                    session = create_session(c, a["id"])
+                    db.audit(c, a["username"], "node.manage", f"manager view on {n['name']}")
+                    view = {"ok": True, "view": "manage", "role": a["role"]}
+                else:
+                    operator, account_id = a["display_name"] or a["username"], a["id"]
+            # Checked here so a password changed at this sign-in isn't kept while the form still needs an answer.
+            if not session:
+                if not body.room_id:
+                    raise HTTPException(422, "Pick the room you're in")
+                if not body.mode:
+                    raise HTTPException(422, "Pick Main PC or Backup PC")
     except HTTPException as e:
         if e.status_code == 401:
             with db.tx() as c:
                 db.audit(c, body.username.strip()[:64] or "?", "auth.fail", request.client.host if request.client else "")
         raise
+    if session:
+        _set_cookie(response, session, request=request)
+        return view
     if not operator:
         raise HTTPException(422, "Enter your name")
     with db.tx() as c:
@@ -603,7 +630,7 @@ async def node_start(body: StartIn, request: Request, response: Response, p: Pri
     response.set_cookie(NODE_COOKIE, _node_token(request), httponly=True, samesite="lax", secure=request.url.scheme == "https",
                         max_age=400 * 86400)
     await hub.publish("fleet", "node.changed", {"id": p.id})
-    return {"ok": True}
+    return {"ok": True, "view": "tech"}
 
 
 @router.put("/api/nodes/me/mode")

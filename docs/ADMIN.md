@@ -59,9 +59,10 @@ the right page.
    order with ↑ ↓, GO starts the next cue. Each cue's *end action* says
    what happens at zero: keep going into overtime, stop, load the next cue,
    or play the next. An Ontime project file can be imported into a room.
-   The console's **Timers** page has four tabs: **Live** (a preview of every
-   room, with no controls), **Screens**, **Views** (every view, with a
-   preview) and **Layout designer**, where admins make their own views by
+   The console's **Timers** page has five tabs: **Live** (a preview of every
+   room, with no controls), **Screens**, **Quick messages** (the ready-made
+   stage messages techs tap), **Views** (every view, with a preview) and
+   **Layout designer**, where admins make their own views by
    dragging the timer, title, clock, message, logo and the rest onto a
    screen. Screens showing a view update as soon as it's saved.
    **Custom views** (the HTML views made for Ontime): Timers → Views → upload

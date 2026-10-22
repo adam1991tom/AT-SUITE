@@ -219,8 +219,9 @@ def _load(c, room_id: int, q, start: bool) -> None:
 
 
 def _stop(c, room_id: int) -> None:
+    # Stop clears the timer and its blink, so nothing is left flashing on stage.
     _update(c, room_id, cue_id=None, title="", duration_ms=0, remaining_ms=0, running=0, started_at=None,
-            first_started_at=None, added_ms=0, timer_type="count-down", end_action="none")
+            first_started_at=None, added_ms=0, timer_type="count-down", end_action="none", message_blink=0)
 
 
 # --------------------------------------------------------------- reading --

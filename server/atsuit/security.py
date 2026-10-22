@@ -28,19 +28,33 @@ _ROLE_RANK = {"viewer": 0, "tech": 1, "manager": 2, "admin": 3}
 
 
 # Same format as AT-RoomComms and AT-Presenter, so migrated accounts keep their passwords.
-# Increased iterations in 1.20.0 for stronger password hashing (200k → 300k).
-def hash_password(password: str, salt: str | None = None) -> str:
+# 1.20.0 raised the rounds from 200k to 300k. The stored hash doesn't say which it used, so a
+# password saved before then is checked with the old rounds too, and saved again with the new
+# ones at its next sign-in.
+ROUNDS = 300_000
+OLD_ROUNDS = (200_000,)
+
+
+def hash_password(password: str, salt: str | None = None, rounds: int = ROUNDS) -> str:
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 300_000).hex()
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), rounds).hex()
     return f"{salt}${digest}"
 
 
-def verify_password(password: str, stored: str) -> bool:
+def password_rounds(password: str, stored: str) -> int | None:
+    """The rounds the stored hash was made with, if the password matches it."""
     try:
         salt, _ = stored.split("$", 1)
     except ValueError:
-        return False
-    return hmac.compare_digest(hash_password(password, salt), stored)
+        return None
+    for rounds in (ROUNDS, *OLD_ROUNDS):
+        if hmac.compare_digest(hash_password(password, salt, rounds), stored):
+            return rounds
+    return None
+
+
+def verify_password(password: str, stored: str) -> bool:
+    return password_rounds(password, stored) is not None
 
 
 def token_hash(token: str, algorithm: str = "sha512") -> str:
@@ -158,7 +172,8 @@ def _node_principal(r) -> Principal | None:
 
 
 def _from_apikey(c, key: str) -> Principal | None:
-    r = c.execute("SELECT id,name FROM api_keys WHERE key_hash=?", (token_hash(key),)).fetchone()
+    # sha512 since 1.20.0; keys made before then are sha256
+    r = c.execute("SELECT id,name FROM api_keys WHERE key_hash IN (?,?)", (token_hash(key, "sha512"), token_hash(key, "sha256"))).fetchone()
     return Principal("apikey", r["id"], r["name"], "tech") if r else None
 
 

@@ -51,9 +51,23 @@ def get_channel(c, channel_id: int, p: Principal):
     return ch
 
 
+def reader_names(c, message_id: int) -> list[str]:
+    """Who has read a message, by name, first reader first: a person's display name, or the tech at a laptop."""
+    out = []
+    for r in c.execute(
+        "SELECT r.account_id AS rid, a.display_name AS acct, n.operator AS op, n.name AS node FROM message_reads r "
+        "LEFT JOIN accounts a ON r.account_id>0 AND a.id=r.account_id LEFT JOIN nodes n ON r.account_id<0 AND n.id=-r.account_id "
+        "WHERE r.message_id=? ORDER BY r.read_at, r.rowid", (message_id,)):
+        name = r["acct"] or r["op"] or r["node"]
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 def message_out(c, m) -> dict:
     atts = db.rows(c.execute("SELECT id,original_name,mime,size FROM attachments WHERE message_id=?", (m["id"],)))
-    reads = c.execute("SELECT COUNT(*) FROM message_reads WHERE message_id=?", (m["id"],)).fetchone()[0]
+    readers = reader_names(c, m["id"])
+    reads = len(readers)
     reactions: dict[str, dict] = {}
     for r in c.execute("SELECT who,name,emoji FROM message_reactions WHERE message_id=? ORDER BY rowid", (m["id"],)):
         x = reactions.setdefault(r["emoji"], {"emoji": r["emoji"], "count": 0, "who": [], "names": []})
@@ -65,6 +79,8 @@ def message_out(c, m) -> dict:
         "body": "" if m["deleted_at"] else decrypt(m["body_enc"]), "priority": m["priority"],
         "created_at": m["created_at"], "edited_at": m["edited_at"], "deleted": bool(m["deleted_at"]),
         "attachments": atts, "reads": reads, "reactions": list(reactions.values()),
+        # "Seen by" under the sender's message: everyone who read it but the sender
+        "seen_by": [n for n in readers if n != m["sender_name"]],
     }
 
 
@@ -103,8 +119,20 @@ def list_channels(p: Principal = Depends(require_user)):
                 a = c.execute("SELECT display_name FROM accounts WHERE id=?", (other[0] if other else p.id,)).fetchone()
                 ch["name"] = a["display_name"] if a else "Direct message"
             ch["unread"] = unread_count(c, ch["id"], p)
+            ch["last"] = last_message(c, ch["id"])
             out.append(ch)
         return out
+
+
+def last_message(c, channel_id: int) -> dict | None:
+    """The newest message in a channel, for the line under its name in the chat list."""
+    m = c.execute("SELECT * FROM messages WHERE channel_id=? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1", (channel_id,)).fetchone()
+    if not m:
+        return None
+    body = decrypt(m["body_enc"])
+    if not body and c.execute("SELECT 1 FROM attachments WHERE message_id=?", (m["id"],)).fetchone():
+        body = "Sent a file"
+    return {"sender_id": m["sender_id"], "sender_name": m["sender_name"], "body": body[:140], "created_at": m["created_at"], "priority": m["priority"]}
 
 
 UNREAD_DAYS = 7  # older messages never count as unread (a new account doesn't start with years of chat)
@@ -272,16 +300,20 @@ class ReadIn(BaseModel):
 
 
 @router.post("/api/comms/channels/{channel_id}/read")
-def mark_read(channel_id: int, body: ReadIn, p: Principal = Depends(require_user)):
+async def mark_read(channel_id: int, body: ReadIn, p: Principal = Depends(require_user)):
     if p.kind not in ("account", "node"):
         return {"ok": True}
     with db.tx() as c:
-        get_channel(c, channel_id, p)
-        c.execute(
+        ch = get_channel(c, channel_id, p)
+        cur = c.execute(
             "INSERT OR IGNORE INTO message_reads(message_id,account_id,read_at) "
             "SELECT id,?,? FROM messages WHERE channel_id=? AND id<=?",
             (reader_id(p), db.now_iso(), channel_id, body.up_to),
         )
+        fresh = cur.rowcount > 0
+    # The sender's "Seen" updates as it happens (only when something new was read, so it's quiet)
+    if fresh:
+        await publish_channel(ch, "message.read", {"channel_id": channel_id, "up_to": body.up_to, "name": p.name})
     return {"ok": True}
 
 

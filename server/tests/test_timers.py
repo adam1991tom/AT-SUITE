@@ -204,6 +204,11 @@ def test_companion_presets_switches_and_messages(admin, client):
     assert not client.post(f"/api/timers/{rid}/blink/toggle", headers=k).json()["message_blink"]
     assert client.post(f"/api/timers/{rid}/blink", headers=k).json()["message_blink"]
     assert not client.post(f"/api/timers/{rid}/blink", headers=k, json={"on": False}).json()["message_blink"]
+    # Stop ends the blink with the timer, so nothing is left flashing on stage.
+    assert client.post(f"/api/timers/{rid}/blink/on", headers=k).json()["message_blink"]
+    s = client.post(f"/api/timers/{rid}/stop", headers=k).json()
+    assert s["playback"] == "stop" and not s["message_blink"]
+    client.post(f"/api/timers/{rid}/preset/10?start=false", headers=k)
     assert client.post(f"/api/timers/{rid}/blackout/on", headers=k).json()["blackout"]
     assert not client.post(f"/api/timers/{rid}/blackout/off", headers=k).json()["blackout"]
     assert client.post(f"/api/timers/{rid}/sideways/on", headers=k).status_code == 404
