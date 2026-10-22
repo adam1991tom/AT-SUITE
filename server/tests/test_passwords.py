@@ -125,3 +125,28 @@ def test_upgraded_sites_keep_name_sign_in(tmp_path, monkeypatch):
         assert db.get_setting(c, "tech_passwords", True) is False
     c = sqlite3.connect(config.cfg.db_path)
     assert "must_change" in [r[1] for r in c.execute("PRAGMA table_info(accounts)")]
+
+
+def test_passwords_and_keys_from_before_1_20_still_work(admin):
+    """1.20.0 hashes passwords with more rounds and keys with sha512. Ones saved before
+    still sign in; a password is saved again with today's rounds at its next sign-in."""
+    import hashlib
+
+    from atsuit import db
+    from atsuit.security import ROUNDS, hash_password, password_rounds
+
+    old = hash_password("olds-pass-1", "ab" * 16, 200_000)
+    admin.post("/api/admin/accounts", json={"username": "olly", "display_name": "Olly", "role": "tech", "password": "x-temp-pass-1"})
+    with db.tx() as c:
+        c.execute("UPDATE accounts SET password_hash=?, must_change=0 WHERE username='olly'", (old,))
+        c.execute("INSERT INTO api_keys(name,key_hash,prefix,created_at) VALUES('Old Companion',?,?,?)",
+                  (hashlib.sha256(b"ats_old-key").hexdigest(), "ats_old-", db.now_iso()))
+    olly = _other(admin)
+    assert olly.post("/api/auth/login", json={"username": "olly", "password": "nope-nope-1"}).status_code == 401
+    assert olly.post("/api/auth/login", json={"username": "olly", "password": "olds-pass-1"}).status_code == 200
+    with db.ro() as c:
+        now = c.execute("SELECT password_hash FROM accounts WHERE username='olly'").fetchone()[0]
+    assert now != old and password_rounds("olds-pass-1", now) == ROUNDS
+    assert _other(admin).post("/api/auth/login", json={"username": "olly", "password": "olds-pass-1"}).status_code == 200
+    rid = admin.get("/api/bootstrap").json()["rooms"][0]["id"]
+    assert admin.post(f"/api/timers/{rid}/start", headers={"X-API-Key": "ats_old-key"}).status_code == 200
