@@ -5,6 +5,27 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.21.0
+
+A layout designer for timer views, and BDNG is built in.
+
+**Layout designer** (Timers → Layout designer)
+- Make your own timer views by placing their parts on a 16:9 screen, like stagetimer.io: the timer, cue title, next cue, time of day, stage message, second line, progress bar, status bar, logo, room name, your own text and plain shapes.
+- Drag a part to move it and its corners to resize it. Parts snap to the middle of the screen and to each other. With the keyboard: arrow keys move the picked part (Shift for bigger steps), Alt and the arrows resize it, Delete removes it, Ctrl+D copies it, Ctrl+Z undoes.
+- Each part has its own colour, background, round corners, text size, line up, bold and capitals. The view has its background, text colour, font, warning, danger and overtime colours, a see-through background for overlay windows, a background picture and a logo.
+- See it as the screens will in each state: running, warning, danger, overtime, with a stage message, or showing the clock.
+- Start from a ready-made layout: Standard, BDNG style, Speaker, Timer and clock, Lower third, or Blank.
+- Saving updates every screen, workspace preview and laptop app showing the view straight away. Views built with the older form open in the designer laid out the way they looked.
+
+**Timers page**
+- It has four tabs: Live, Screens, Views and Layout designer.
+- Views lists every view with a Preview button that shows it on the room you pick, and Open full screen.
+- Standard shows the site's logo, or nothing when there isn't one.
+
+**BDNG**
+- BDNG sponsor clock is a built-in view: no import needed. Screens set to BDNG, or to an imported copy of it, show the shipped view. Its logos, bottom text and status bar are set under Views, and screens show changes straight away.
+- The status bar for uploaded views draws again.
+
 ## 1.20.3
 
 **UI improvements and visual enhancements**

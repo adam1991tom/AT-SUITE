@@ -326,8 +326,8 @@ dialog.bugdlg summary { cursor: pointer; }
 .ld-seg button:first-child { border-radius: var(--ctl-radius) 0 0 var(--ctl-radius); margin-left: 0; }
 .ld-seg button:last-child { border-radius: 0 var(--ctl-radius) var(--ctl-radius) 0; }
 .ld-seg button.on { background: color-mix(in srgb, var(--accent) 22%, var(--btn)); border-color: var(--accent); color: var(--strong); position: relative; }
-.ld-main { display: grid; grid-template-columns: 13rem minmax(0, 1fr) 17rem; gap: .8rem; align-items: start; }
-@media (max-width: 1100px) { .ld-main { grid-template-columns: minmax(0, 1fr); } .ld-centre { order: -1; } }
+.ld-main { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 19rem; gap: .8rem; align-items: start; }
+@media (max-width: 1180px) { .ld-main { grid-template-columns: minmax(0, 1fr); } .ld-centre { order: -1; } }
 .ld-left, .ld-right { padding: .7rem; }
 .ld-add { display: flex; flex-wrap: wrap; gap: .3rem; }
 .ld-layers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .2rem; }
@@ -354,7 +354,7 @@ dialog.bugdlg summary { cursor: pointer; }
 .ld-guide { position: absolute; pointer-events: none; background: #ff2bd6; }
 .ld-guide.v { top: 0; bottom: 0; width: 1px; } .ld-guide.h { left: 0; right: 0; height: 1px; }
 .ld-right fieldset, .ld-left fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
-.ld-f { display: grid; grid-template-columns: 7.2rem minmax(0, 1fr); align-items: center; gap: .4rem; margin: .35rem 0; font-weight: 400; font-size: .85rem; }
+.ld-f { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); align-items: center; gap: .4rem; margin: .35rem 0; font-weight: 400; font-size: .85rem; }
 .ld-f > span:first-child { color: var(--muted); }
 .ld-f input[type=color] { width: 3rem; height: 1.8rem; min-height: 0; }
 .ld-f input[type=range] { padding: 0; }

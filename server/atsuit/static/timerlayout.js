@@ -12,7 +12,7 @@ const TimerLayout = (() => {
     mono: 'ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace',
     serif: 'Georgia, "Times New Roman", serif',
   };
-  const FONT_NAMES = { arial: "Arial (like Standard)", saira: "Saira (AT SUITE)", system: "System", condensed: "Condensed", mono: "Monospaced", serif: "Serif" };
+  const FONT_NAMES = { arial: "Arial", saira: "Saira", system: "System", condensed: "Condensed", mono: "Monospaced", serif: "Serif" };
   // Every kind of part, with the size it starts at (% of the screen) and its text height (% of its box).
   const TYPES = {
     timer: { label: "Timer", w: 70, h: 40, size: 90 },
@@ -75,8 +75,8 @@ const TimerLayout = (() => {
     .tl-alert.on { animation: tl-border .6s ease-in-out infinite; }
     @keyframes tl-border { 0%, 100% { border-width: 1.5cqmin; } 50% { border-width: 4cqmin; } }
     @media (prefers-reduced-motion: reduce) { .tl-el.blink .tl-in, .tl-cover.blink div { animation-duration: 2.4s; } }
-    .tl-root.edit .tl-el.empty::after { content: attr(data-label); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font: 600 clamp(9px, 30cqh, 14px) system-ui, sans-serif; color: var(--tl-fg); opacity: .45; border: 1px dashed currentColor; }
+    .tl-root.edit .tl-el.empty::after { content: attr(data-label); position: absolute; inset: 0; padding: 2px 5px; box-sizing: border-box;
+      font: 600 11px/1.3 system-ui, sans-serif; color: var(--tl-fg); opacity: .4; border: 1px dashed currentColor; text-align: left; }
   `;
 
   function addCss() {
@@ -230,6 +230,7 @@ const TimerLayout = (() => {
       root.querySelector(".tl-alert").classList.toggle("on", !!(f.alert && L.flash_over !== false));
     }
 
+    set(look);
     const ro = new ResizeObserver(() => { for (const n of nodes.values()) fit(n); if (last) update(last, true); });
     ro.observe(root);
     return { root, set, update, node: (id) => nodes.get(id), destroy() { ro.disconnect(); root.remove(); } };

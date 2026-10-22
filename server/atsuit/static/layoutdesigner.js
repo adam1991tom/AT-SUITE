@@ -140,7 +140,7 @@ const LayoutDesigner = (() => {
       focusHit = focusHit || over.contains(document.activeElement);
       over.innerHTML = els.map((e, i) => e.hidden ? "" : `<div class="ld-hit${e.id === sel ? " sel" : ""}${e.y < 6 ? " low" : ""}" data-hit="${esc(e.id)}" tabindex="0" role="button"
           aria-label="${esc(TL.TYPES[e.type].label)}, ${r1(e.x)}% across, ${r1(e.y)}% down, ${r1(e.w)}% by ${r1(e.h)}%${e.id === sel ? ", picked" : ""}"
-          style="left:${e.x}%;top:${e.y}%;width:${e.w}%;height:${e.h}%;z-index:${i + 1}">
+          style="left:${e.x}%;top:${e.y}%;width:${e.w}%;height:${e.h}%;z-index:${e.type === "message" && e.cover !== false && e.id !== sel ? 0 : i + 1}">
           ${e.id === sel ? `<span class="ld-tag">${esc(TL.TYPES[e.type].label)}</span>` + ["nw", "n", "ne", "e", "se", "s", "sw", "w"].map((h) => `<i class="ld-h h-${h}" data-h="${h}"></i>`).join("") : ""}</div>`).join("") +
         '<div class="ld-guide v hidden"></div><div class="ld-guide h hidden"></div>';
       if (sel && focusHit) over.querySelector(`[data-hit="${CSS.escape(sel)}"]`)?.focus({ preventScroll: true });
