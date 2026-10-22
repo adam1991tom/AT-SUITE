@@ -169,6 +169,7 @@
     });
   }
 
+  const linkHost = (u) => { try { return new URL(u, location.href).host; } catch (_) { return u; } };
   const roomName = (id) => boot.rooms.find((r) => r.id === id)?.name || "";
   const roomOptions = (sel, blank = "No room") => `<option value="">${blank}</option>` + boot.rooms.map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`).join("");
 
@@ -249,8 +250,8 @@
         <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`).join("")}</div>` : "";
     const pre = '<div class="panel" id="preshow" style="margin-top:.6rem"><p class="muted small">Checking every laptop, screen and caption mic…</p></div>';
     el.innerHTML = (strip ? strip.replace('<div class="grid" id="dashRooms"', pre + '<div class="grid" id="dashRooms"') : `<div class="row" style="justify-content:space-between"><h1>Dashboard</h1>${boot.me.role === "admin" ? '<a class="btn" href="#/links">Edit links</a>' : ""}</div>` + pre) + (strip ? '<h2 style="margin-top:1.4rem">Links</h2>' : "") +
-      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 style="margin-top:1.2rem">${esc(g)}</h3><div class="tiles">` +
-        ls.map((l) => `<a class="tile" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="dot" data-ping="${l.id}"></span><span class="grow">${esc(l.label)}</span></a>`).join("") + "</div>").join("")
+      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 class="lk-head">${esc(g)}</h3><div class="lk-grid">` +
+        ls.map((l) => `<a class="lk" href="${esc(l.url)}" target="_blank" rel="noopener">${Chat.avatar(l.label)}<span class="lk-txt"><b>${esc(l.label)}</b><span>${esc(linkHost(l.url))}</span></span><span class="dot" data-ping="${l.id}"></span></a>`).join("") + "</div>").join("")
         : '<p class="muted">No links yet. Admins can import the old Homarr board or add links in Links.</p>');
     const dash = el.querySelector("#dashRooms");
     if (dash) {
@@ -279,18 +280,42 @@
   }
 
   // --------------------------------------------------------------- help --
+  // Help calls on the left as cards, and the chat of the room the picked one came from on the right,
+  // so an admin answers the tech straight from here ("Swap to the spare mic, on my way").
   async function help(el) {
-    const render = async () => {
-      const rows = await api("/api/comms/help");
-      el.innerHTML = `<h1>Help requests</h1><div class="panel"><table><tr><th>When</th><th>Room</th><th>From</th><th>What</th><th>Status</th><th></th></tr>` +
-        rows.map((h) => `<tr><td>${when(h.created_at)}</td><td>${esc(h.room_name)}</td><td>${esc(h.requested_by)}</td><td>${esc(h.category)}: ${esc(h.description)}</td>` +
-          `<td><span class="pill ${h.status === "open" ? "bad" : h.status === "resolved" ? "good" : "warn"}">${esc(h.status)}</span>${h.status === "open" && h.escalations ? ' <span class="pill bad" title="Nobody answered in time, so it went out again to every laptop and page">no answer</span>' : ""} ${esc(h.assigned_to)}</td>` +
-          `<td class="row">${h.status === "open" ? `<button class="small" data-s="acknowledged" data-id="${h.id}">On my way</button>` : ""}${h.status !== "resolved" ? `<button class="small" data-s="resolved" data-id="${h.id}">Resolved</button>` : ""}</td></tr>`).join("") +
-        "</table></div>";
-      el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => guard(() => put(`/api/comms/help/${b.dataset.id}`, { status: b.dataset.s })));
+    let rows = [], pick = null, filter = "live", roomChat = null, chans = null;
+    el.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Help requests</h1></div>
+      <div class="helpdesk"><div class="hd-left"><div class="hd-filter" role="tablist">
+        <button type="button" class="chip" data-f="live">Open</button><button type="button" class="chip" data-f="all">All</button></div>
+        <div class="hc-list"></div></div>
+        <div class="hd-chat"><div class="chat-mount"></div></div></div>`;
+    const listEl = el.querySelector(".hc-list"), chatEl = el.querySelector(".chat-mount");
+    const draw = () => {
+      el.querySelectorAll("[data-f]").forEach((b) => { b.classList.toggle("on", b.dataset.f === filter); b.setAttribute("aria-selected", String(b.dataset.f === filter)); });
+      const shown = rows.filter((h) => filter === "all" || h.status !== "resolved");
+      listEl.innerHTML = shown.map((h) => HelpCards.card(h, { active: h.id === pick?.id })).join("") ||
+        `<p class="muted">${filter === "all" ? "No help calls yet." : "No open help calls. 🎉"}</p>`;
+      HelpCards.wire(listEl, rows, { onReply: (h) => openChat(h), onPick: (h) => openChat(h) });
     };
-    view = { onEvent: (e) => e.type.startsWith("help.") && render() };
-    render();
+    async function openChat(h) {
+      pick = h; draw();
+      chans ||= await api("/api/comms/channels");
+      const ch = chans.find((c) => c.kind === "room" && c.room_id === h.room_id);
+      if (!ch) { chatEl.innerHTML = '<p class="muted" style="padding:1rem">This room has no chat.</p>'; roomChat = null; return; }
+      roomChat = Chat.mount(chatEl, { me: boot.me, channel: ch.id, quiet: true });
+      setTimeout(() => chatEl.querySelector("textarea")?.focus(), 50);
+    }
+    el.querySelectorAll("[data-f]").forEach((b) => (b.onclick = () => { filter = b.dataset.f; draw(); }));
+    const load = async () => {
+      rows = await api("/api/comms/help");
+      if (pick) pick = rows.find((h) => h.id === pick.id) || pick;
+      draw();
+    };
+    view = { onEvent: (e) => { if (e.type.startsWith("help.")) load(); roomChat && roomChat.onEvent(e); } };
+    await load();
+    const first = rows.find((h) => h.status === "open") || rows.find((h) => h.status !== "resolved") || rows[0];
+    if (first) openChat(first);
+    else chatEl.innerHTML = '<div class="chat-empty" style="padding:2rem"><p class="muted">Pick a help call to answer the tech in their room\'s chat.</p></div>';
   }
 
   // ------------------------------------------------------------- timers --

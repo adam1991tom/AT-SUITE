@@ -6,6 +6,7 @@
 <link rel="icon" href="/static/brand/favicon.ico" sizes="any"><link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><meta name="theme-color" content="#0B1020">
 <link rel="stylesheet" href="/static/app.css">
 <link rel="stylesheet" href="/static/ui/desk.css">
+<link rel="stylesheet" href="/static/social.css">
 <script src="/static/theme.js"></script>
 <style>
   /* the workspace is used mid-show, often by touch: bigger buttons and boxes */
@@ -39,18 +40,15 @@
   .dropdown { position: absolute; right: 0; top: calc(100% + .4rem); width: min(380px, 92vw); max-height: 70vh; overflow: auto; z-index: 1000;
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem; box-shadow: var(--shadow); }
   #helpBox { border-color: var(--bad); }
-  .helpbtn .unread, #bellBtn .unread { margin-left: .35rem; background: #fff; color: var(--bad); }
-  #bellBtn .unread { background: var(--accent); color: #fff; }
-  .note { padding: .5rem .6rem; border-left: 3px solid var(--line); background: var(--panel2); border-radius: 0 6px 6px 0; margin-top: .45rem; cursor: pointer; }
-  .note.n-urgent, .note.n-error { border-left-color: var(--bad); } .note.n-timer { border-left-color: var(--warn); } .note.n-good { border-left-color: var(--good); } .note.n-chat { border-left-color: var(--accent); }
+  .helpbtn .unread { margin-left: .35rem; background: #fff; color: var(--bad); }
   #toasts { bottom: 3.6rem; z-index: 1100; }
   .scr .row select, .scr .row input { width: auto; flex: 1 1 0 !important; min-width: 0; }
-  /* chat inside its window */
+  /* chat inside its window (static/chat.js, styled in social.css) */
   .chat-pane { display: flex; flex-direction: column; height: 100%; min-height: 320px; }
   .chat-pane .chat-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-  .chat-pane .msgs { min-height: 0 !important; display: flex; flex-direction: column; }
-  .chat-pane .msgs .list { flex: 1; max-height: none; min-height: 0; }
-  .chat-pane .tabs button { padding: .2rem .5rem; font-size: .8rem; }
+  /* the room this laptop is in today: a name, not a picker (the room is picked at the start of the day) */
+  .room-name { font-weight: 700; color: var(--strong); border-color: var(--accent); }
+  .room-name::before { content: "📍 "; font-weight: 400; }
   /* phones: the top bar scrolls away instead of covering a third of the screen */
   @media (max-width: 700px) { .top { position: static; } }
   @media (max-width: 600px) { .dropdown { position: fixed; left: .5rem; right: .5rem; top: 4rem; width: auto; } } /* the bell and Help lists stay on screen */
@@ -88,15 +86,6 @@
   @media (max-width: 1400px) { .lb-wx { display: none; } }
   @media (max-width: 1300px) { .lb .lb-sub, .lb .lb-flag { display: none; } .top { gap: .5rem; } }
   @media (max-width: 700px) { .livebar { order: 10; flex-basis: 100%; justify-content: flex-start; } }
-  /* handover notes (static/notes-panel.js) */
-  .hn-pane { min-height: 200px; }
-  .hn-add textarea, .hn textarea { width: 100%; resize: vertical; }
-  .hn-pin { display: flex; gap: .35rem; align-items: center; margin: 0; } .hn-pin input { width: auto; margin: 0; }
-  .hn { margin-top: .5rem; padding: .5rem .6rem; background: var(--panel2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 0 8px 8px 0; }
-  .hn.pin { border-left-color: var(--accent); } .hn.new { border-left-color: var(--warn); box-shadow: 0 0 0 1px var(--warn) inset; }
-  .hn.off { opacity: .65; } .hn.off .hn-body { text-decoration: line-through; }
-  .hn-body { white-space: normal; overflow-wrap: anywhere; } .hn-foot { margin-top: .35rem; gap: .3rem; }
-  .hn-done { margin-top: .8rem; } .hn-done summary { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -148,19 +137,18 @@
     <img class="brand-mark" src="/static/brand/icon-96.png" alt=""><b data-product>AT-SUITE</b>
     <button class="small ver hidden" id="topVer" title="This app's version. Click for updates."></button>
     <span class="muted" id="who"></span><span class="pill hidden" id="modePill"></span>
-    <select id="room" aria-label="Room" style="width:auto"></select>
-    <span id="roomAsk" class="row hidden" style="gap:.3rem"><span class="small" id="roomAskText"></span><button class="small primary" id="roomMove">Move</button><button class="small" id="roomStay">Cancel</button></span>
+    <span id="room" class="pill room-name" title="This laptop's room today"></span>
     <div class="livebar" id="liveBar"></div>
     <span class="pill" id="conn">connecting</span>
-    <div class="drop"><button id="bellBtn" title="Notifications" aria-label="Notifications">🔔<span class="unread hidden" id="bellCount"></span></button>
-      <div class="dropdown hidden" id="bellBox"></div></div>
+    <div class="drop"><button id="bellBtn" class="bell" title="Notifications" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7A1 1 0 0 0 4 19.4h16a1 1 0 0 0 .7-1.7Z"/></svg><span class="badge hidden" id="bellCount"></span></button>
+      <div class="dropdown nf-box hidden" id="bellBox" role="dialog" aria-label="Notifications"></div></div>
     <div class="drop"><button class="helpbtn" id="helpTop">Help<span class="unread hidden" id="helpCount"></span></button>
       <div class="dropdown hidden" id="helpBox">
         <b>Call for help</b>
         <div class="row" style="margin-top:.4rem"><select id="helpCat" style="width:auto"><option>Audio</option><option>Video</option><option>Presenter</option><option>Lighting</option><option>Network</option><option>Other</option></select>
           <input id="helpText" class="grow" placeholder="What's wrong?"></div>
         <div class="row" style="margin-top:.4rem;justify-content:flex-end"><button class="helpbtn" id="helpBtn">Send</button></div>
-        <div style="margin-top:.6rem"><b class="small">Open requests</b><div id="helpList" class="small" style="margin-top:.3rem"></div></div>
+        <div style="margin-top:.6rem"><b class="small">Open requests</b><div id="helpList" class="hc-list" style="margin-top:.3rem"></div></div>
         <div id="aiBox" class="hidden" style="margin-top:.7rem;border-top:1px solid var(--line);padding-top:.6rem">
           <b>🤖 AI helper</b> <span class="muted small" id="aiWhere"></span>
           <div class="row" style="margin-top:.4rem"><input id="aiQ" class="grow" placeholder="Ask anything, e.g. the lectern mic is dead"><button id="aiAsk">Ask</button></div>
@@ -234,7 +222,7 @@
 
   <section data-win="overlays" data-title="Overlays" hidden><div id="atOv"></div><div id="ovList"></div></section>
 
-  <section data-win="links" data-title="Links" hidden><input id="linkFind" placeholder="Find a link" style="margin-bottom:.5rem"><div id="links" style="max-height:60vh;overflow:auto"></div></section>
+  <section data-win="links" data-title="Links" hidden><input id="linkFind" class="lk-find" placeholder="🔍 Find a link" aria-label="Find a link"><div id="links"></div></section>
 
   <section class="chat-pane" id="chatPane" hidden><div class="chat-mount" id="chat"></div></section>
 
@@ -446,24 +434,17 @@
     roomId = (node?.room?.id) || saved || boot.rooms[0]?.id;
   }
   const roomName = boot.rooms.find((r) => r.id === roomId)?.name || "";
-  $("room").innerHTML = boot.rooms.map((r) => `<option value="${r.id}" ${r.id === roomId ? "selected" : ""}>${esc(r.name)}</option>`).join("");
-  if (techLaptop()) {
-    // The tech signed in here picks the room. The whole laptop moves with it (chat, timer, captions, overlay).
-    $("room").title = "This laptop's room today. Pick another to move it there.";
-    // Asked in the bar, not a pop-up box (the app has none: they can make a sound).
-    const ask = (on) => { $("roomAsk").classList.toggle("hidden", !on); if (!on) $("room").value = roomId; };
-    $("room").onchange = () => {
-      const to = +$("room").value;
-      if (to === roomId) return ask(false);
-      $("roomAskText").textContent = `Move this laptop to ${boot.rooms.find((r) => r.id === to)?.name || "that room"}?`;
-      ask(true);
-    };
-    $("roomStay").onclick = () => ask(false);
-    $("roomMove").onclick = async () => {
-      try { await api("/api/nodes/me/room", { method: "PUT", headers: nodeHdr(), body: { room_id: +$("room").value } }); location.reload(); }
-      catch (e) { ask(false); toast(e.message, "bad"); }
-    };
-  } else $("room").onchange = () => { try { localStorage.setItem("atsuit_room", $("room").value); } catch (_) {} location.reload(); };
+  // The room is a name in the top bar, not a picker: the tech picks it once, at the start of the day,
+  // and stays in it (an admin can move a laptop from the console).
+  $("room").textContent = roomName || "No room";
+  if (!techLaptop() && ["admin", "manager"].includes(boot.me.role) && boot.rooms.length > 1) {
+    // In a browser (not a room's laptop) an admin or manager can look at another room's workspace.
+    const pick = document.createElement("select");
+    pick.className = "small"; pick.style.width = "auto"; pick.setAttribute("aria-label", "Look at another room");
+    pick.innerHTML = `<option value="">Switch room…</option>` + boot.rooms.filter((r) => r.id !== roomId).map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("");
+    pick.onchange = () => { if (!pick.value) return; try { localStorage.setItem("atsuit_room", pick.value); } catch (_) {} location.reload(); };
+    $("room").after(pick);
+  }
   // The console is for admins. On a tech laptop an admin signs in there for a short session (30 minutes, ends with the browser).
   if (techLaptop()) { $("consoleBtn").textContent = "Admin"; $("consoleBtn").href = "/?shared=1#/dashboard"; $("consoleBtn").title = "For admins: sign in to the console"; $("consoleBtn").classList.remove("hidden"); }
   else if (["admin", "manager"].includes(boot.me.role)) $("consoleBtn").classList.remove("hidden");
@@ -771,7 +752,7 @@
     wins.sessions.available(sessions.length > 0);
     // A new upload for this room is worth a note.
     const files = sessions.flatMap((s) => s.presenters.flatMap((p) => p.files.slice(0, 1).map((f) => [f.id, p.full_name, f.original_name, s.title])));
-    if (seenFiles) files.filter(([id]) => !seenFiles.has(id)).forEach(([, who, name, title]) => alerts.add("chat", `New slides from ${who}`, `${name} for ${title}`, () => wins.sessions.open()));
+    if (seenFiles) files.filter(([id]) => !seenFiles.has(id)).forEach(([, who, name, title]) => alerts.add("info", `New slides from ${who}`, `${name} for ${title}`, () => wins.sessions.open(), { who }));
     seenFiles = new Set(files.map(([id]) => id));
     const today = new Date().toLocaleDateString("en-CA"), days = [...new Set(sessions.map((s) => sDay(s.starts_at)))].filter(Boolean).sort();
     if (!days.includes(sessDay)) sessDay = days.includes(today) ? today : days.find((d) => d > today) || days[days.length - 1] || "";
@@ -810,15 +791,17 @@
 
   // handover notes: what one tech leaves for the next in this room, until someone ticks it off.
   // Unread ones are a count on the window and in the top bar; nothing pops up.
+  // A new one also goes in the bell's list, quietly (no toast or pop-up).
   notes = ATNotes.mount($("notesBox"), { roomId, me: boot.me.name,
-    onCount: (unseen, total) => { ATDesk.badge("notes", unseen); liveBar.notes(unseen, total); } });
-  setInterval(() => { if (ATDesk.isOpen("notes") && !document.hidden) notes.seen(); }, 1500);
+    onCount: (unseen, total) => { ATDesk.badge("notes", unseen); liveBar.notes(unseen, total); },
+    onNew: (n) => alerts.add("note", `${n.author} left a handover note`, n.body, () => ATDesk.open("notes"), { who: n.author, silent: true }) });
+  setInterval(() => { if (ATDesk.isOpen("notes") && !document.hidden) { notes.seen(); alerts.read("note"); } }, 1500);
 
   // chat: a window like the rest; its taskbar button counts what came in while it was out of sight
   let chatUnread = 0;
   const chatSeen = () => ATDesk.isOpen("chat") && !document.hidden;
   const setDock = (open) => { if (open) ATDesk.open("chat"); };
-  setInterval(() => { if (chatUnread && chatSeen()) { chatUnread = 0; ATDesk.badge("chat", 0); } }, 1000);
+  setInterval(() => { if (chatSeen()) { alerts.read("chat"); if (chatUnread) { chatUnread = 0; ATDesk.badge("chat", 0); } } }, 1000);
   if (boot.modules.comms) {
     const chans = await api("/api/comms/channels");
     chat = Chat.mount($("chat"), { me: boot.me, compact: true, quiet: true /* the workspace's own alerts show urgent messages */, prefer: chans.find((c) => c.room_id === roomId)?.id });
@@ -828,12 +811,15 @@
   if (boot.modules.dashboard) {
     const links = (await api(`/api/dashboard/links?room_id=${roomId}`)).filter((l) => l.room_id === roomId || l.kind === "tool" || l.board === "public");
     const groups = [["This room", (l) => l.room_id === roomId], ["Tools", (l) => l.kind === "tool"], ["Everything else", () => true]];
+    // a card per link: its first letter in a coloured square, the name, and where it goes
+    const host = (u) => { try { return new URL(u, location.href).host; } catch (_) { return u; } };
+    const linkCard = (l) => `<a class="lk" href="${esc(l.url)}" target="_blank" rel="noopener">${Chat.avatar(l.label)}<span class="lk-txt"><b>${esc(l.label)}</b><span>${esc(host(l.url))}</span></span></a>`;
     const drawLinks = () => {
       const q = $("linkFind").value.trim().toLowerCase(), seen = new Set();
       const html = groups.map(([name, test]) => {
         const rows = links.filter((l) => !seen.has(l.id) && test(l) && (!q || l.label.toLowerCase().includes(q)));
         rows.forEach((l) => seen.add(l.id));
-        return rows.length ? `<h4 style="margin:.6rem 0 .3rem">${name}</h4><div class="tiles">${rows.map((l) => `<a class="tile" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join("")}</div>` : "";
+        return rows.length ? `<h4 class="lk-head">${name}</h4><div class="lk-grid">${rows.map(linkCard).join("")}</div>` : "";
       }).join("");
       $("links").innerHTML = html || '<p class="muted small">No links yet. An admin adds them in Links, or imports the old Homarr board.</p>';
     };
@@ -845,14 +831,17 @@
     const rows = (await api("/api/comms/help")).filter((h) => h.status !== "resolved").slice(0, 8);
     const open = rows.filter((h) => h.status === "open").length;
     $("helpCount").textContent = open; $("helpCount").classList.toggle("hidden", !open); $("helpTop").classList.toggle("help-alarm", !!open);
-    $("helpList").innerHTML = rows.map((h) => `<div class="row" style="margin:.25rem 0"><span class="pill ${h.status === "open" ? "bad" : "warn"}">${esc(h.status)}</span>${h.status === "open" && h.escalations ? ' <span class="pill bad">no answer</span>' : ""} <b>${esc(h.room_name)}</b> ${esc(h.category)}: ${esc(h.description)} <span class="muted">${esc(h.assigned_to)}</span>` +
-      `${h.status === "open" ? `<button class="small" data-h="${h.id}" data-s="acknowledged">On my way</button>` : ""}<button class="small" data-h="${h.id}" data-s="resolved">Resolved</button></div>`).join("") || '<span class="muted">No open requests.</span>';
-    $("helpList").querySelectorAll("[data-h]").forEach((b) => b.onclick = () => {
-      // How it was fixed is optional; the AI helper offers it the next time someone asks.
-      const fix = b.dataset.s === "resolved" && ai.on ? prompt("How was it fixed? (optional: the AI helper learns from it)", "") : null;
-      if (fix === null && b.dataset.s === "resolved" && ai.on && !confirm("Mark it resolved without saying how?")) return;
-      guard(() => AT.put(`/api/comms/help/${b.dataset.h}`, { status: b.dataset.s, ...(fix ? { resolution: fix } : {}) }));
-    });
+    $("helpList").innerHTML = rows.map((h) => HelpCards.card(h, { reply: !!chat })).join("") || '<p class="muted small">No open requests.</p>';
+    // How it was fixed is optional; the AI helper offers it the next time someone asks.
+    HelpCards.wire($("helpList"), rows, { askFix: ai.on, onReply: (h) => replyTo(h) });
+  }
+  // Reply to a help call in its room's chat: the chat window opens on that room.
+  async function replyTo(h) {
+    const ch = (await api("/api/comms/channels")).find((c) => c.kind === "room" && c.room_id === h.room_id);
+    document.querySelectorAll(".dropdown").forEach((d) => d.classList.add("hidden"));
+    ATDesk.open("chat");
+    if (ch && chat) await chat.open(ch.id);
+    document.querySelector("#chat textarea")?.focus();
   }
 
   // The AI helper, in the Help menu: answers from the venue's notes and past fixes (and a local AI model if
@@ -939,24 +928,24 @@
       const m = evt.data, dm = evt.topic.startsWith("dm:"), mine = dm || evt.topic === `room:${roomId}` || evt.topic.startsWith("site:");
       if (!chatSeen()) { chatUnread++; ATDesk.badge("chat", chatUnread); }
       ATDesk.flash?.("chat"); // the chat window glows for a moment, open or not
-      if (mine || m.priority === "urgent") alerts.add(m.priority === "urgent" ? "urgent" : "chat", dm ? `${m.sender_name} (direct)` : m.sender_name, m.body || "Sent a file", () => setDock(true));
+      if (mine || m.priority === "urgent") alerts.add(m.priority === "urgent" ? "urgent" : "chat", dm ? `${m.sender_name} (direct)` : m.sender_name, m.body || "Sent a file", () => setDock(true), { who: m.sender_name });
     }
     const what = (h) => h.description ? `${h.category}: ${h.description}` : h.category;
     if (evt.type === "help.new") {
       // not about the call you just sent yourself
-      if (!(evt.data.room_id === roomId && evt.data.requested_by === boot.me.name)) alerts.add("urgent", `Help needed in ${evt.data.room_name}`, what(evt.data), () => $("helpTop").click());
+      if (!(evt.data.room_id === roomId && evt.data.requested_by === boot.me.name)) alerts.add("help", `Help needed in ${evt.data.room_name}`, what(evt.data), () => $("helpTop").click(), { who: evt.data.requested_by });
       renderHelp();
     }
     if (evt.type === "help.escalated") {
       // Nobody is on the way yet: it goes out again to every laptop and page (the main PC still shows nothing).
       const h = evt.data, mins = Math.max(1, Math.round((h.waited_s || 0) / 60));
-      alerts.add("urgent", `Still no answer: help in ${h.room_name} (${mins} min)`, what(h), () => $("helpTop").click());
+      alerts.add("help", `Still no answer: help in ${h.room_name} (${mins} min)`, what(h), () => $("helpTop").click(), { who: h.requested_by });
       renderHelp();
     }
     if (evt.type === "help.updated") {
       renderHelp();
       const h = evt.data;
-      if (h.room_id === roomId && h.status === "acknowledged" && h.assigned_to !== boot.me.name) alerts.add("good", `${h.assigned_to || "Someone"} is on the way`, what(h));
+      if (h.room_id === roomId && h.status === "acknowledged" && h.assigned_to !== boot.me.name) alerts.add("good", `${h.assigned_to || "Someone"} is on the way`, what(h), null, { who: h.assigned_to });
     }
     cuelist && cuelist.onEvent(evt);
     if (evt.topic === `timer:${roomId}` && evt.type === "timer") { tstate = evt.data; liveBar.timer(tstate); APP?.bubble?.timer({ ...evt.data, room_id: roomId }); }
@@ -1113,7 +1102,7 @@
         }
         if (m.type === "audio" && local) { APP.captions.audio(m.audio); if (m.vocabulary) APP.captions.prepare(); configureBubble(); }
         if (m.type === "error") { problem("Captions mic stopped", m.message); stopMic(); }
-        if (m.type === "replaced") { alerts.add("chat", `${m.by} took over the captions mic`); stopMic(); }
+        if (m.type === "replaced") { alerts.add("info", `${m.by} took over the captions mic`, "", null, { who: m.by }); stopMic(); }
       };
       ws.onclose = () => {
         if (ws !== sock) return;

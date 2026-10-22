@@ -1,0 +1,229 @@
+/* The parts people talk through, laid out like the apps everyone already knows (Messenger,
+   Facebook): chat bubbles, notes and help calls as cards with faces, links as cards, and a
+   notifications list with a red count. Used by the console (app.html) and the workspace (node.html). */
+
+/* ------------------------------------------------------------ faces -- */
+/* initials in a circle, one colour per name; dark enough for white text on every theme (AA) */
+.av { --av-s: 2rem; flex: 0 0 auto; display: inline-grid; place-items: center; width: var(--av-s); height: var(--av-s); border-radius: 50%;
+  background: hsl(var(--av-h, 210) 52% 32%); color: #fff; font-weight: 700; font-size: calc(var(--av-s) * .4); line-height: 1; letter-spacing: .02em; user-select: none; }
+.av.av-room { border-radius: 28%; }
+.av.av-chan { border-radius: 28%; font-size: calc(var(--av-s) * .55); }
+.av.av-new { background: var(--panel2); color: var(--text); border: 1px dashed var(--line); font-size: 1.1rem; }
+.av.av-msg { --av-s: 1.75rem; align-self: flex-end; margin-bottom: 1.15rem; }
+.av-gap { flex: 0 0 1.75rem; }
+.av.av-seen { --av-s: 1rem; font-size: .5rem; box-shadow: 0 0 0 2px var(--panel); }
+.av.av-big { --av-s: 3.5rem; }
+.av.av-sm { --av-s: 1.5rem; }
+.av.av-lg { --av-s: 2.5rem; }
+
+/* ------------------------------------------------------------- chat -- */
+.fbchat { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: var(--gap); height: calc(100vh - 6rem); min-height: 0; }
+.fbchat.compact, .fbchat.solo { display: flex; flex-direction: column; height: 100%; gap: 0; }
+.fbchat.solo { min-height: 360px; }
+.fbchat > .chans { display: flex; flex-direction: column; min-height: 0; padding: .6rem; }
+.chans-head { display: flex; align-items: center; justify-content: space-between; padding: .2rem .4rem .5rem; }
+.chans-head h2 { margin: 0; font-size: 1.35rem; }
+.chan-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.chan { display: flex; align-items: center; gap: .6rem; padding: .5rem; border-radius: 10px; color: var(--text); text-decoration: none; }
+.chan:hover { background: var(--hover); }
+.chan.active { background: color-mix(in srgb, var(--accent) 16%, var(--panel2)); }
+.chan .av { --av-s: 2.6rem; }
+.chan-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.chan-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan-last { font-size: .82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chan.has-unread .chan-name, .chan.has-unread .chan-last { font-weight: 700; color: var(--strong); }
+.chan-meta { display: flex; flex-direction: column; align-items: flex-end; gap: .25rem; }
+.chan-new .chan-name { color: var(--accent-text); }
+.dm-pick { margin: 0 0 .5rem; }
+
+.fbchat .msgs { display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.fbchat.compact .msgs, .fbchat.solo .msgs { flex: 1; }
+/* in a workspace window the chips name the chat, so the header only shows for a direct message */
+.fbchat.compact:not(.is-dm) .chat-head { display: none; }
+.chips { display: flex; gap: .3rem; padding: .1rem 0 .5rem; overflow-x: auto; scrollbar-width: thin; flex: 0 0 auto; }
+.chip { border-radius: 999px; padding: .2rem .7rem; font-size: .82rem; white-space: nowrap; }
+.chip.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel2)); border-color: var(--accent); color: var(--strong); font-weight: 600; }
+.chat-head { display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.chat-head .title { font-size: 1rem; }
+.fbchat.compact .chat-head { padding: .3rem .1rem .5rem; }
+.fbchat.compact .chat-head .av { --av-s: 1.75rem; }
+.fbchat .list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: .7rem .8rem; }
+.fbchat.compact .list { padding: .6rem .2rem; min-height: 200px; }
+.chat-empty { margin: auto; text-align: center; display: grid; justify-items: center; gap: .4rem; }
+
+.day-sep { display: flex; justify-content: center; margin: .9rem 0 .5rem; }
+.day-sep span { font-size: .75rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+.mrow { display: flex; gap: .45rem; align-items: flex-end; max-width: 100%; }
+.mrow.first { margin-top: .45rem; }
+.mrow.mine { flex-direction: row-reverse; }
+.mcol { display: flex; flex-direction: column; min-width: 0; max-width: min(78%, 34rem); position: relative; }
+.mrow.mine .mcol { align-items: flex-end; }
+.mname { font-size: .75rem; color: var(--muted); margin: 0 0 .15rem .7rem; }
+.bwrap { display: flex; align-items: center; gap: .3rem; max-width: 100%; }
+.mrow.mine .bwrap { flex-direction: row-reverse; }
+.bubble { padding: .45rem .8rem; border-radius: 18px; overflow-wrap: anywhere; min-width: 0; line-height: 1.38;
+  background: color-mix(in srgb, var(--text) 9%, var(--panel)); color: var(--text); }
+.mrow.mine .bubble { background: var(--accent); color: var(--accent-ink); }
+.mrow.mine .bubble a { color: inherit; }
+/* bubbles in a block share their inner corners, like Messenger */
+.mrow.theirs:not(.first) .bubble { border-top-left-radius: 5px; } .mrow.theirs:not(.last) .bubble { border-bottom-left-radius: 5px; }
+.mrow.mine:not(.first) .bubble { border-top-right-radius: 5px; } .mrow.mine:not(.last) .bubble { border-bottom-right-radius: 5px; }
+.bubble.bare { background: transparent !important; padding: 0; }
+.mrow.deleted .bubble { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+/* the emergency ones: a red (or amber) bubble with its label on top, whoever sent it */
+.flag { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .15rem; }
+.mrow.p-urgent .bubble, .mrow.p-important .bubble { color: var(--text); border: 2px solid var(--bad); background: color-mix(in srgb, var(--bad) 16%, var(--panel)); border-radius: 14px; }
+.mrow.p-urgent .flag { color: var(--bad-ink); }
+.mrow.p-important .bubble { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
+.mrow.p-important .flag { color: var(--warn-ink); }
+.mtime { font-size: .7rem; color: var(--muted); margin: .15rem .7rem 0; }
+.atts { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .25rem; }
+.bubble.bare .atts { margin-top: 0; }
+.att-img img { display: block; max-width: min(100%, 300px); max-height: 220px; border-radius: 14px; object-fit: cover; background: #0003; }
+.att-file { display: flex; align-items: center; gap: .4rem; padding: .35rem .6rem; border-radius: 12px; font-size: .85rem; text-decoration: none;
+  background: color-mix(in srgb, var(--text) 8%, transparent); color: inherit; max-width: 100%; }
+.bubble.bare .att-file { background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+/* react and delete appear beside the bubble on hover (always there for touch and keyboard) */
+.msg-tools { display: flex; gap: .15rem; opacity: 0; transition: opacity .12s; }
+.mrow:hover .msg-tools, .mrow:focus-within .msg-tools { opacity: 1; }
+@media (hover: none) { .msg-tools { opacity: .7; } }
+.msg-tools button { padding: .1rem .35rem; min-height: 0; border-radius: 999px; background: transparent; border-color: transparent; color: var(--muted); }
+.msg-tools button:hover { background: var(--hover); color: var(--strong); }
+.msg-tools button.danger { color: var(--bad-ink); border-color: var(--bad); }
+/* reactions sit on the bubble's bottom corner */
+.rxs { display: flex; flex-wrap: wrap; gap: .2rem; margin: -.45rem .5rem 0; position: relative; z-index: 1; }
+.mrow.mine .rxs { justify-content: flex-end; }
+.rx { padding: 0 .35rem; min-height: 0; font-size: .82rem; line-height: 1.45; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.rx.mine { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--panel)); }
+.rx-quick { display: flex; gap: .1rem; padding: .2rem .3rem; margin-top: .25rem; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); width: max-content; }
+.rx-quick button, .emoji-pick button { padding: .1rem .3rem; min-height: 0; font-size: 1.2rem; line-height: 1.2; background: transparent; border: 1px solid transparent; border-radius: 999px; }
+.rx-quick button:hover, .emoji-pick button:hover { background: var(--hover); transform: scale(1.15); }
+.emoji-pick { position: fixed; z-index: 3000; display: grid; grid-template-columns: repeat(8, 2.1rem); gap: .1rem; padding: .4rem; max-height: 16rem; overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); }
+.emoji-pick.hidden { display: none; }
+/* "Seen by": small faces under your latest message */
+.seen { display: flex; justify-content: flex-end; align-items: center; gap: .35rem; margin: .2rem .2rem .3rem; }
+.seen .faces { display: flex; } .seen .faces .av + .av { margin-left: -.25rem; }
+/* a message that has just arrived from someone else glows for a moment */
+.mrow.fresh .bubble { animation: msg-new 6s ease-out; }
+@keyframes msg-new { 0%, 35% { box-shadow: 0 0 0 3px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 55%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .mrow.fresh .bubble { animation: none; outline: 2px solid var(--accent); } }
+
+/* the message box: a rounded pill with the attach, emoji and send buttons around it */
+.fbchat .compose { display: flex; align-items: flex-end; gap: .35rem; padding: .55rem .7rem; border-top: 1px solid var(--line); margin: 0; flex: 0 0 auto; }
+.fbchat.compact .compose { padding: .5rem 0 0; }
+.compose textarea { resize: none; min-height: 2.25rem; max-height: 140px; padding: .45rem .9rem; border-radius: 18px; line-height: 1.35; background: var(--input); overflow-y: auto; }
+.compose .ico { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; padding: 0; margin: 0; border-radius: 50%; border-color: transparent; background: transparent; cursor: pointer; font-size: 1.1rem; flex: 0 0 auto; }
+.compose .ico:hover { background: var(--hover); }
+.compose select { width: auto; flex: 0 0 auto; border-radius: 18px; height: 2.25rem; font-size: .82rem; }
+.compose .send { width: 2.25rem; height: 2.25rem; padding: 0; border-radius: 50%; flex: 0 0 auto; font-size: 1rem; }
+.fbchat[data-prio="urgent"] .compose textarea { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+.fbchat[data-prio="important"] .compose textarea { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.fbchat[data-prio="urgent"] .compose .send { background: var(--bad); border-color: var(--bad); color: #fff; }
+@media (max-width: 520px) { .compose select { max-width: 6.5rem; } }
+.pending-files { display: flex; flex-wrap: wrap; gap: .3rem; padding: 0 .7rem; }
+.pending-files:not(:empty) { padding-top: .4rem; }
+.pending-files .pf { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .3rem .15rem .5rem; font-size: .8rem; background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; max-width: 100%; overflow: hidden; }
+.chat-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
+@media (max-width: 760px) { .fbchat:not(.compact):not(.solo) { grid-template-columns: 1fr; height: auto; } .fbchat > .chans { max-height: 40vh; } .fbchat .msgs { min-height: 70vh; } }
+
+/* ------------------------------------------------------------ cards -- */
+/* a post: face, name and time on top, the text, then a row of flat action buttons */
+.post { background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--radius) + 6px); padding: .75rem .85rem .4rem; margin-top: .6rem; }
+.post-head { display: flex; gap: .6rem; align-items: center; }
+.post-who { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.post-who b { color: var(--strong); }
+.post-who .small { color: var(--muted); }
+.post-body { margin: .55rem 0 .2rem; overflow-wrap: anywhere; line-height: 1.45; }
+.post-acts { display: flex; gap: .2rem; border-top: 1px solid var(--line); margin-top: .5rem; padding-top: .25rem; flex-wrap: wrap; }
+.post-acts button { flex: 1 1 auto; background: transparent; border-color: transparent; color: var(--muted); font-weight: 600; border-radius: 8px; }
+.post-acts button:hover { background: var(--hover); color: var(--strong); }
+.post-acts button.primary { color: var(--accent-text); }
+.post-acts button.go { color: var(--good-ink); }
+.post-acts button.bad { color: var(--bad-ink); }
+.tag { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border-radius: 999px; font-size: .72rem; font-weight: 700; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tag.pin { border-color: var(--accent); color: var(--accent-text); }
+.tag.new { border-color: var(--warn); color: var(--warn-ink); }
+.tag.bad { border-color: var(--bad); color: var(--bad-ink); }
+.tag.warn { border-color: var(--warn); color: var(--warn-ink); }
+.tag.good { border-color: var(--good); color: var(--good-ink); }
+
+/* the "What's on your mind?" box that starts a note */
+.composer { display: flex; gap: .6rem; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: calc(var(--radius) + 6px); padding: .7rem .8rem; }
+.composer textarea { border-radius: 18px; padding: .5rem .9rem; resize: vertical; min-height: 2.4rem; background: var(--input); }
+.composer-foot { display: flex; align-items: center; gap: .4rem; margin-top: .45rem; }
+
+/* handover notes */
+.hn-pane { min-height: 200px; }
+.post.hn.pin { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.post.hn.new { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn) inset; }
+.post.hn.off { opacity: .7; } .post.hn.off .post-body { text-decoration: line-through; }
+.hn textarea { width: 100%; resize: vertical; }
+.hn-pin { display: inline-flex; gap: .35rem; align-items: center; margin: 0; } .hn-pin input { width: auto; margin: 0; }
+.hn-done { margin-top: .9rem; } .hn-done summary { cursor: pointer; }
+
+/* links */
+.lk-grid { display: grid; gap: .55rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); }
+.lk { display: flex; align-items: center; gap: .65rem; padding: .6rem .7rem; border-radius: calc(var(--radius) + 6px); background: var(--panel); border: 1px solid var(--line); color: var(--text); text-decoration: none; min-width: 0; }
+.lk:hover { border-color: var(--accent); background: var(--btn-hover); }
+.lk .av { --av-s: 2.4rem; border-radius: 12px; }
+.lk-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.lk-txt b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--strong); }
+.lk-txt span { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lk .dot { flex: 0 0 auto; }
+.lk-head { margin: .9rem 0 .4rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.lk-find { border-radius: 999px; padding-left: 1rem; margin-bottom: .2rem; }
+
+/* help calls (the emergency ones): a red card with the room, what's wrong and the answer buttons */
+.post.hc { border-left: 4px solid var(--bad); }
+.post.hc.st-open { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--panel)); }
+.post.hc.st-acknowledged { border-left-color: var(--warn); }
+.post.hc.st-resolved { border-left-color: var(--good); opacity: .8; }
+.post.hc .post-body b { color: var(--strong); }
+.hc-fix { display: flex; gap: .35rem; margin-top: .45rem; }
+.post.hc.active { box-shadow: 0 0 0 2px var(--accent); }
+.hc-list .post:first-child { margin-top: 0; }
+
+/* the console's Help requests page: the calls on the left, the room's chat on the right */
+.helpdesk { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: var(--gap); height: calc(100vh - 8.5rem); min-height: 0; }
+.helpdesk .hc-list { overflow-y: auto; min-height: 0; padding-right: .2rem; }
+.helpdesk .hd-chat { min-height: 0; display: flex; flex-direction: column; }
+.helpdesk .hd-chat > .chat-mount { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.helpdesk .hd-chat .fbchat { flex: 1; min-height: 0; height: auto; }
+.hd-filter { display: flex; gap: .3rem; margin-bottom: .6rem; flex-wrap: wrap; }
+@media (max-width: 900px) { .helpdesk { grid-template-columns: 1fr; height: auto; } .helpdesk .hd-chat { min-height: 60vh; } }
+
+/* ---------------------------------------------------- notifications -- */
+/* the bell: a red count like Facebook's; only things a person sent or that need someone (not the timer) */
+.bell { position: relative; display: inline-grid; place-items: center; width: var(--ctl-h); height: var(--ctl-h); padding: 0; border-radius: 50%; font-size: 1.05rem; }
+.bell svg { width: 1.15rem; height: 1.15rem; fill: currentColor; }
+.bell.open { background: color-mix(in srgb, var(--accent) 22%, var(--btn)); border-color: var(--accent); }
+.bell .badge { position: absolute; top: -.35rem; right: -.4rem; min-width: 1.15rem; height: 1.15rem; padding: 0 .3rem; border-radius: 999px;
+  background: #d1242f; color: #fff; font-size: .7rem; font-weight: 800; line-height: 1.15rem; text-align: center; box-shadow: 0 0 0 2px var(--side, var(--panel)); }
+.nf-box { padding: .5rem !important; width: min(400px, 94vw) !important; }
+.nf-head { display: flex; align-items: center; justify-content: space-between; padding: .2rem .4rem .4rem; }
+.nf-head h2 { margin: 0; font-size: 1.3rem; }
+.nf-head button { background: transparent; border-color: transparent; color: var(--accent-text); font-weight: 600; padding: .1rem .4rem; }
+.nf-head button:hover { background: var(--hover); }
+.nf-tabs { display: flex; gap: .3rem; padding: 0 .4rem .4rem; }
+.nf-tabs button { border-radius: 999px; padding: .15rem .8rem; font-weight: 600; font-size: .85rem; background: transparent; border-color: transparent; }
+.nf-tabs button.on { background: color-mix(in srgb, var(--accent) 20%, var(--panel2)); color: var(--strong); }
+.nf-sec { font-weight: 700; font-size: .9rem; padding: .5rem .4rem .2rem; color: var(--strong); }
+.nf { display: flex; gap: .65rem; align-items: center; width: 100%; padding: .5rem .45rem; border-radius: 10px; text-align: left; background: transparent; border: 0; color: var(--text); cursor: pointer; min-height: 0; font: inherit; }
+.nf:hover, .nf:focus-visible { background: var(--hover); }
+.nf-ic { position: relative; flex: 0 0 auto; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 50%; font-size: 1.15rem; background: var(--panel2); border: 1px solid var(--line); }
+.nf-ic .av { --av-s: 2.6rem; }
+.nf-ic i { position: absolute; right: -.2rem; bottom: -.2rem; width: 1.25rem; height: 1.25rem; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .65rem; background: var(--panel); box-shadow: 0 0 0 2px var(--panel); }
+.nf-txt { flex: 1; min-width: 0; font-size: .88rem; line-height: 1.35; }
+.nf-txt b { color: var(--strong); }
+.nf-txt .nf-body { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nf-when { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
+.nf.unseen .nf-when { color: var(--accent-text); font-weight: 700; }
+.nf.unseen .nf-body { color: var(--text); }
+.nf-dot { flex: 0 0 .7rem; width: .7rem; height: .7rem; border-radius: 50%; }
+.nf.unseen .nf-dot { background: var(--accent); }
+.nf.k-urgent .nf-ic, .nf.k-help .nf-ic, .nf.k-error .nf-ic { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--panel)); }
+.nf.k-note .nf-ic { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--panel)); }
+.nf.k-good .nf-ic { border-color: var(--good); background: color-mix(in srgb, var(--good) 16%, var(--panel)); }
+.nf-empty { padding: 1.2rem .5rem; text-align: center; color: var(--muted); font-size: .9rem; }
