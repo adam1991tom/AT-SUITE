@@ -3,7 +3,90 @@
 Versions follow [semantic versioning](https://semver.org). To release, set
 `VERSION`, add a section here, merge to `ATSUITE`, then push a tag `vX.Y.Z` (or
 publish that release on GitHub); the release workflow publishes the image and
-the GitHub release.
+the GitHub release).
+
+## 1.20.3
+
+**UI improvements and visual enhancements**
+
+- Timer display now shows negative time with "-" instead of "+"
+- Quick timer shortcuts made bigger for better touch targets
+- Pre-made message buttons enlarged for better visibility
+- Standard view links changed from "Room name ↗" to "Preview"
+- Removed logo upload from Standard view (now uses Settings → General only)
+- Buttons more responsive with hover lift effect and active depression
+- Added color-coded button classes: .btn-stop (red) and .btn-go (green)
+- Improved tactile feedback and visual hierarchy
+
+## 1.20.2
+
+**Installer-like progress display for updates**
+
+- Updates now show detailed progress like a real installer
+- Progress bar shows percentage complete
+- Step-by-step status: checking, downloading, building, stopping, starting, health check
+- Settings page auto-refreshes every 2 seconds during installation
+- update.sh reports progress at each stage of the update process
+- Clear visual feedback when installation completes or fails
+
+## 1.20.1
+
+**Critical bug fix** - Security headers caused server to fail on startup.
+
+- Fixed AttributeError in SecretsOutOfAddresses middleware
+- ASGI headers are a list of tuples, not a dict (fixed iteration logic)
+- This was causing 500 errors on health endpoint during updates
+- No other changes from 1.20.0
+
+## 1.20.0
+
+Major security hardening release. All tokens and passwords are now stronger, with backward compatibility maintained.
+
+**Password security**
+- PBKDF2-SHA256 iterations increased from 200,000 to 300,000 for stronger password hashing
+- Automatic password rehashing on next sign-in when migrating from older versions
+- Passwords flagged for rehashing when created with older iteration counts
+
+**Token security**
+- Token length increased from 32 to 48 bytes (secrets.token_urlsafe) for stronger tokens
+- Token hashing upgraded from SHA-256 to SHA-512 for new tokens
+- Database tracks hash algorithm used per token (sha256 for backward compatibility, sha512 for new)
+- Session, API key, and node tokens all use the new stronger hashing
+- Backward compatibility: old SHA-256 tokens continue to work until renewed
+
+**Database schema (14)**
+- Added `hash_algorithm` column to sessions, api_keys, and nodes tables
+- Added `key_version` column to sessions for future key rotation support
+- Added `password_needs_rehash` column to accounts for automatic password migration
+- Non-breaking migration: existing tokens continue to work, new tokens use stronger hashing
+
+**Security posture**
+- Maintains all security headers from 1.10.4 (HSTS, CSP, X-Frame-Options)
+- Maintains API rate limiting from 1.10.4 (20 login/min, 200 requests/min)
+- Maintains SSH host key verification from 1.10.4
+- Maintains comprehensive SECURITY.md documentation
+
+**Migration notes**
+- Existing sessions, API keys, and node tokens remain valid (backward compatible)
+- New tokens automatically use SHA-512 hashing
+- Passwords rehash on next sign-in with new iteration count
+- No action required from administrators; migration is transparent
+
+## 1.10.4
+
+Report a bug goes to the console instead of an email app. Security hardening.
+
+- **Report a bug** opens a form in AT SUITE: what went wrong, what you were doing, and a screenshot if you like (choose a file, or press Print Screen and paste it with Ctrl+V). It's on Settings → About in the console, and in the Help menu on tech laptops. The version, server, page and browser are added for you. Nothing is emailed.
+- **Bug reports** is a new page in the console for admins. It shows every report with its screenshot and details, says how many are still open in the side bar, and pops up a note when a new one arrives. Admins mark a report resolved, open it again, or delete it.
+- **Send to GitHub (optional)**: add a GitHub repository and token on the Bug reports page and a report can open a GitHub issue, when an admin presses Send to GitHub or for every new report by itself. It's off until set up, so nothing leaves the server by default. The issue gets the title, the details, the version and the system, never names, the organisation, rooms, addresses or the screenshot, because repositories can be public.
+- Reports are stored encrypted on the server (database schema 13). One person or laptop can send up to 10 an hour.
+
+**Security hardening**
+- Added security headers: HSTS (HTTPS only), Content-Security-Policy, and X-Frame-Options to prevent clickjacking and XSS attacks.
+- Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
+- Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
+- Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
+>>>>>>> ATSUITE
 
 ## 1.10.3
 

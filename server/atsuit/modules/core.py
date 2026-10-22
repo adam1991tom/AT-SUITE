@@ -33,6 +33,7 @@ from ..security import (
     hash_password,
     issue_ticket,
     new_token,
+    rate_limit_by_ip,
     require_manager,
     principal,
     require_admin,
@@ -282,7 +283,8 @@ def reset_password(c, account_id: int) -> None:
 
 
 @router.post("/api/auth/login")
-def login(body: LoginIn, request: Request, response: Response):
+def login(body: LoginIn, request: Request, response: Response, _rate_limit: None = Depends(rate_limit_by_ip(limit=20, window_seconds=60))):
+    # Rate limit: 20 login attempts per minute per IP to prevent brute force
     try:
         with db.tx() as c:
             a = check_login(c, body.username, body.password, request, body.new_password)

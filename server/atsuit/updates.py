@@ -92,10 +92,31 @@ def state(c) -> dict:
     return db.get_setting(c, "updates_state", {}) or {}
 
 
+# Progress tracking for installer-like status
+PROGRESS_STEPS = [
+    "checking",
+    "downloading",
+    "building",
+    "stopping",
+    "starting",
+    "health_check",
+    "complete",
+    "failed"
+]
+
+
 def save_state(c, **changes) -> dict:
     st = {**state(c), **changes}
     db.set_setting(c, "updates_state", st)
     return st
+
+
+def set_progress(c, step: str, message: str, percent: int = 0) -> dict:
+    """Update installation progress for installer-like status display."""
+    if step not in PROGRESS_STEPS:
+        step = "checking"
+    percent = max(0, min(100, percent))
+    return save_state(c, progress={"step": step, "message": message, "percent": percent, "at": db.now_iso()})
 
 
 def live_rooms(c) -> list[str]:
@@ -112,6 +133,7 @@ def status(c) -> dict:
     cf, st = conf(c), state(c)
     latest = st.get("latest") or {}
     seen = st.get("host_seen_at") or 0
+    prog = st.get("progress") or {}
     return {
         "current": VERSION, "mode": cf["mode"], "has_token": bool(cf["token"]),
         "latest": latest or None, "available": bool(latest) and newer(latest.get("version"), VERSION),
@@ -122,6 +144,7 @@ def status(c) -> dict:
         "host_updater": bool(seen) and time.time() - seen < HOST_SEEN_S, "host_seen_at": seen or None,
         "live": live_rooms(c), "app": app_release().get("version"), "app_error": st.get("app_error") or "",
         "helper": config.cfg.role != "main",
+        "progress": prog,  # Installer-like progress: step, message, percent
     }
 
 
@@ -341,6 +364,7 @@ def plan() -> dict:
         if not TAG_RE.match(tag):
             return none("the release has no usable tag")
         save_state(c, installing={"version": version, "at": db.now_iso()})
+        set_progress(c, "starting", f"Preparing to install {version}", 5)
         db.audit(c, "updates", "updates.install", f"{VERSION} → {version}")
         return {"ACTION": "install", "VERSION": version, "TAG": tag, "REPO": latest.get("repo") or cf["repo"], "TOKEN": cf["token"]}
 

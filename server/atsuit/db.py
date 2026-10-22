@@ -193,6 +193,29 @@ MIGRATIONS: list[str] = [
         question TEXT NOT NULL, answer TEXT NOT NULL, added_by TEXT NOT NULL, created_at TEXT NOT NULL,
         helped INTEGER NOT NULL DEFAULT 1);
     """,
+    # 13: bug reports, sent from the app to the console instead of by email
+    """
+    CREATE TABLE bug_reports(id INTEGER PRIMARY KEY AUTOINCREMENT, title_enc TEXT NOT NULL, description_enc TEXT NOT NULL,
+        reporter TEXT NOT NULL, reporter_kind TEXT NOT NULL, room_name TEXT NOT NULL DEFAULT '', page TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT '', app_version TEXT NOT NULL DEFAULT '', system TEXT NOT NULL DEFAULT '{}',
+        screenshot TEXT, screenshot_mime TEXT, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL,
+        resolved_at TEXT, resolved_by TEXT, github_url TEXT, github_error TEXT);
+    CREATE INDEX bug_reports_status ON bug_reports(status, id);
+    """,
+    # 14: security hardening for 1.20.0
+    """
+    -- Token hash algorithm tracking: stores which hash algorithm was used for tokens/keys
+    -- This allows migration to sha512 while maintaining backward compatibility with sha256 tokens
+    -- Password PBKDF2 iterations increased from 200k to 300k for stronger hashing
+    -- Token length increased from 32 to 48 bytes (token_urlsafe) for stronger security
+    ALTER TABLE sessions ADD COLUMN hash_algorithm TEXT DEFAULT 'sha256';
+    ALTER TABLE api_keys ADD COLUMN hash_algorithm TEXT DEFAULT 'sha256';
+    ALTER TABLE nodes ADD COLUMN hash_algorithm TEXT DEFAULT 'sha256';
+    -- Session key rotation tracking for future implementation
+    ALTER TABLE sessions ADD COLUMN key_version INTEGER DEFAULT 1;
+    -- Password migration tracking: rehash passwords with new iteration count on next sign-in
+    ALTER TABLE accounts ADD COLUMN password_needs_rehash INTEGER DEFAULT 1;
+    """,
 ]
 
 

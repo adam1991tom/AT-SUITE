@@ -96,7 +96,7 @@ const AT = (() => {
     const neg = ms < 0; ms = Math.abs(ms);
     const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     const body = h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-    return (neg ? "+" : "") + body;
+    return (neg ? "-" : "") + body;
   }
 
   // Marks when a timer state arrived (x._rx), which every page counts the time from.
