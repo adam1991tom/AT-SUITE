@@ -38,6 +38,7 @@ def client(tmp_path, monkeypatch):
     from atsuit.modules import core
 
     core._forgot_asks.clear()  # every test starts with no recent "forgot" requests
+    security._RATE_LIMITS.clear()  # nor any requests counted against the rate limits
 
     with TestClient(create_app()) as c:
         yield c

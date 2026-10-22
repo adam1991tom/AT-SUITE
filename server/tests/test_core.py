@@ -152,3 +152,10 @@ def test_built_in_logo_and_brand_colour(admin):
         r = admin.get(page)
         if r.status_code == 200 and "text/html" in r.headers.get("content-type", ""):
             assert "/static/brand/favicon.ico" in r.text
+
+
+def test_pages_may_load_the_mic_worklet_from_a_blob(client):
+    """The workspace loads its captions audio worklet from a blob: address; 1.20.0's policy blocked it."""
+    csp = client.get("/api/health").headers["content-security-policy"]
+    rules = {r.split()[0]: r.split()[1:] for r in csp.split(";") if r.strip()}
+    assert "blob:" in rules["script-src"] and "blob:" in rules["worker-src"]
