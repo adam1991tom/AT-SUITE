@@ -71,6 +71,7 @@ def test_full_purchase_gives_a_key_the_server_accepts(h, server_licence):
     assert parsed.edition == "venue" and parsed.max_nodes == 30 and parsed.max_sites == 1
     assert parsed.modules == server_licence.ALL_MODULES
     assert parsed.expires == period_expiry("2027-10-15T12:00:00Z", 7)  # period end + 7 spare days
+    assert parsed.checkin == h.shop.s.site_url  # the server checks in here every day
     # Shown in the portal, downloadable, and emailed.
     page = c.get("/account").text
     assert lic["serial"] in page and lic["key"] in page
@@ -117,6 +118,9 @@ def test_monthly_renewal_gives_a_new_key_and_replaces_the_old(h, server_licence)
     assert r["key"] == keys[1]["key"] and r["subscription"] == "active"
     assert h.client().post("/api/v1/licence/refresh", json={"key": keys[1]["key"]}).json()["status"] == "current"
     assert h.client().post("/api/v1/licence/refresh", json={"key": "made.up"}).status_code == 400
+    # Revoking the renewal cancels the key it replaced too, so a server still on the old one hears it.
+    h.shop.db.run("UPDATE licences SET revoked_at=1 WHERE id=?", keys[1]["id"])
+    assert h.client().post("/api/v1/licence/refresh", json={"key": keys[0]["key"]}).json()["status"] == "revoked"
 
 
 def test_upgrade_and_downgrade(h, server_licence):

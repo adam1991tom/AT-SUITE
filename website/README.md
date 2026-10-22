@@ -126,12 +126,18 @@ buys hosting, the shop records the venue and queues a job:
 Commands used: `atcloud new`, `atcloud licence`, `atcloud suspend`, `atcloud resume`. Nothing removes a
 venue or its data automatically; when a hosted subscription ends, admins get an email and decide.
 
-## Licence key renewal
+## Licence key renewal and the daily check-in
 
 A yearly key runs to the end of the paid year plus 7 spare days; a monthly key to the end of the month
-plus 7. Each renewal emails the new key and shows it in the portal. `POST /api/v1/licence/refresh`
-with `{"key": "<current key>"}` returns that subscription's newest key, ready for a future "renew
-automatically" setting in the app (the app doesn't call it yet).
+plus 7. Each renewal emails the new key and shows it in the portal.
+
+Every key the shop makes names the shop (`checkin`, from `SITE_URL`, so set that before selling). The
+AT SUITE server posts its key to `POST /api/v1/licence/refresh` once a day and gets back that
+subscription's newest key (it installs it by itself), `"status": "current"`, or `"status": "revoked"`
+when an admin revoked the key or a renewal of it. A revoked key locks at the server's next quiet
+moment; a server that can't reach the shop for 14 days locks the same way until it does. Never
+during a show. Admin → Licences → "Offline key" makes a key with no `checkin`, for venues with no
+internet: it never checks in, so it can't be revoked early or renew itself.
 
 ## What's done and what isn't
 
@@ -153,6 +159,5 @@ Not done yet, needs a person:
 - a real Paddle account (sandbox first), the live switch-on, and an SMTP service
 - the domain, the shop server, and Paddle's website approval
 - a solicitor's review of the legal pages (they are drafts with placeholders)
-- the AT SUITE app calling the key refresh endpoint (it can't renew itself yet; customers paste keys)
 - nothing here has been run against Paddle's real sandbox yet: the tests use a stand-in that follows
   Paddle's documented API

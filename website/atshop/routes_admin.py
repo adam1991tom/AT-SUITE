@@ -207,8 +207,9 @@ async def licence_issue(request: Request):
             if data.get("licensee"):
                 acc = {**dict(acc), "organisation": data["licensee"].strip()[:120]}
             ctx = Ctx(c, sh.s, sh.cat, sh.signer)
+            offline = data.get("offline") == "1"
             lic = issue(ctx, acc, source="manual", edition=edition, max_nodes=nodes, max_sites=sites, expires=expires,
-                        note=note, actor=sess["email"])
+                        note=note + (" (offline key)" if offline else ""), actor=sess["email"], offline=offline)
             if data.get("send") == "1":
                 from . import notify
                 notify.key_email(ctx, acc, lic, "Your AT SUITE licence key", reason="manual")

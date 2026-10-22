@@ -8,6 +8,8 @@
   <div class="field"><label for="i-sites">Sites (0 = unlimited)</label><input id="i-sites" name="sites" type="number" min="0" value="1"></div>
   <div class="field"><label for="i-until">Last day</label><input id="i-until" name="until" type="date"></div>
   <label class="check"><input type="checkbox" name="never" value="1"> <span>Never ends (owner keys)</span></label>
+  <label class="check"><input type="checkbox" name="offline" value="1" aria-describedby="i-offline-hint"> <span>Offline key: never checks in with this website</span></label>
+  <span class="hint" id="i-offline-hint">For venues whose server can't reach the internet (strict NDA). It won't renew itself and can't be cancelled before its last day, so give it a fixed end date, usually a year.</span>
   <div class="field"><label for="i-note">Why (goes in the audit log)</label><input id="i-note" name="note" type="text" required maxlength="300"></div>
   <label class="check"><input type="checkbox" name="send" value="1" checked> <span>Email the key to the customer</span></label>
   <div><button class="btn primary" type="submit">Issue licence</button></div>

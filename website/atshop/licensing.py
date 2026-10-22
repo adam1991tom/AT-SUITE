@@ -93,8 +93,12 @@ class Signer:
         return b64(self.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw))
 
     def sign(self, *, licensee: str, edition: str, max_nodes: int, expires: int, max_sites: int = 1,
-             modules: list[str] | None = None, serial: str | None = None, issued: int | None = None) -> tuple[str, dict]:
-        """A licence key and its body. Same fields, order and encoding as tools/licence.py."""
+             modules: list[str] | None = None, serial: str | None = None, issued: int | None = None,
+             checkin: str | None = None) -> tuple[str, dict]:
+        """A licence key and its body. Same fields, order and encoding as tools/licence.py.
+        `checkin` is this website's address: the AT SUITE server sends the key there once a day
+        (POST /api/v1/licence/refresh) for renewals and cancellations. Leave it out for an
+        offline key, which never checks in."""
         licensee = " ".join((licensee or "").split())[:120]
         if not licensee:
             raise SigningError("A licence needs the licensee's name")
@@ -104,6 +108,8 @@ class Signer:
             "expires": int(expires), "modules": modules or ["*"], "issued": int(issued or time.time()),
             "serial": serial or new_serial(),
         }
+        if checkin:
+            body["checkin"] = checkin.rstrip("/")
         raw = json.dumps(body, separators=(",", ":")).encode()
         return f"{b64(raw)}.{b64(self._private().sign(raw))}", body
 

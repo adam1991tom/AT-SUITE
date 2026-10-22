@@ -54,7 +54,7 @@ backups and updates, and [docs/ADMIN.md](docs/ADMIN.md) for day-to-day setup.
 |---|---|---|
 | `/` | admins, techs | console: dashboard, chat, help, timer preview and screens, presenters, captions, nodes, admin |
 | `/node` | techs on their laptop | the tech workspace |
-| `/timer/<room>` | stage screens | full-screen countdown, no sign-in (`?view=minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (Standard), `overlay`, `built:<name>`; imported Ontime views such as BDNG at `/room/<room>/external/<name>/`) |
+| `/timer/<room>` | stage screens | full-screen countdown, no sign-in (`?view=minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (Standard), `bdng`, `overlay`, `built:<name>` from the layout designer; uploaded Ontime views at `/room/<room>/external/<name>/`) |
 | `/screentest` | anyone | display test patterns (colour bars, gradients, checkerboard, geometry, sharpness, motion, overscan, LED tile map) for any screen; no sign-in. Screens can be sent to a pattern from the workspace or Timers → Screens |
 | `/screen` | Linux screens | display-only screen: shows the room and view picked on it or routed from the console |
 | `/room/<room>/external/<view>/` | screens, OBS | custom Ontime-style views uploaded in Timers → Views |
@@ -93,9 +93,11 @@ is where servers and laptops update from. See
 ## Licence
 
 AT-SUITE is proprietary (see [LICENSE](LICENSE)): using it needs a licence key
-from AT NET, and nothing works until one is installed. Keys are checked offline
-and carry the subscription's end date; there are warnings before it ends and 14
-days of grace after, and it never locks during a show. Issuing keys and the
+from AT NET, and nothing works until one is installed. Keys carry the
+subscription's end date; there are warnings before it ends and 14 days of grace
+after, and it never locks during a show. Keys from the website check in with it
+once a day to renew themselves (offline keys are available for venues with no
+internet). Issuing keys and the
 plans are in [docs/ADMIN.md](docs/ADMIN.md#licences-for-resellers).
 Versions before 1.0.4 were published under the MIT licence.
 

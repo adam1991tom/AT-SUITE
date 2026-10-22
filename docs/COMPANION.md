@@ -189,16 +189,14 @@ Overlay laptops are numbered in Laptops & screens → Overlay laptops (`targets/
 | Button | Method and path | Body |
 |---|---|---|
 | Screen 12 to the Standard view of room 3 | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "hcc"}` |
-| Screen 12 to the imported BDNG view | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "view:bdng"}` |
+| Screen 12 to the BDNG view | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "bdng"}` |
 | Identify screen 12 | `POST /api/fleet/nodes/12/command` | `{"kind": "identify"}` |
 
-Views: `stage`, `minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (shown as "Standard"), `overlay`, `view:<slug>` (imported, e.g. `view:bdng`),
+Views: `stage`, `minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (shown as "Standard"), `bdng` (BDNG sponsor clock), `overlay`,
 `captions` (audience screen), `captions:overlay`, `captions:bar` (subtitle bar), `screentest:<pattern>` for a display test pattern (`colorbars`, `grayramp`,
 `rgbramp`, `checker`, `crosshatch`, `sharpness`, `motion`, `overscan`, `ledmap`, `black`,
-`white`, `red`, `green`, `blue`, `gray`), `built:<name>` for views built in Timers → Views, `view:<name>`
-for uploaded ones (the BDNG view is `view:bdng` once imported in Timers;
-the old `bdng` still works and shows it, or the Standard view if it isn't
-imported), or `url:https://...` for any web page.
+`white`, `red`, `green`, `blue`, `gray`), `built:<name>` for views made in Timers → Layout designer, `view:<name>`
+for uploaded ones (`view:bdng`, from when BDNG was imported, still shows BDNG), or `url:https://...` for any web page.
 
 ### Reading values back into Companion
 
@@ -261,7 +259,7 @@ admin signed in.
 | POST | `/api/timers/{room_id}/cues/import` | file upload; `?replace=` | Bring in a room's running order from an Ontime project file (db.json) |
 | GET | `/api/timers-views` |  | Every timer view: built in, built in the console and uploaded (no key needed) |
 | GET | `/api/timers-views/look/{view}` |  | What a view needs: logos, text, colours and whether the status bar shows (no key needed) |
-| GET | `/api/timers-designs` |  | Views built in the console (Timers → Views) (no key needed) |
+| GET | `/api/timers-designs` |  | Views made in the console (Timers → Layout designer), with their layouts (no key needed) |
 | POST | `/api/timers/{room_id}/{what}/{state}` |  | Blink, clock or blackout: /on, /off or /toggle, with no body |
 
 ### Captions

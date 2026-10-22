@@ -58,8 +58,12 @@ the right page.
    order with ↑ ↓, GO starts the next cue. Each cue's *end action* says
    what happens at zero: keep going into overtime, stop, load the next cue,
    or play the next. An Ontime project file can be imported into a room.
-   The console's **Timers** page is a live preview of every room, with no
-   controls, plus the list of screens.
+   The console's **Timers** page has five tabs: **Live** (a preview of every
+   room, with no controls), **Screens**, **Quick messages** (the ready-made
+   stage messages techs tap), **Views** (every view, with a preview) and
+   **Layout designer**, where admins make their own views by
+   dragging the timer, title, clock, message, logo and the rest onto a
+   screen. Screens showing a view update as soon as it's saved.
    **Custom views** (the HTML views made for Ontime): Timers → Views → upload
    the view's folder as a .zip with `index.html` at the top (or one .html
    file). It shows at `/external/<view>/?room=<room id>` with the room's live
@@ -140,7 +144,7 @@ six-digit code. The tech, on their own laptop in the workspace:
 
 1. finds **Add a screen** next to the timer,
 2. types the code from the screen,
-3. picks what it shows: any timer view (built in, built in Timers → Views or
+3. picks what it shows: any timer view (built in, made in the Layout designer or
    uploaded), captions (audience screen, transparent overlay or subtitle bar),
    a test pattern, or *A web page…*,
 4. optionally names it (otherwise the computer's name, or `SCREEN-<code>`),
@@ -247,7 +251,7 @@ keys). Room 3 here; the room number is in its stage screen address
 ## Licences (for resellers)
 
 AT-SUITE does nothing until a valid licence key is installed (in setup, or
-**Licence** afterwards). Keys are checked offline against the vendor public
+**Licence** afterwards). Keys are checked against the vendor public
 key in `server/atsuit/vendor_pubkey.txt`, the only key AT-SUITE trusts. The
 private half is never in the repo and never on a venue server: keep it
 offline and backed up, because losing it means no new keys for existing
@@ -276,6 +280,15 @@ python tools/licence.py show <key>
 It prints the key for the customer to paste into **Licence**. Renewing is
 issuing a key for the next period; pasting it replaces the old one and keeps
 everything else.
+
+**Daily check-in.** A key made with `--checkin https://<website>` (every key the
+website makes, unless an admin ticks "Offline key") checks in with that website
+once a day. The server picks up renewed keys by itself, and a key revoked on the
+website locks at the server's next quiet moment. A server that can't reach the
+website for 14 days locks the same way, and unlocks as soon as it checks in again
+(**Licence → Check now**). Admins are warned after 2 days without a check-in,
+everyone in the last week. Keys made without `--checkin` are offline keys: they
+never check in, so give them a fixed end date (venues with no internet).
 
 **When a subscription runs out:**
 

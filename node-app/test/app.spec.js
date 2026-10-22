@@ -153,7 +153,8 @@ test("after enrolment the tech signs in with their account, picks the room and M
   await unmaximise(app);
   await expect.poll(() => maximised(app)).toBe(false);
   await start(page, { user: "amy", password: "amy-password-1", newPassword: "amy-own-pass-1", room: "HD", mode: "main" });
-  await expect(page.locator("#room option:checked")).toHaveText("HD");
+  await expect(page.locator("#room")).toHaveText("HD");
+  await expect(page.locator("select#room")).toHaveCount(0); // the room is a name, not a picker
   await expect(page.locator("#who")).toHaveText("Amy on TESTLAP1");
   await expect(page.locator("#modePill")).toHaveText("Main PC");
   await expect.poll(() => maximised(app)).toBe(true); // signing in maximises it again
@@ -559,18 +560,10 @@ test("the next day the tech starts again, without enrolling again", async () => 
   await expect(page.locator("#startForm [name=username]")).toBeVisible();
   await expect(page.locator("#startForm [name=mode][value=backup]")).toBeChecked();
   await start(page, { user: "ben", password: "ben-password-1", room: "CC" });
-  await expect(page.locator("#room option:checked")).toHaveText("CC");
+  await expect(page.locator("#room")).toHaveText("CC");
   await expect(page.locator("#who")).toHaveText("Ben on TESTLAP1");
-  // The room is the tech's call: Ben moves the laptop to RH from the top bar, then back.
-  for (const room of ["RH", "CC"]) {
-    await page.selectOption("#room", { label: room });
-    await expect(page.locator("#roomAskText")).toHaveText(`Move this laptop to ${room}?`);
-    const reloaded = page.waitForEvent("load"); // the workspace starts over in the new room
-    await page.click("#roomMove");
-    await reloaded;
-    await expect(page.locator("#ws")).toBeVisible();
-    await expect(page.locator("#room option:checked")).toHaveText(room);
-  }
+  // The room is picked at the start of the day and stays: the top bar names it, with nothing to change it.
+  await expect(page.locator("#ws select#room, #roomAsk")).toHaveCount(0);
   // Sign out at the end of the day: back to the start screen, and nothing pops up.
   await page.click("#out");
   await expect(page.locator("#start")).toBeVisible();

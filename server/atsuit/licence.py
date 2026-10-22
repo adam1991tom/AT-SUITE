@@ -2,8 +2,15 @@
 
 A licence key is `<base64url(json)>.<base64url(ed25519 signature)>`, signed with
 the vendor's private key (see tools/licence.py). The matching public key ships
-in `vendor_pubkey.txt` inside the image and is the only key trusted. Keys are
-checked offline, so a venue server needs no internet.
+in `vendor_pubkey.txt` inside the image and is the only key trusted. The key is
+checked here, offline.
+
+A key from the website also names the website it checks in with (`checkin`). Once
+a day the server sends its key there: it gets back a renewed key when there is one,
+or hears that the key was cancelled. A key that hasn't reached the website for
+CHECKIN_GRACE_DAYS stops counting, and so does a cancelled one; both then lock the
+same way a lapsed key does (never during a show). Keys made without `checkin`
+("offline" keys, for venues with no internet) never check in.
 
 AT-SUITE doesn't work until a valid key is installed. A subscription key carries
 its end date:
@@ -22,12 +29,14 @@ import base64
 import hashlib
 import json
 import math
+import random
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
@@ -47,6 +56,14 @@ UPGRADE_GRACE_DAYS = 14
 # A due lock waits for these hours (site time), or a restart, and for no show to be on.
 LOCK_HOURS = range(2, 5)
 CHECK_EVERY_S = 300
+# Keys that check in with the website: once a day, again sooner after a failure, and
+# they keep working this long without reaching it.
+CHECKIN_EVERY_S = DAY
+CHECKIN_RETRY_S = 3 * 3600
+CHECKIN_GRACE_DAYS = 14
+CHECKIN_WARN_DAYS = 2  # admins hear about missed check-ins after this long
+CHECKIN_PATH = "/api/v1/licence/refresh"
+TRANSPORT: httpx.BaseTransport | None = None  # tests swap in a stand-in website
 
 
 @dataclass
@@ -62,9 +79,11 @@ class Licence:
     serial: str = ""
     issued: int = 0  # unix time, 0 = not recorded
     # none: no key; invalid: a bad key; active; expiring: ends within WARN_ADMIN_DAYS;
-    # grace: ended (or never had a key, on an upgraded install) but still working; lapsed: grace is over
+    # grace: ended (or never had a key, on an upgraded install) but still working; lapsed: grace is over;
+    # revoked: the website cancelled it; unchecked: it hasn't reached the website for CHECKIN_GRACE_DAYS
     state: str = "none"
     grace_until: int = 0  # unix time the grace ends, when in grace or lapsed
+    checkin: str = ""  # the website this key checks in with every day; "" for an offline key
 
     def allows(self, module: str) -> bool:
         return module in self.modules
@@ -117,6 +136,11 @@ def _modules(listed) -> list[str]:
     return [m for m in ALL_MODULES if m in listed]
 
 
+def _checkin_url(v) -> str:
+    v = str(v or "").strip().rstrip("/")
+    return v if v.startswith(("https://", "http://")) and len(v) < 300 else ""
+
+
 def _day(ts: float, tz: str = "UTC") -> str:
     d = datetime.fromtimestamp(ts, ZoneInfo(tz))
     return f"{d.day} {d:%b %Y}"
@@ -148,6 +172,7 @@ def parse(key: str, now: float | None = None) -> Licence:
         serial=str(data.get("serial") or data.get("id") or hashlib.sha256(body).hexdigest()[:12].upper()),
         issued=int(data.get("issued", 0) or 0),
         state="active",
+        checkin=_checkin_url(data.get("checkin")),
     )
     if lic.expires:
         # The clock can't be earlier than the day the key was made.
@@ -221,6 +246,13 @@ def site_tz(c) -> str:
 # ---------------------------------------------------------------- the licence --
 def current(c) -> Licence:
     lic = parse(db.get_setting(c, "licence_key", ""), now=clock(c))
+    if lic.valid and lic.checkin:
+        st = checkin_state(c)
+        if st.get("revoked") and st["revoked"] == lic.serial:
+            lic.valid, lic.state, lic.reason = False, "revoked", "AT SUITE cancelled this licence"
+        elif clock(c) >= checkin_deadline(st, lic):
+            lic.valid, lic.state = False, "unchecked"
+            lic.reason = f"Hasn't reached the licence server since {_day(checkin_last(st, lic), site_tz(c))}"
     if not lic.valid:  # an upgraded install with no working key may still be in its grace (see prepare)
         until = int(db.get_setting(c, "licence_grace_until", 0) or 0)
         if until and clock(c) < until:
@@ -263,6 +295,11 @@ def installed(c, lic: Licence, actor: str) -> None:
     db.set_setting(c, "licence_in_use", True)
     db.set_setting(c, "licence_locked", False)
     db.set_setting(c, "licence_grace_until", 0)
+    st = checkin_state(c)
+    st.update(last_try=0, error="")  # check in soon
+    if st.get("serial") != lic.serial:  # a new key gets its full time to check in; the same key again doesn't
+        st.update(serial=lic.serial, since=int(_now()))
+    db.set_setting(c, "licence_checkin", st)
     db.audit(c, actor, "licence.update", f"{lic.licensee} {lic.serial}".strip())
     forget()
 
@@ -279,6 +316,91 @@ def prepare(c) -> None:
     db.set_setting(c, "licence_in_use", True)
     if not parse(db.get_setting(c, "licence_key", ""), now=clock(c)).valid:
         db.set_setting(c, "licence_grace_until", int(_now()) + UPGRADE_GRACE_DAYS * DAY)
+
+
+# ------------------------------------------------------------- the check-in --
+def checkin_state(c) -> dict:
+    """{"last_ok", "last_try", "error", "revoked", "serial", "since"}: when the website last
+    answered, when we last tried, what went wrong, the serial the website said was cancelled,
+    and which key was installed when."""
+    return dict(db.get_setting(c, "licence_checkin", {}) or {})
+
+
+def checkin_last(st: dict, lic: Licence) -> int:
+    """When this key last reached the website, or when it was first installed here if that's
+    later. Pasting the same key again doesn't buy more time offline."""
+    since = int(st.get("since") or 0) if st.get("serial") == lic.serial else 0
+    return max(int(st.get("last_ok") or 0), lic.issued, since)
+
+
+def checkin_deadline(st: dict, lic: Licence) -> int:
+    return checkin_last(st, lic) + CHECKIN_GRACE_DAYS * DAY
+
+
+def checkin_info(c) -> dict | None:
+    """For Licence: where and when this key checks in. None for an offline key."""
+    lic = parse(db.get_setting(c, "licence_key", ""), now=clock(c))
+    if not lic.checkin:
+        return None
+    st = checkin_state(c)
+    return {"url": lic.checkin, "last_ok": int(st.get("last_ok") or 0), "last_try": int(st.get("last_try") or 0),
+            "error": st.get("error") or "", "deadline": checkin_deadline(st, lic),
+            "revoked": bool(st.get("revoked")) and st.get("revoked") == lic.serial}
+
+
+def checkin(force: bool = False, transport: httpx.BaseTransport | None = None) -> dict | None:
+    """Send the key to the website it names: install a renewed key, note a cancelled one,
+    and record that the website answered. Returns checkin_info, or None for an offline key."""
+    with db.ro() as c:
+        key = db.get_setting(c, "licence_key", "")
+        lic = parse(key, now=clock(c))
+        st = checkin_state(c)
+    if not lic.checkin or lic.state == "invalid":
+        return None
+    now = _now()
+    wait = CHECKIN_RETRY_S if st.get("error") else CHECKIN_EVERY_S
+    if not force and now - float(st.get("last_try") or 0) < wait:
+        with db.ro() as c:
+            return checkin_info(c)
+    answer, error = None, ""
+    try:
+        with httpx.Client(timeout=20, transport=transport or TRANSPORT, follow_redirects=False) as cl:
+            r = cl.post(lic.checkin + CHECKIN_PATH, json={"key": key})
+        if r.status_code == 200:
+            answer = r.json()
+            if not isinstance(answer, dict):
+                answer, error = None, "The licence server sent something unexpected"
+        else:
+            error = f"The licence server answered {r.status_code}"
+    except (httpx.HTTPError, ValueError) as e:
+        error = f"Couldn't reach the licence server ({type(e).__name__})"
+    with db.tx() as c:
+        if db.get_setting(c, "licence_key", "") != key:  # someone installed another key meanwhile
+            return checkin_info(c)
+        st = checkin_state(c)
+        st.update(last_try=int(now), error=error)
+        if answer is not None:
+            st["last_ok"] = int(now)
+            if answer.get("status") == "revoked":
+                if st.get("revoked") != lic.serial:
+                    db.audit(c, "licence", "licence.revoked", lic.serial)
+                st["revoked"] = lic.serial
+            else:
+                st["revoked"] = ""
+        db.set_setting(c, "licence_checkin", st)
+        new = str(answer.get("key") or "") if answer else ""
+        if new and new.strip() != key:
+            nl = check_new(c, new)
+            if nl.valid and nl.serial != lic.serial:
+                db.set_setting(c, "licence_key", new.strip())
+                installed(c, nl, "licence check-in")
+                st = checkin_state(c)
+                st.update(last_try=int(now), last_ok=int(now), error="")
+                db.set_setting(c, "licence_checkin", st)
+        if current(c).valid:  # back in touch: a lock from missed check-ins lifts at once
+            db.set_setting(c, "licence_locked", False)
+        forget()
+        return checkin_info(c)
 
 
 def show_on(c) -> list[str]:
@@ -318,8 +440,12 @@ def enforce(at_start: bool = False, hour: int | None = None) -> bool:
 
 async def watch() -> None:
     at_start = True
+    # Servers that start together (a hosting server after an update) don't all check in at once.
+    first_checkin = time.monotonic() + random.uniform(30, 600)
     while True:
         try:
+            if time.monotonic() >= first_checkin:
+                await asyncio.to_thread(checkin)
             await asyncio.to_thread(enforce, at_start)
             at_start = False
         except Exception as exc:  # never let the check kill the server
@@ -333,8 +459,25 @@ def notice(c, role: str) -> dict | None:
     lic, now, tz = current(c), clock(c), site_tz(c)
     admin = role == "admin"
     what = "trial" if lic.edition == "trial" else "subscription"
+    if lic.state in ("active", "expiring") and lic.checkin:
+        st = checkin_state(c)
+        last, deadline = checkin_last(st, lic), checkin_deadline(st, lic)
+        if now - last > CHECKIN_WARN_DAYS * DAY:
+            if admin:
+                return {"level": "warn", "admin": True, "text": f"AT-SUITE hasn't reached the licence server since "
+                        f"{_day(last, tz)}. Let this server reach the internet by {_day(deadline, tz)}, or it locks "
+                        "(never during a show)."}
+            if deadline - now <= WARN_ALL_DAYS * DAY:
+                return {"level": "warn", "admin": False, "text": f"AT-SUITE on this server needs to reach the internet by "
+                        f"{_day(deadline, tz)}. Ask your admin."}
     if lic.state == "expiring":
         days = math.ceil((lic.expires - now) / DAY)
+        if lic.checkin and days > WARN_ALL_DAYS:
+            return None  # it renews by itself at its daily check-in, so nobody needs telling yet
+        if admin and lic.checkin:
+            return {"level": "warn", "admin": True, "text": f"Your AT-SUITE {what} ends on {_day(lic.expires, tz)} "
+                    f"({days} day{'s' if days != 1 else ''}). It renews by itself once the payment goes through; "
+                    "check your account on the AT SUITE website if it doesn't."}
         if admin:
             return {"level": "warn", "admin": True, "text": f"Your AT-SUITE {what} ends on {_day(lic.expires, tz)} "
                     f"({days} day{'s' if days != 1 else ''}). Paste the renewal key in Licence."}
@@ -356,6 +499,14 @@ def notice(c, role: str) -> dict | None:
                     f"working until {_day(lic.grace_until, tz)}, then locks. Paste the renewal key in Licence."}
         return {"level": "bad", "admin": False, "text": f"This venue's AT-SUITE {what} has ended. It keeps working until "
                 f"{_day(lic.grace_until, tz)}. Ask your admin to renew it."}
+    if lic.state in ("revoked", "unchecked") and not locked(c):
+        why = ("AT SUITE has cancelled this licence" if lic.state == "revoked"
+               else "AT-SUITE couldn't reach the licence server for {} days".format(CHECKIN_GRACE_DAYS))
+        if admin:
+            fix = ("Paste a new key in Licence, or contact AT SUITE." if lic.state == "revoked"
+                   else "Let this server reach the internet, then press Check now in Licence.")
+            return {"level": "bad", "admin": True, "text": f"{why}. It locks tonight, once no show is on. {fix}"}
+        return {"level": "bad", "admin": False, "text": f"{why}. Ask your admin."}
     if not lic.valid and not locked(c):  # due to lock at the next quiet moment
         if admin:
             return {"level": "bad", "admin": True, "text": "Your AT-SUITE licence has run out. It locks tonight, once no show "
