@@ -130,15 +130,22 @@
   .v-overlay #black { background: transparent; } .v-overlay #black.on ~ .stage { visibility: hidden; }
   .v-overlay #room { display: none; } .v-overlay #off { font-size: 11px; bottom: 2px; right: 8px; }
 
-  /* built in the console (Timers → Views) */
+  /* built in the console with the older form (before the layout designer) */
   .v-design #logoTop.show { display: block; position: absolute; top: 3.5vh; left: 3.5vw; height: clamp(40px, 9vh, 120px); z-index: 2; }
   .v-design #tod.show { display: block; position: fixed; top: 3vh; right: 3vw; font-size: 4vw; color: var(--tfg); opacity: .8; }
   .has-status.v-stage .stage, .has-status.v-clock .stage, .has-status.v-backstage .stage, .has-status.v-minimal .stage, .has-status.v-design .stage { padding-bottom: calc(var(--sbh) + var(--barh) + 2vh); }
   .v-design.no-title #title, .v-design.no-bar #bar { display: none; }
+
+  /* made in the layout designer (Timers → Layout designer): timerlayout.js draws every part where the layout puts it */
+  #layout { display: none; position: fixed; inset: 0; }
+  .v-layout #layout { display: block; }
+  .v-layout .stage, .v-layout #status, .v-layout #room { display: none !important; }
+  html.v-layout.clear, .v-layout.clear { background: transparent !important; }
 </style>
 </head>
 <body>
 <div id="black"></div>
+<div id="layout"></div>
 <div class="stage">
   <img id="logoTop" class="logo" alt="">
   <div class="main">
@@ -154,27 +161,23 @@
   <div class="it" data-s="elapsed"><b>Elapsed</b><span></span></div><div class="it" data-s="end"><b>Expected end</b><span></span></div></div>
 <div id="room"></div><div id="off" class="hidden">reconnecting…</div>
 <script src="/static/common.js"></script>
+<script src="/static/timerlayout.js"></script>
 <script>
 (async () => {
-  // /timer/<room>?view=hcc (Standard, the default)|minimal|clock|overlay, or built:<name> from Timers → Views.
+  // /timer/<room>?view=hcc (Standard, the default)|bdng|minimal|clock|overlay, or built:<name> from the layout designer.
   // The old Stage view is the Standard view now. Backstage is backstage.html.
   const roomId = location.pathname.split("/")[2];
   let view = new URLSearchParams(location.search).get("view") || "hcc";
   if (view === "stage") view = "hcc";
-  if (view === "bdng") {
-    // BDNG used to be built in; it is now an imported view. Show that if it's there, else the Standard view.
-    const views = await AT.api("/api/timers-views").catch(() => []);
-    const imp = views.find((v) => v.id === "view:bdng") || views.find((v) => (v.id || "").startsWith("view:bdng"));
-    if (imp) { location.replace(`/room/${roomId}/external/${encodeURIComponent(imp.slug)}/`); return; }
-    view = "hcc";
-  }
+  // BDNG is the client's own Ontime view, built in and served as it was made.
+  if (view === "bdng") { location.replace(`/room/${roomId}/external/bdng/${location.search.replace(/([?&])view=bdng&?/, "$1").replace(/[?&]$/, "")}`); return; }
   const KINDS = ["stage", "minimal", "clock", "backstage", "hcc", "overlay"];
   const kind = view.startsWith("built:") ? "design" : KINDS.includes(view) ? view : "hcc";
   const $ = (id) => document.getElementById(id);
   document.body.className = document.documentElement.className = "v-" + kind;
   // Standard shows "--:--" until a timer starts, as the venue's own Ontime view did.
   const strict = kind === "hcc";
-  let design = null;
+  let design = null, lay = null;
   const q = new URLSearchParams(location.search);
   // The status bar: on by default (off for minimal and overlay), set per view in Timers → Views, or ?status=0/1.
   let statusOn = !["minimal", "overlay"].includes(kind);
@@ -185,11 +188,21 @@
   {
     const look = await AT.api(`/api/timers-views/look/${encodeURIComponent(view)}`).catch(() => null);
     if (look && look.options && "status_bar" in look.options) statusOn = !!look.options.status_bar;
-    if (look && look.design) statusOn = look.design.show_status !== false;
+    if (look && look.design && !look.design.layout) statusOn = look.design.show_status !== false;
     if (look && strict) {
       setLogo($("logoTop"), look.logos.top || look.site_logo);
     }
-    if (look && look.design) {
+    if (look && look.design && look.design.layout) {
+      // Made in the layout designer: the parts go where the layout puts them.
+      design = look.design;
+      document.body.classList.add("v-layout"); document.documentElement.classList.add("v-layout");
+      document.documentElement.classList.toggle("clear", !!design.layout.transparent);
+      document.body.classList.toggle("clear", !!design.layout.transparent);
+      document.documentElement.style.setProperty("--tbg", design.background);
+      lay = TimerLayout.mount($("layout"), { layout: design.layout, background: design.background, text: design.text, logos: look.logos });
+      statusOn = false;
+      document.title = look.name;
+    } else if (look && look.design) {
       design = look.design;
       const st = document.documentElement.style;
       st.setProperty("--tbg", design.background); st.setProperty("--tfg", design.text); st.setProperty("--tsize", design.timer_size + "vw");
@@ -239,19 +252,21 @@
   };
   const sb = (k) => $("status").querySelector(`[data-s="${k}"]`);
   const setSb = (k, v, cls) => { const it = sb(k), sp = it.lastChild; if (sp.textContent !== v) sp.textContent = v; it.classList.toggle("empty", v === "—"); if (cls !== undefined) it.className = it.className.replace(/ (play|pause|over|stop|armed|clock)\b/g, "") + (cls ? " " + cls : ""); };
-  const drawStatus = (left, phase, clock, idle) => {
+  // What the status bar says: time now, the timer's state, the cue, started, elapsed and expected end.
+  const statusInfo = (left, phase, clock, idle) => {
     const nowMs = s.clock_ms + Date.now() - s._rx;
-    setSb("tod", todText());
     const pb = s.playback;
     const label = clock && (s.show_clock || kind === "clock") ? ["Clock", "clock"] : phase === "over" ? ["Overtime", "over"] : pb === "play" ? ["Running", "play"] : pb === "pause" ? ["Paused", "pause"] : pb === "armed" ? ["Ready", "armed"] : ["Stopped", "stop"];
-    setSb("state", label[0], label[1]);
     const cue = s.cue ? (s.cue.cue ? `${s.cue.cue} · ` : "") : "";
-    setSb("cue", (cue + (s.title || "")) || (s.cue_count ? "—" : "No cue loaded"));
     const startedAgo = s.started_at ? (s.server_time - s.started_at) * 1000 + (Date.now() - s._rx) : null;
-    setSb("start", startedAgo != null ? hhmm(nowMs - startedAgo) : "—");
     const total = s.duration_ms + (s.added_ms || 0);
-    setSb("elapsed", s.started_at && !idle ? (strict ? fmt : dur)(Math.max(0, total - left)) : "—");
-    setSb("end", pb === "play" && left > -86400000 ? hhmm(nowMs + left) : pb === "pause" || pb === "armed" ? `${dur(Math.max(0, left))} left` : "—");
+    return { label, items: { tod: todText(), state: label[0], cue: (cue + (s.title || "")) || (s.cue_count ? "—" : "No cue loaded"),
+      start: startedAgo != null ? hhmm(nowMs - startedAgo) : "—",
+      elapsed: s.started_at && !idle ? (strict ? fmt : dur)(Math.max(0, total - left)) : "—",
+      end: pb === "play" && left > -86400000 ? hhmm(nowMs + left) : pb === "pause" || pb === "armed" ? `${dur(Math.max(0, left))} left` : "—" } };
+  };
+  const drawStatus = (info) => {
+    for (const [k, v] of Object.entries(info.items)) setSb(k, v, k === "state" ? info.label[1] : undefined);
   };
   const drawSecondary = () => {
     const x = s.secondary, el = $("sec");
@@ -324,13 +339,15 @@
       put($("next"), s.next ? `Next: ${s.next.title}` : "");
     }
     drawSecondary();
-    if (statusOn) drawStatus(left, phase, clock, idle);
+    if (statusOn) drawStatus(statusInfo(left, phase, clock, idle));
     // progress
     bar.classList.toggle("off", clock || type === "none" || type === "count-up" || (!loaded && !strict));
     bar.classList.toggle("over", phase === "over");
+    const zones = { danger: 0, warn: 0 };
     if (total > 0) {
       const dp = Math.min(100, Math.max(0, s.danger_ms / total * 100)), wp = Math.min(100 - dp, Math.max(0, (s.warn_ms - s.danger_ms) / total * 100));
       place(zn, 0, 100 - dp - wp); place(zw, 100 - dp - wp, wp); place(zd, 100 - dp, dp);
+      Object.assign(zones, { danger: dp, warn: wp });
     } else { place(zn, 0, 100); place(zw, 0, 0); place(zd, 0, 0); }
     const done = idle || total <= 0 ? 0 : Math.min(100, Math.max(0, (total - left) / total * 100));
     place(mask, done, 100 - done);
@@ -340,12 +357,26 @@
     $("msg").classList.toggle("blink", !!s.message_blink);
     if (showMsg && $("msg").firstChild.textContent !== s.message) { $("msg").firstChild.textContent = s.message; fitMsg(); }
     $("black").classList.toggle("on", !!s.blackout);
+    if (lay) {
+      const sec = $("sec");
+      lay.update({
+        timer: { text, phase, blink: !clock && !idle && AT.timerBlinks(s, left) }, // the same rule as the built-in views
+        title: s.title || "", next: s.next ? s.next.title : "", clock: todText(), room: s.room || "",
+        message: { on: !!(s.message_visible && s.message), text: s.message || "", blink: !!s.message_blink },
+        secondary: { on: sec.classList.contains("on"), text: sec.textContent, over: sec.classList.contains("over") },
+        progress: { off: bar.classList.contains("off"), over: phase === "over", done, ...zones },
+        status: { items: statusInfo(left, phase, clock, idle).items, over: phase === "over" },
+        alert: phase === "over",
+      });
+    }
   };
   AT.ticker(() => s, draw);
   // Re-read the venue clock every few minutes, so a screen left up overnight keeps time across a clock change.
   setInterval(() => AT.api(`/api/timers/${roomId}`).then(got).catch(() => {}), 300000);
   draw();
   AT.socket([`timer:${roomId}`], (e) => {
+    // The view's look was changed in the console: show the new one straight away.
+    if (e.type === "view" && e.data && e.data.view === view) { location.reload(); return; }
     if (e.type === "timer") { got(e.data); if (kind === "backstage") renderList(); }
     if (e.type === "cues" && kind === "backstage") { cues = e.data.cues; renderList(); }
   }, (up) => {

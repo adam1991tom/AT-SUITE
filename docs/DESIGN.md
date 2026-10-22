@@ -219,9 +219,19 @@ over an imported view when it is switched on for that view.
 
 The client's BDNG view ships this way: `docs/views/bdng.html` is the original
 Ontime view (HTML, CSS, config and JS inlined, no logos) plus a few lines that
-read its logos and bottom text from `/api/timers-views/look/bdng`. Admin →
-Timers imports it as `view:bdng`; `view=bdng` (when it was built in) redirects
-there, or shows the Standard view (`hcc`) if it isn't imported.
+read its logos and bottom text from `/api/timers-views/look/bdng`. It is a
+built-in view (`bdng`): `/room/<room>/external/bdng/` always serves the shipped
+file, `view=bdng` redirects there, and `view:bdng` (from when it was imported)
+still routes to it. No upload can take the name.
+
+Views made in the console's layout designer (`built:<slug>`) keep a layout in
+`timer_designs.config_json`: a list of parts (timer, title, next, clock,
+message, secondary, progress, status, logo, text, room, box), each placed as a
+share (%) of the screen. `static/timerlayout.js` draws them on the stage
+screens (timer.html) and on the designer's canvas (`static/layoutdesigner.js`),
+so both look the same. Saving a design, or changing any view's logos or
+options, sends `{"type": "view"}` on every room's `timer:<room>` topic and the
+pages showing that view reload.
 
 **Nodes pull their own updates.** Every heartbeat reply names the current
 node agent version and checksum; an older agent downloads it, checks the

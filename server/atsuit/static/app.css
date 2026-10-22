@@ -288,3 +288,52 @@ dialog.bugdlg summary { cursor: pointer; }
 .bugshot { max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); }
 .bugpick { background: none; border: 0; padding: 0; min-height: 0; font-weight: 600; color: var(--strong); text-align: left; }
 .bugpick:hover { background: none; text-decoration: underline; }
+
+
+/* Timers → Layout designer (layoutdesigner.js) */
+.ld-bar { margin-bottom: .6rem; gap: .4rem; }
+.ld-sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 .2rem; }
+.ld-seg { display: inline-flex; gap: 0; }
+.ld-seg button { border-radius: 0; margin-left: -1px; }
+.ld-seg button:first-child { border-radius: var(--ctl-radius) 0 0 var(--ctl-radius); margin-left: 0; }
+.ld-seg button:last-child { border-radius: 0 var(--ctl-radius) var(--ctl-radius) 0; }
+.ld-seg button.on { background: color-mix(in srgb, var(--accent) 22%, var(--btn)); border-color: var(--accent); color: var(--strong); position: relative; }
+.ld-main { display: grid; grid-template-columns: 14rem minmax(0, 1fr) 19rem; gap: .8rem; align-items: start; }
+@media (max-width: 1180px) { .ld-main { grid-template-columns: minmax(0, 1fr); } .ld-centre { order: -1; } }
+.ld-left, .ld-right { padding: .7rem; }
+.ld-add { display: flex; flex-wrap: wrap; gap: .3rem; }
+.ld-layers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .2rem; }
+.ld-layers li { display: flex; gap: .2rem; align-items: center; }
+.ld-layers li.off .ld-pick { opacity: .55; text-decoration: line-through; }
+.ld-layers button.small { min-width: 24px; padding: .1rem .35rem; }
+.ld-pick { flex: 1; justify-content: flex-start; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; padding: .15rem .5rem; min-height: calc(var(--ctl-h) - .4rem); }
+.ld-layers li.sel .ld-pick { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--btn)); color: var(--strong); }
+.ld-canvas { position: relative; aspect-ratio: 16 / 9; width: 100%; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #000; user-select: none; touch-action: none; }
+.ld-canvas.clear { background: repeating-conic-gradient(#3a3f47 0 25%, #2a2e35 0 50%) 0 0 / 20px 20px; }
+.ld-draw { position: absolute; inset: 0; }
+.ld-over { position: absolute; inset: 0; z-index: 2000; }
+.ld-hit { position: absolute; box-sizing: border-box; cursor: move; outline: 1px dashed transparent; }
+.ld-hit:hover { outline-color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.ld-hit.sel { outline: 2px solid var(--accent); outline-offset: 0; }
+.ld-hit:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.ld-tag { position: absolute; left: -2px; top: -1.35rem; background: var(--accent); color: var(--accent-ink); font: 600 11px/1.4 var(--ui-font); padding: 0 .35rem; border-radius: 3px 3px 0 0; white-space: nowrap; pointer-events: none; }
+.ld-hit.low .ld-tag { top: auto; bottom: -1.35rem; border-radius: 0 0 3px 3px; }
+.ld-h { position: absolute; width: 12px; height: 12px; background: #fff; border: 2px solid var(--accent); border-radius: 2px; box-sizing: border-box; }
+.ld-h.h-nw { left: -6px; top: -6px; cursor: nwse-resize; } .ld-h.h-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.ld-h.h-ne { right: -6px; top: -6px; cursor: nesw-resize; } .ld-h.h-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.ld-h.h-n { left: calc(50% - 6px); top: -6px; cursor: ns-resize; } .ld-h.h-s { left: calc(50% - 6px); bottom: -6px; cursor: ns-resize; }
+.ld-h.h-e { right: -6px; top: calc(50% - 6px); cursor: ew-resize; } .ld-h.h-w { left: -6px; top: calc(50% - 6px); cursor: ew-resize; }
+.ld-guide { position: absolute; pointer-events: none; background: #ff2bd6; }
+.ld-guide.v { top: 0; bottom: 0; width: 1px; } .ld-guide.h { left: 0; right: 0; height: 1px; }
+.ld-right fieldset, .ld-left fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.ld-f { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); align-items: center; gap: .4rem; margin: .35rem 0; font-weight: 400; font-size: .85rem; }
+.ld-f > span:first-child { color: var(--muted); }
+.ld-f input[type=color] { width: 3rem; height: 1.8rem; min-height: 0; }
+.ld-f input[type=range] { padding: 0; }
+.ld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 .6rem; }
+.ld-grid .ld-f { grid-template-columns: 1fr; gap: .1rem; }
+label.ld-c { margin: .35rem 0; font-size: .85rem; }
+.ld-thumb { height: 28px; max-width: 90px; object-fit: contain; background: #555; border-radius: 4px; }
+/* Timers → Views: the preview of a view on one room */
+.tv-preview { position: relative; width: 100%; max-width: 760px; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.tv-preview iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; pointer-events: none; }

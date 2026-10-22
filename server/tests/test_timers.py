@@ -3,6 +3,8 @@ import json
 import time
 import zipfile
 
+from atsuit import config
+
 
 def room(admin, name="CC"):
     return next(r["id"] for r in admin.get("/api/bootstrap").json()["rooms"] if r["name"] == name)
@@ -245,7 +247,7 @@ def test_clock_button_and_back(admin):
 def test_branded_views_logos_and_builder(admin, client):
     rid = room(admin)
     ids = {v["id"] for v in client.get("/api/timers-views").json()}
-    assert {"hcc", "overlay"} <= ids and "bdng" not in ids  # BDNG is an imported view now
+    assert {"hcc", "bdng", "overlay"} <= ids  # BDNG is built in
     assert next(v["name"] for v in client.get("/api/timers-views").json() if v["id"] == "hcc") == "Standard"
     admin.put("/api/admin/settings", json={"branding": {"logo_url": "/static/site-logo.png"}})
     look = client.get("/api/timers-views/look/hcc").json()
@@ -373,29 +375,35 @@ def test_status_bar_setting_and_view_defaults(admin, client):
     assert 'id="status"' in page and 'id="sec"' in page
 
 
-def test_bdng_is_an_imported_view(admin, client):
+def test_bdng_is_built_in(admin, client):
     rid = room(admin)
-    # Before it's imported, view=bdng still works (screens set to it keep a timer): the Standard view.
     code = admin.get("/api/fleet/enrolment").json()[0]["enrol_code"]
     n = admin.post("/api/nodes/enrol", json={"code": code, "name": "scr", "kind": "kiosk"}).json()
-    assert admin.put(f"/api/fleet/nodes/{n['node_id']}/screen", json={"room_id": rid, "view": "bdng"}).status_code == 200
+    # Screens can be put on it, by its own id or the id it had when it was an uploaded view.
+    for v in ("bdng", "view:bdng"):
+        assert admin.put(f"/api/fleet/nodes/{n['node_id']}/screen", json={"room_id": rid, "view": v}).status_code == 200
+    assert next(v["name"] for v in client.get("/api/timers-views").json() if v["id"] == "bdng") == "BDNG sponsor clock"
     page = client.get(f"/timer/{rid}?view=bdng").text
-    assert 'view === "bdng"' in page and 'view = "hcc"' in page
-    # The shipped file: the Ontime original, no logos inside, downloadable and importable in one step.
+    assert 'view === "bdng"' in page and "/external/bdng/" in page
+    # The shipped file: the Ontime original, no logos inside, served without importing it and run unchanged.
     html = client.get("/api/timers-views/samples/bdng.html")
     assert html.status_code == 200 and "ONTIME_SPONSOR_CONFIG" in html.text and "connectSocket" in html.text
     assert ".png" not in html.text.replace("assets/top-logo.png", "").replace("assets/bottom-logo.png", "")
     assert client.get("/api/timers-views/samples/nope.html").status_code == 404
-    r = admin.post("/api/timers-views/samples/bdng/import").json()
-    assert r["id"] == "view:bdng"
-    assert "view:bdng" in {v["id"] for v in client.get("/api/timers-views").json()}
     served = client.get(f"/room/{rid}/external/bdng/")
     assert served.status_code == 200 and "/static/ontime-shim.js" in served.text and "/static/viewbar.js" in served.text
-    assert served.text.replace(timers_shim(), "") == html.text  # the file itself runs unchanged
-    # Imported views: status bar off unless switched on.
-    assert client.get("/api/timers-views/look/view:bdng").json()["options"] == {"status_bar": False}
+    assert served.text.replace(timers_shim(), "") == html.text
+    assert client.get(f"/room/{rid}/external/bdng/assets/top-logo.png").status_code == 404
+    # Nothing to import any more, and an upload can't take its name.
+    assert admin.post("/api/timers-views/samples/bdng/import").json()["id"] == "bdng"
+    assert "view:bdng" not in {v["id"] for v in client.get("/api/timers-views").json()}
+    r = admin.post("/api/timers-views?name=BDNG", files={"file": ("index.html", b"<html><head></head></html>")})
+    assert r.status_code == 400 and "built in" in r.json()["detail"]
+    # Status bar off unless switched on; the old id and the new one are the same setting.
+    assert client.get("/api/timers-views/look/bdng").json()["options"]["status_bar"] is False
     assert admin.put("/api/timers-views/look/view:bdng", json={"status_bar": True}).status_code == 200
-    assert client.get("/api/timers-views/look/view:bdng").json()["options"] == {"status_bar": True}
+    assert client.get("/api/timers-views/look/bdng").json()["options"]["status_bar"] is True
+    assert client.get("/api/timers-views/look/view:bdng").json()["options"]["status_bar"] is True
     assert client.get("/api/timers-views/look/view:nope").status_code == 404
     assert admin.put("/api/timers-views/look/view:nope", json={"status_bar": True}).status_code == 404
     # It reads the room's timer from the Ontime feed, like on Ontime.
@@ -435,3 +443,48 @@ def test_stage_is_the_standard_view_now(admin):
     assert "stage" not in ids and ids[0] == "hcc"
     with db.ro() as c:
         assert view_known(c, "stage")  # screens already set to it keep working (they show Standard)
+
+
+def test_layout_designer_views(admin, client):
+    rid = room(admin)
+    layout = {"font": "saira", "warn": "#ffaa00", "transparent": True, "elements": [
+        {"id": "t1", "type": "timer", "x": 10, "y": 20, "w": 80, "h": 40, "size": 90},
+        {"id": "m1", "type": "message", "x": 5, "y": 5, "w": 90, "h": 90, "cover": True},
+        {"id": "x1", "type": "text", "x": 0, "y": 90, "w": 50, "h": 8, "text": "Sponsored by", "bg": "#112233", "bg_opacity": 50}]}
+    d = admin.post("/api/timers-designs", json={"name": "Stage left", "background": "#101010", "layout": layout}).json()
+    assert d == {"id": "built:stage-left", "slug": "stage-left"}
+    look = client.get("/api/timers-views/look/built:stage-left").json()
+    L = look["design"]["layout"]
+    assert L["font"] == "saira" and L["transparent"] and L["danger"] == "#ff1744"  # defaults filled in
+    assert [e["id"] for e in L["elements"]] == ["t1", "m1", "x1"] and L["elements"][2]["text"] == "Sponsored by"
+    assert look["logos"] == {"logo": "", "bg": ""}
+    # Checked on the way in: known parts only, on the screen, unique ids, real colours.
+    bad = [{"id": "a", "type": "video", "x": 0, "y": 0, "w": 10, "h": 10},
+           {"id": "a", "type": "timer", "x": 0, "y": 0, "w": 0, "h": 10},
+           {"id": "a", "type": "timer", "x": 0, "y": 0, "w": 10, "h": 10, "color": "red"},
+           {"id": "<b>", "type": "timer", "x": 0, "y": 0, "w": 10, "h": 10}]
+    for e in bad:
+        assert admin.post("/api/timers-designs", json={"name": "Bad", "layout": {"elements": [e]}}).status_code == 422
+    twins = [{"id": "a", "type": "timer", "x": 0, "y": 0, "w": 10, "h": 10}] * 2
+    assert admin.post("/api/timers-designs", json={"name": "Bad", "layout": {"elements": twins}}).status_code == 422
+    # A background picture and a logo for it.
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+    assert admin.post("/api/timers-views/look/built:stage-left/logo/bg", files={"file": ("bg.png", png)}).status_code == 200
+    assert client.get("/api/timers-views/look/built:stage-left").json()["logos"]["bg"].startswith("/api/timers-views/logo/built-stage-left-bg.png")
+    assert admin.post("/api/timers-views/look/built:stage-left/logo/side", files={"file": ("x.png", png)}).status_code == 404
+    # Screens showing it are told the moment it changes, so they redraw.
+    with client.websocket_connect(f"/ws?topics=timer:{rid}") as ws:
+        ws.receive_json()
+        layout["elements"][0]["x"] = 12
+        assert admin.put("/api/timers-designs/stage-left", json={"name": "Stage left", "layout": layout}).status_code == 200
+        assert ws.receive_json() == {"topic": f"timer:{rid}", "type": "view", "data": {"view": "built:stage-left"}}
+        admin.put("/api/timers-views/look/hcc", json={"status_bar": False})
+        assert ws.receive_json()["data"] == {"view": "hcc"}
+    assert client.get("/api/timers-views/look/built:stage-left").json()["design"]["layout"]["elements"][0]["x"] == 12
+    # The stage page draws it with the layout renderer.
+    page = client.get(f"/timer/{rid}?view=built:stage-left").text
+    assert "/static/timerlayout.js" in page and "TimerLayout.mount" in page
+    assert client.get("/static/timerlayout.js").status_code == 200 and client.get("/static/layoutdesigner.js").status_code == 200
+    # Removing it takes its pictures too.
+    assert admin.delete("/api/timers-designs/stage-left").status_code == 200
+    assert not list((config.cfg.data / "view-logos").glob("built-stage-left-*"))
