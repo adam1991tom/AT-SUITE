@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block description %}How to use AT SUITE: step-by-step guides, screenshots and show-day scenarios for techs, managers and admins.{% endblock %}
+{% block main %}
+<div class="page kb"><div class="wrap">
+<p class="eyebrow">Help centre</p>
+<h1>How can we help?</h1>
+<p class="lead">Guides for everything in AT SUITE, with pictures, step-by-step scenarios and answers to show-day problems.</p>
+{% include "site/_kb_search.html" %}
+<p class="small muted">The same guides are built into AT SUITE: techs open them from <strong>Help → AT SUITE manual</strong>, and the AI helper answers from them.</p>
+
+<nav class="kb-quick" aria-label="Start here">
+  <h2 class="h3">Start here</h2>
+  <ul>
+    <li><a href="/docs/welcome"><strong>New to AT SUITE?</strong> <span>What it is and how the parts fit together</span></a></li>
+    <li><a href="/docs/start-the-day"><strong>I'm a tech</strong> <span>Start the day on your laptop and run the room</span></a></li>
+    <li><a href="/docs/console-tour"><strong>I run the venue</strong> <span>The console, people, rooms and reports</span></a></li>
+    <li><a href="/docs/scenario-new-venue"><strong>Setting up a venue</strong> <span>From a bare server to the first show</span></a></li>
+  </ul>
+</nav>
+
+<div class="kb-sections">
+{% for sec in kb.sections %}
+<section class="card kb-sec" aria-labelledby="sec-{{ sec.slug }}">
+  <h2 class="h3" id="sec-{{ sec.slug }}">{{ sec.title }}</h2>
+  {% if sec.summary %}<p class="small muted">{{ sec.summary }}</p>{% endif %}
+  <ul>
+  {% for a in sec.articles %}<li><a href="/docs/{{ a.slug }}">{{ a.title }}</a></li>{% endfor %}
+  </ul>
+</section>
+{% endfor %}
+</div>
+<p class="small muted kb-version">Written for AT SUITE {{ kb.version }}. Can't find it? <a href="/contact?kind=support">Ask support</a>.</p>
+</div></div>
+{% endblock %}

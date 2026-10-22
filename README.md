@@ -47,6 +47,10 @@ Then open `http://SERVER-IP:PORT/` and follow the setup wizard. See
 [docs/SETUP-GUIDE.md](docs/SETUP-GUIDE.md) to go from a bare server to a
 venue ready for its first show, [docs/INSTALL.md](docs/INSTALL.md) for https, migration from the old apps,
 backups and updates, and [docs/ADMIN.md](docs/ADMIN.md) for day-to-day setup.
+The user manual, with how-tos, pictures and show-day scenarios, is the
+knowledge base in `website/atshop/content/kb/`: the website's help centre,
+`/guide/manual` on every server, and what the AI helper answers from (see
+[CONTRIBUTING.md](CONTRIBUTING.md#the-knowledge-base)).
 
 ## Pages
 
@@ -61,6 +65,7 @@ backups and updates, and [docs/ADMIN.md](docs/ADMIN.md) for day-to-day setup.
 | `/present/<link>` | presenters | their own page: upload slides, see review notes, check in. No account; each presenter has their own link |
 | `/captions/<room>` | audience screens | captions, no sign-in |
 | `/captions/<room>/overlay` | OBS / vMix | transparent caption overlay |
+| `/guide/manual` | anyone | the AT SUITE manual (the knowledge base), works offline; `/guide/help` is the tech guide, `/guide/tech` the printable tech card |
 | `/api/docs` | integrators | REST API (Companion, automation); Companion set-up and button list in [docs/COMPANION.md](docs/COMPANION.md) |
 
 ## Repository

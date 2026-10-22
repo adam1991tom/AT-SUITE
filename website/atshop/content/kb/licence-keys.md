@@ -1,3 +1,8 @@
+---
+summary: Where to find your licence key, how to put it in, how renewals and the daily check-in work, and what happens when a key ends.
+audience: admins
+keywords: licence, license, key, renew, renewal, expiry, expired, grace, locked, check-in, offline key, plan, serial, not licensed
+---
 # Licence keys
 
 AT SUITE needs a licence key to run. The key holds who it's licensed to, the plan, how many laptops can connect, and the date it ends. Once a day your server checks in with this website: that's how renewals arrive by themselves. Venues whose server has no internet can ask us for an offline key.
@@ -10,7 +15,11 @@ In [your account](/account), under **Licence key**: press **Copy key** or **Down
 
 1. On your AT SUITE server, sign in as an admin.
 2. Open **Licence**.
-3. Paste the key and press **Save**.
+3. Paste the key into **Install a new key** and press **Install licence**.
+
+![The Licence page: licensed to Grand Hall Events on the Venue plan, with its serial, dates and modules; limits on the right; the key itself below with Copy key and Remove licence; and a box to install a new key](/static/kb/console-licence.jpg)
+
+The page shows who it's licensed to, the plan, serial, issue and end dates with days left, the modules, sites and laptops used against the limits, the daily check, and whether the signature checks out. Techs never see licence details, only a warning line while it runs out.
 
 Nothing else changes: settings, rooms and data are kept. On a new install, paste it on the last page of the setup wizard. With managed hosting we put keys in for you.
 

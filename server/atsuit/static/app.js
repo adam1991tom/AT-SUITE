@@ -870,6 +870,8 @@
       <label><input type="checkbox" name="learn_help" ${s.learn_help ? "checked" : ""} style="width:auto"> Learn from how help calls were fixed</label>
       <label><input type="checkbox" name="builtin_guide" ${s.builtin_guide !== false ? "checked" : ""} style="width:auto"> Use the built-in tech guide</label>
       <p class="small muted" style="margin:.1rem 0 .4rem">Fault finding for sound, video, lighting, staging and rigging, networks, presenters' laptops, hybrid events, safety and running the show, built into AT-SUITE. It works offline. Your own notes and fixes always come first. You can read and change it under Tech guide.</p>
+      <label><input type="checkbox" name="manual" ${s.manual !== false ? "checked" : ""} style="width:auto"> Use the AT SUITE manual</label>
+      <p class="small muted" style="margin:.1rem 0 .4rem">How to use AT SUITE itself, step by step, for questions like "how do I add a stage screen?". It comes with each update, matches the version you're running, and techs can read it at <a href="/guide/manual" target="_blank" rel="noopener">/guide/manual</a>.</p>
       <h2 style="margin-top:1rem">Private AI model (optional)</h2>
       <p class="small muted" style="margin-top:0">With a model on your own network (<a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>), it writes its replies from those notes and the whole conversation. Without one it still chats: it offers the best match and asks the guide's questions to narrow the fault down. Leave the address empty to use the one set in Presenters${d.presenter_ai_url ? ` (${esc(d.presenter_ai_url)})` : ""}.</p>
       <label>Ollama address</label><input name="ai_url" placeholder="http://192.168.1.50:11434" value="${esc(s.ai_url)}">
@@ -884,7 +886,7 @@
     const f = a.querySelector("#aif");
     f.onsubmit = (e) => {
       e.preventDefault();
-      guard(() => put("/api/admin/ai", { enabled: f.enabled.checked, venue_notes: f.venue_notes.value, learn_help: f.learn_help.checked, builtin_guide: f.builtin_guide.checked, ai_url: f.ai_url.value.trim(), ai_model: f.ai_model.value.trim() || "llama3.1:8b", web_search: f.web_search.checked }))
+      guard(() => put("/api/admin/ai", { enabled: f.enabled.checked, venue_notes: f.venue_notes.value, learn_help: f.learn_help.checked, builtin_guide: f.builtin_guide.checked, manual: f.manual.checked, ai_url: f.ai_url.value.trim(), ai_model: f.ai_model.value.trim() || "llama3.1:8b", web_search: f.web_search.checked }))
         .then((ok) => ok && toast("Saved", "good"));
     };
     a.querySelectorAll("[data-forget]").forEach((b) => b.onclick = () => confirm("Forget this answer?") && guard(() => del(`/api/admin/ai/learned/${b.dataset.forget}`)).then(() => admAi(a)));

@@ -8,6 +8,8 @@ guide (knowledge/*.md): show-day fault finding for sound, video, lighting,
 staging, networks, presentation laptops, running the show and AT-SUITE itself,
 shipped with the app so it works offline. Admins can edit the guide in the
 console; their copies live in the data folder and replace the built-in ones.
+And from the AT SUITE manual: the website's help centre (website/atshop/content/kb),
+shipped in the image too, for "how do I..." questions about AT SUITE itself.
 
 With a local model (Ollama) the whole conversation, the matching venue notes
 and guide entries go to it and it writes the replies. Without one the helper
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import math
 import re
+import tomllib
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -30,6 +33,7 @@ from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .. import config, db
@@ -40,9 +44,16 @@ router = APIRouter()
 
 NAME = "AI helper"
 DEFAULTS = {"enabled": True, "ai_url": "", "ai_model": "llama3.1:8b", "web_search": False, "learn_help": True,
-            "builtin_guide": True, "venue_notes": ""}
+            "builtin_guide": True, "manual": True, "venue_notes": ""}
 GUIDE = "tech guide"
 GUIDE_DIR = Path(__file__).resolve().parent.parent / "knowledge"
+MANUAL = "AT SUITE manual"
+# The manual is the website's help centre, written once: the Dockerfile copies its pages to
+# atsuit/manual and its pictures to atsuit/manual/img; a checkout reads the website folder.
+_HERE, _REPO = Path(__file__).resolve().parent.parent, Path(__file__).resolve().parents[3]
+MANUAL_DIRS = (_HERE / "manual", _REPO / "website" / "atshop" / "content" / "kb")
+MANUAL_IMAGES = (_HERE / "manual" / "img", _REPO / "website" / "atshop" / "static" / "kb")
+HOWTO = re.compile(r"\b(how (do|can|should|would) (i|we|you)|how to|where (do|can|is|are)|can i|is there a way|what does|what is the)\b")
 SEARCH = "https://api.duckduckgo.com/"
 STOP = set("""a an and are as at be but by can do does for from has have how i if in into is it its me my no not of on or
 our so that the their them then there these this to too up us was we what when where which who why will with you your
@@ -187,6 +198,131 @@ def help_articles():
     return {"articles": sorted(out, key=lambda a: a["title"].lower())}
 
 
+def manual_dir() -> Path | None:
+    return next((d for d in MANUAL_DIRS if (d / "index.toml").is_file()), None)
+
+
+def split_meta(text: str) -> tuple[dict, str]:
+    """An article's "key: value" lines between the --- lines at the top, and the rest."""
+    meta: dict[str, str] = {}
+    if text.startswith("---\n"):
+        head, _, text = text[4:].partition("\n---\n")
+        for line in head.splitlines():
+            k, _, v = line.partition(":")
+            if k.strip():
+                meta[k.strip().lower()] = v.strip()
+    return meta, text.lstrip("\n")
+
+
+def _where_manual() -> tuple[str, float]:
+    d = manual_dir()
+    return (str(d), max(f.stat().st_mtime for f in d.iterdir())) if d else ("", 0.0)
+
+
+def manual() -> dict:
+    """The manual's sections and their articles, in reading order, and the release it describes."""
+    return _manual(*_where_manual())
+
+
+@lru_cache(maxsize=1)
+def _manual(folder: str, _stamp: float) -> dict:
+    if not folder:
+        return {"version": "", "sections": []}
+    d = Path(folder)
+    index = tomllib.loads((d / "index.toml").read_text(encoding="utf-8"))
+    sections = []
+    for s in index.get("section", []):
+        articles = []
+        for name in s.get("articles", []):
+            f = d / f"{name}.md"
+            if not f.is_file():
+                continue
+            meta, body = split_meta(f.read_text(encoding="utf-8"))
+            first = body.splitlines()[0] if body else ""
+            articles.append({"slug": name, "title": first[2:].strip() if first.startswith("# ") else name,
+                             "summary": meta.get("summary", ""), "keywords": meta.get("keywords", ""), "markdown": body})
+        sections.append({"slug": s["slug"], "title": s["title"], "summary": s.get("summary", ""), "articles": articles})
+    return {"version": index.get("version", ""), "sections": sections}
+
+
+def plain(markdown: str) -> str:
+    """Manual text for a chat reply: the steps and words, without pictures or Markdown."""
+    out = []
+    for line in markdown.splitlines():
+        if re.match(r"^\s*!\[", line) or re.match(r"^\|[\s:|-]+\|?\s*$", line) or line.startswith("```"):
+            continue
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", re.sub(r"</?(kbd|b|i|em|strong)>", "", line))
+        line = re.sub(r"[*`]", "", line).replace("> ", "", 1) if line.startswith(">") else re.sub(r"[*`]", "", line)
+        if line.startswith("|"):
+            line = " · ".join(c.strip() for c in line.strip().strip("|").split("|"))
+        out.append(line.rstrip())
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
+
+
+def manual_items() -> tuple[dict, ...]:
+    """The manual for the helper: each whole article, and each of its "## " sections."""
+    return _manual_items(*_where_manual())
+
+
+@lru_cache(maxsize=1)
+def _manual_items(folder: str, stamp: float) -> tuple[dict, ...]:
+    items = []
+    for a in (a for s in _manual(folder, stamp)["sections"] for a in s["articles"]):
+        name, title, keywords, summary, body = a["slug"], a["title"], a["keywords"], a["summary"], a["markdown"]
+        page = re.sub(r"^# .*\n?", "", body, count=1)
+        # The whole article (as far as it fits) answers "how do I..."; each "## " section a narrower question.
+        whole = plain(re.sub(r"^## (.*)$", r"\1:", page, flags=re.M))
+        if len(whole) > 1500:
+            whole = re.sub(r"\n\n[^\n]*:$", "", whole[:whole.rfind("\n\n", 0, 1500)]) + "\n\n(More in the manual.)"
+        items.append({"kind": MANUAL, "id": f"manual:{name}", "title": title, "text": whole, "keys": f"{keywords} {summary}",
+                      "url": f"/guide/manual#{name}", "topic": "manual", "tree": {}, "first": "", "boost": 1.6})
+        for block in re.split(r"^## ", page, flags=re.M)[1:]:
+            head, _, rest = block.partition("\n")
+            text = plain(rest)
+            if not text or head.strip().lower() in ("next", "see also"):
+                continue
+            items.append({"kind": MANUAL, "id": f"manual:{name}:{slug(head)}", "title": f"{title}: {head.strip()}",
+                          "text": text[:1500], "keys": f"{keywords} {summary}", "url": f"/guide/manual#{name}", "topic": "manual",
+                          "tree": {}, "first": ""})
+    return tuple(items)
+
+
+def reference(cfg: dict) -> list[dict]:
+    """What the helper answers from beyond the venue: the tech guide and the AT SUITE manual."""
+    return (list(guide()) if cfg.get("builtin_guide", True) else []) + (list(manual_items()) if cfg.get("manual", True) else [])
+
+
+def lookup(text: str, cfg: dict, cover: float, howto: bool, top: int = 4) -> list[dict]:
+    """The best tech guide entries and manual sections for what the tech said. For "how do I..."
+    the manual comes first; for a fault the guide does, and the manual only when it matches closely."""
+    g = best(text, list(guide()), top=top, cover=cover) if cfg.get("builtin_guide", True) else []
+    m = best(text, list(manual_items()), top=top, cover=cover if howto else max(cover, 0.75)) if cfg.get("manual", True) else []
+    return m + g if howto else g + m
+
+
+def is_howto(text: str) -> bool:
+    return bool(HOWTO.search(text.lower()))
+
+
+def source(item: dict) -> str:
+    return "the AT SUITE manual" if item["kind"] == MANUAL else "the tech guide"
+
+
+@router.get("/api/guide/manual")
+def manual_pages():
+    """The AT SUITE manual, for /guide/manual. No sign-in: it's the help centre on the public website."""
+    return manual()
+
+
+@router.get("/guide/manual/img/{name}", include_in_schema=False)
+def manual_image(name: str):
+    if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,80}\.(jpg|png)", name):
+        for d in MANUAL_IMAGES:
+            if (d / name).is_file():
+                return FileResponse(d / name, headers={"Cache-Control": "public, max-age=86400"})
+    raise HTTPException(404, "Not found")
+
+
 def knowledge(c, site_id: int | None) -> list[dict]:
     """Everything the helper can answer from, for one site."""
     cfg = prefs(c)
@@ -222,7 +358,7 @@ def best(question: str, items: list[dict], top: int = 4, cover: float = 0) -> li
         named = set(words(item["title"]))  # a word in the title says more than one in the text
         s = sum(math.log(1 + n / df[w]) * (1 + math.log(d[w])) * (1.5 if w in named else 1) for w in hit)
         if s > 0 and len(hit) >= cover * len(q):
-            scored.append((s / math.sqrt(1 + sum(d.values()) / 40), item))
+            scored.append((s * item.get("boost", 1) / math.sqrt(1 + sum(d.values()) / 40), item))
     scored.sort(key=lambda x: -x[0])
     return [i for _, i in scored[:top]]
 
@@ -259,9 +395,9 @@ def generate(url: str, model: str, prompt: str) -> str:
 
 
 def answer(c_items: list[dict], cfg: dict, question: str, who: str, room: str, venue: str) -> dict:
-    # What this venue knows comes first; the built-in guide fills in.
+    # What this venue knows comes first; the built-in guide and the manual fill in.
     found = best(question, c_items, top=3)
-    from_guide = best(question, list(guide()), top=2, cover=0.5) if cfg.get("builtin_guide", True) else []
+    from_guide = lookup(question, cfg, 0.5, is_howto(question), top=2)[:2]
     venue_found, found = found, found + from_guide
     web = None
     if cfg["web_search"] and len(found) < 2:
@@ -286,7 +422,7 @@ def answer(c_items: list[dict], cfg: dict, question: str, who: str, room: str, v
             parts.append("Here's what has worked here before:\n" + "\n".join(lines))
         if from_guide:
             g = from_guide[0]
-            parts.append(f"From the tech guide, {g['title']}:\n{g['text']}")
+            parts.append(f"From {source(g)}, {g['title']}:\n{g['text']}")
         text = "\n\n".join(parts)
     elif web:
         text = f"From the web ({web['title']}): {web['text']}"
@@ -322,11 +458,12 @@ Help them find and fix the fault one step at a time, like an experienced crew ch
 - Never make up venue details like input numbers, room names or where kit is kept.
 - If it could be unsafe (power, rigging, height, smoke), say to stop and call the crew.
 - If you run out of ideas, say so and tell them to press Call for help.
+- For how to use AT SUITE itself, follow the AT SUITE manual: the exact page, window and button names, step by step.
 
 Venue information:
 {venue_info}
 
-Tech guide:
+Tech guide and AT SUITE manual:
 {guide_info}"""
 
 
@@ -383,7 +520,7 @@ def _question(entry: dict, qid: str) -> tuple[str, list[str]]:
 
 def _brief(entry: dict) -> str:
     """A guide entry for the model, its questions included."""
-    lines = [f"[tech guide] {entry['title']}", entry["text"]]
+    lines = [f"[{entry['kind']}] {entry['title']}", entry["text"]]
     for node in entry["tree"].values():
         lines.append(f"Ask: {node['q']}")
         lines += [f"  {o['label']}: {o['text']}" for o in node["options"]]
@@ -401,7 +538,8 @@ def converse(c_items: list[dict], cfg: dict, turns: list[dict], state: dict, who
     """The helper's next reply in a conversation. `turns` are {"role": "tech"|"helper", "text"}, oldest first."""
     last = turns[-1]["text"].strip()
     asked = [t["text"] for t in turns if t["role"] == "tech"]
-    guide_items = list(guide()) if cfg.get("builtin_guide", True) else []
+    guide_items = reference(cfg)
+    how = is_howto(last) or bool(asked) and is_howto(asked[0])  # "how do I..." or a fault
     by_id = {g["id"]: g for g in guide_items}
     topic = by_id.get(state.get("topic") or "")
     ask = state.get("ask") or ""
@@ -443,7 +581,7 @@ def converse(c_items: list[dict], cfg: dict, turns: list[dict], state: dict, who
     # With a model: the whole conversation, and what the venue and the guide say about it.
     if cfg["ai_url"]:
         found = best(f"{last} {context}", c_items, top=4)
-        g = best(f"{last} {context}", guide_items, top=3, cover=0.3)
+        g = lookup(f"{last} {context}", cfg, 0.3, how, top=3)[:3]
         if topic and topic not in g:
             g.insert(0, topic)
         sources += found + g
@@ -466,23 +604,24 @@ def converse(c_items: list[dict], cfg: dict, turns: list[dict], state: dict, who
     # A follow-up ("what if the batteries are new?") is read with what came before, unless it plainly
     # says something new on its own ("and now the projector has no signal").
     fresh = lambda q, n, cover: [x for x in best(q, n, top=4, cover=cover) if x["id"] not in shown]
+    fresh_ref = lambda q, cover: [x for x in lookup(q, cfg, cover, how) if x["id"] not in shown]
     if still:  # something else on the same subject, twice at most, then the crew
         tried = sum(1 for i in shown if i in by_id)
         venue_found = fresh(context, c_items, 0)[:3]
-        g = [x for x in fresh(context, guide_items, 0.3) if not topic or x["topic"] == topic["topic"]] if tried < 3 else []
+        g = [x for x in fresh_ref(context, 0.3) if not topic or x["topic"] == topic["topic"]] if tried < 3 else []
         # An entry the last reply pointed to (see "Laptop doesn't detect the screen") comes first.
         said = turns[-2]["text"] if len(turns) > 1 and turns[-2]["role"] == "helper" else ""
         named = {x["title"]: x for x in guide_items if x["id"] not in shown}
         g = [named[t] for t in re.findall(r'"([^"]{3,80})"', said) if t in named] + g
-    elif node and not fresh(last, guide_items, 0.6) and best(last, [topic], cover=0.5):
+    elif node and not fresh_ref(last, 0.6) and best(last, [topic], cover=0.5):
         # About the entry it's on ("what if the batteries are new?"): carry on with its question.
         q, choices = _question(topic, ask)
         sources.append(topic)
         return reply(f"OK, then let's narrow it down. {q}", choices)
-    elif len(asked) > 1 and not fresh(last, guide_items, 0.6):
-        venue_found, g = fresh(f"{last} {context}", c_items, 0)[:3], fresh(f"{last} {context}", guide_items, 0.3)
+    elif len(asked) > 1 and not fresh_ref(last, 0.6):
+        venue_found, g = fresh(f"{last} {context}", c_items, 0)[:3], fresh_ref(f"{last} {context}", 0.3)
     else:
-        venue_found, g = fresh(last, c_items, 0)[:3], fresh(last, guide_items, 0.5)
+        venue_found, g = fresh(last, c_items, 0)[:3], fresh_ref(last, 0.5)
     parts = []
     if venue_found:
         lines = [f"• {s['title']}: {s['text'].split('Fixed by: ')[-1].split('A: ')[-1]}" for s in venue_found]
@@ -494,7 +633,7 @@ def converse(c_items: list[dict], cfg: dict, turns: list[dict], state: dict, who
         sources.append(topic)
         shown.append(topic["id"])
         lead = "Let's try something else. " if still else ""
-        parts.append(f"{lead}From the tech guide, {topic['title']}:\n{topic['text']}")
+        parts.append(f"{lead}From {source(topic)}, {topic['title']}:\n{topic['text']}")
         if topic["first"]:
             ask = topic["first"]
             q, choices = _question(topic, ask)
@@ -502,7 +641,8 @@ def converse(c_items: list[dict], cfg: dict, turns: list[dict], state: dict, who
             return reply("\n\n".join(parts), choices)
     if parts:
         ask = ENDED
-        return reply("\n\n".join(parts) + "\n\nDid that sort it?", CHECK)
+        check = "Did that answer it?" if topic and topic["kind"] == MANUAL and not venue_found else "Did that sort it?"
+        return reply("\n\n".join(parts) + f"\n\n{check}", CHECK)
     if cfg["web_search"] and not still:
         try:
             web = web_search(last)
@@ -612,6 +752,7 @@ class SettingsIn(BaseModel):
     web_search: bool = False
     learn_help: bool = True
     builtin_guide: bool = True
+    manual: bool = True
     venue_notes: str = Field(default="", max_length=50000)
 
 

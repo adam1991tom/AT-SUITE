@@ -247,6 +247,11 @@ def create_app() -> FastAPI:
     def help_page():
         return page("help.html")
 
+    @app.get("/guide/manual", include_in_schema=False)
+    def manual_page():
+        # The AT SUITE manual: the website's help centre, shipped with the app so it works offline.
+        return page("manual.html")
+
     @app.get("/guide/companion", include_in_schema=False)
     def companion_guide_page():
         return page("guide.html")

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AT-SUITE manual</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any"><link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><meta name="theme-color" content="#0B1020">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
+<style>
+  /* The AT SUITE manual: the website's help centre, shipped with the server (atsuit/manual) so it
+     works with no internet. Every article on one page, so links and the browser's find work. */
+  .topbar { display: flex; align-items: center; gap: .7rem; padding: .7rem 1.2rem; background: var(--navy); border-bottom: 3px solid var(--accent); }
+  .topbar img { height: 28px; } .topbar b { font-family: var(--brand-font); font-weight: 800; }
+  .layout { max-width: 1240px; margin: 0 auto; padding: 1.2rem 1rem 4rem; display: grid; gap: 2rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 960px) { .layout { grid-template-columns: 17rem minmax(0, 1fr); } .mside { position: sticky; top: 1rem; align-self: start; max-height: calc(100vh - 2rem); overflow: auto; } }
+  .mside details { margin: .2rem 0; } .mside summary { cursor: pointer; font-weight: 600; padding: .25rem 0; }
+  .mside ul { list-style: none; margin: .2rem 0 .5rem; padding-left: .8rem; border-left: 1px solid var(--line); } .mside li a { display: block; padding: .15rem 0; font-size: .92rem; }
+  .search label { display: block; font-weight: 600; margin-bottom: .3rem; } .search input { width: 100%; }
+  .guide { max-width: 860px; line-height: 1.6; }
+  .guide h2 { margin-top: 0; font-size: 1.6rem; }
+  .guide h3 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: .3rem; font-size: 1.2rem; color: var(--strong); text-transform: none; letter-spacing: 0; } .guide h4 { margin-top: 1.4rem; }
+  .guide table { margin: .6rem 0 1rem; font-size: .92rem; } .guide td, .guide th { vertical-align: top; } .table-wrap { overflow-x: auto; }
+  .guide code { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: .05rem .35rem; font-size: .88em; word-break: break-word; }
+  .guide pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; overflow-x: auto; } .guide pre code { border: 0; background: none; padding: 0; }
+  .guide kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 .3rem; font-size: .88em; background: var(--panel2); }
+  .guide ul, .guide ol { padding-left: 1.4rem; } .guide li { margin: .2rem 0; } .guide p { margin: .6rem 0; }
+  .guide figure { margin: 1rem 0 1.4rem; } .guide figure img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .guide figcaption { color: var(--muted); font-size: .88rem; margin-top: .35rem; }
+  .callout { margin: 1rem 0; padding: .6rem .9rem; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; background: var(--panel); }
+  .callout.important, .callout.safety { border-left-color: var(--bad); } .callout.note { border-left-color: var(--muted); }
+  .lede { color: var(--muted); font-size: 1.05rem; margin-top: .2rem; }
+  article { scroll-margin-top: 1rem; } article + article { border-top: 3px solid var(--line); margin-top: 3rem; padding-top: 1.5rem; }
+  .guide h3, .guide h4 { scroll-margin-top: 1rem; }
+</style>
+</head>
+<body>
+<header class="topbar"><img src="/static/brand/icon-96.png" alt=""><b>AT-SUITE</b><span class="muted">Manual</span></header>
+<div class="layout">
+  <nav class="mside" aria-label="Manual contents">
+    <form class="search" role="search" method="post" onsubmit="return false"><label for="q">Search the manual</label><input id="q" type="search" autocomplete="off" placeholder="e.g. add a stage screen"></form>
+    <p class="small muted" id="count" role="status" style="margin:.4rem 0 .8rem"></p>
+    <div id="toc"></div>
+  </nav>
+  <main class="guide" id="main">
+    <h1 style="margin-top:0">AT SUITE manual</h1>
+    <p class="muted" id="ver">Loading…</p>
+    <div id="g"></div>
+  </main>
+</div>
+<script>
+  // A small Markdown renderer for the manual: headings, pictures, tips, tables, nested lists, code.
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const slugify = (s) => s.toLowerCase().replace(/<[^>]+>/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  // Links between articles stay on this page; the website's own pages (account, shop) aren't on this server.
+  const href = (u) => u.startsWith("/docs/") ? "#" + u.slice(6).split("#")[0] : /^(https?:|#|\/guide\/)/.test(u) ? u : null;
+  const picture = (u) => u.startsWith("/static/kb/") ? "/guide/manual/img/" + u.slice(11) : u;
+  const inline = (s) => esc(s).replace(/&lt;(\/?)kbd&gt;/g, "<$1kbd>").replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
+      const h = href(u.replace(/&amp;/g, "&"));
+      return h ? `<a href="${esc(h)}"${/^https?:/.test(h) ? ' target="_blank" rel="noopener"' : ""}>${t}</a>` : t;
+    });
+  const ITEM = /^(\s*)([-*]|\d+\.)\s+/;
+  function md(src, art) {
+    const L = src.replace(/\r/g, "").split("\n"), out = []; let i = 0;
+    const cells = (l) => l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
+    const depth = (l) => l.match(/^ */)[0].length;
+    function list(base) {
+      const ord = /^\s*\d+\./.test(L[i]), items = [];
+      while (i < L.length && ITEM.test(L[i]) && depth(L[i]) === base) {
+        let h = inline(L[i++].replace(ITEM, ""));
+        while (i < L.length && L[i].trim() && !(ITEM.test(L[i]) && depth(L[i]) <= base)) {
+          if (ITEM.test(L[i])) h += list(depth(L[i]));
+          else h += " " + inline(L[i++].trim());
+        }
+        items.push(`<li>${h}</li>`);
+        if (i + 1 < L.length && !L[i].trim() && ITEM.test(L[i + 1]) && depth(L[i + 1]) === base) i++;
+      }
+      return `<${ord ? "ol" : "ul"}>${items.join("")}</${ord ? "ol" : "ul"}>`;
+    }
+    while (i < L.length) {
+      const l = L[i]; let m;
+      if (/^```/.test(l)) { const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]); i++; out.push(`<pre><code>${esc(b.join("\n"))}</code></pre>`); continue; }
+      if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) {
+        // One page, many articles: an article's title is a level 2 heading, its sections level 3.
+        const n = m[1].length + 1, id = n === 2 ? "" : ` id="${esc(art)}--${slugify(m[2])}"`;
+        out.push(`<h${n}${id}>${inline(m[2])}</h${n}>`); i++; continue;
+      }
+      if ((m = /^!\[([^\]]*)\]\((\S+?)(?:\s+"([^"]*)")?\)\s*$/.exec(l))) {
+        const s = esc(picture(m[2]));
+        out.push(`<figure><a href="${s}"><img src="${s}" alt="${esc(m[1])}" loading="lazy"></a>${m[3] ? `<figcaption>${inline(m[3])}</figcaption>` : ""}</figure>`); i++; continue;
+      }
+      if (/^>/.test(l)) {
+        const b = []; while (i < L.length && /^>/.test(L[i])) b.push(L[i++].replace(/^>\s?/, ""));
+        const kind = (/^\*\*(Tip|Note|Important|Safety):\*\*/i.exec(b[0]) || [])[1];
+        out.push(`<div class="callout ${kind ? kind.toLowerCase() : "note"}"><p>${inline(b.join(" "))}</p></div>`); continue;
+      }
+      if (/^\|/.test(l) && /^\|[\s:|-]+\|?\s*$/.test(L[i + 1] || "")) {
+        const head = cells(l); i += 2; const rows = [];
+        while (i < L.length && /^\|/.test(L[i])) rows.push(cells(L[i++]));
+        out.push(`<div class="table-wrap"><table><tr>${head.map((c) => `<th scope="col">${inline(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`).join("")}</table></div>`); continue;
+      }
+      if (ITEM.test(l)) { out.push(list(depth(l))); continue; }
+      if (!l.trim()) { i++; continue; }
+      const p = [l]; i++;
+      while (i < L.length && L[i].trim() && !/^(#{1,4}\s|```|\||>|!\[)/.test(L[i]) && !ITEM.test(L[i])) p.push(L[i++]);
+      out.push(`<p>${inline(p.join(" "))}</p>`);
+    }
+    return out.join("\n");
+  }
+
+  let data = { sections: [] };
+  const words = (s) => s.toLowerCase().match(/[a-z0-9]+/g) || [];
+  function draw() {
+    const q = words(document.getElementById("q").value);
+    const match = (a) => { const t = (a.title + " " + a.summary + " " + a.keywords + " " + a.markdown).toLowerCase(); return q.every((w) => t.includes(w)); };
+    const sections = data.sections.map((s) => ({ ...s, articles: s.articles.filter(match) })).filter((s) => s.articles.length);
+    const n = sections.reduce((a, s) => a + s.articles.length, 0);
+    document.getElementById("count").textContent = q.length ? `${n} article${n === 1 ? "" : "s"} match.` : "";
+    document.getElementById("toc").innerHTML = sections.map((s) => `<details ${q.length ? "open" : ""}><summary>${esc(s.title)}</summary><ul>${s.articles.map((a) => `<li><a href="#${esc(a.slug)}">${esc(a.title)}</a></li>`).join("")}</ul></details>`).join("");
+    document.getElementById("g").innerHTML = n ? sections.map((s) => s.articles.map((a) => `<article id="${esc(a.slug)}" aria-labelledby="${esc(a.slug)}-t">${md(a.markdown, a.slug).replace("<h2>", `<h2 id="${esc(a.slug)}-t">`).replace(/(<\/h2>)/, `$1${a.summary ? `<p class="lede">${inline(a.summary)}</p>` : ""}`)}</article>`).join("")).join("")
+      : `<p class="muted">${data.sections.length ? "Nothing matches that. Try fewer words." : "The manual isn't on this server."}</p>`;
+  }
+  let typing = null;
+  document.getElementById("q").oninput = () => { clearTimeout(typing); typing = setTimeout(draw, 200); };
+  fetch("/api/guide/manual").then((r) => r.ok ? r.json() : Promise.reject(new Error("The manual isn't available on this server.")))
+    .then((d) => {
+      data = d;
+      document.getElementById("ver").textContent = d.version ? `Written for AT SUITE ${d.version}. The same help as on the AT SUITE website, kept on this server so it works without the internet.` : "";
+      draw();
+      if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+    })
+    .catch((e) => { document.getElementById("ver").textContent = e.message; });
+</script>
+</body>
+</html>

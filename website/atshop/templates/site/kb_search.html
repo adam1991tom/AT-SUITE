@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="page kb"><div class="wrap">
+<p class="eyebrow"><a href="/docs">Help centre</a></p>
+<h1>{% if q %}Results for “{{ q }}”{% else %}Search the help centre{% endif %}</h1>
+{% include "site/_kb_search.html" %}
+{% if q %}
+  <p role="status">{% if results %}{{ results|length }} page{{ '' if results|length == 1 else 's' }} found.{% else %}Nothing matches that. Try fewer or other words, or <a href="/contact?kind=support">ask support</a>.{% endif %}</p>
+  {% if results %}
+  <ol class="kb-results">
+  {% for a, snip in results %}
+    <li><a href="/docs/{{ a.slug }}">{{ a.title }}</a>
+      <span class="small muted">{{ kb.section_of(a).title }}</span>
+      <p class="small">{{ snip|safe }}</p></li>
+  {% endfor %}
+  </ol>
+  {% endif %}
+{% endif %}
+</div></div>
+{% endblock %}

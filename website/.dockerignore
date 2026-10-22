@@ -3,3 +3,4 @@ tests/
 .env
 *.pem
 **/__pycache__
+tools/kb_screenshots.py

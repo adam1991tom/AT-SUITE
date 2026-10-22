@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-from . import auth, notify
+from . import auth, kb, notify
 from .app import content
 from .db import audit, now
 from .web import current, form, ip, redirect, render, safe_next, shop
@@ -23,7 +23,6 @@ PAGES = {
 }
 LEGAL = {"terms": "Terms of Service", "privacy": "Privacy Policy", "dpa": "Data Processing Agreement",
          "billing": "Billing, cancellation and refunds", "acceptable-use": "Acceptable use"}
-DOCS = ["getting-started", "self-hosted-install", "managed-hosting", "licence-keys", "laptop-app", "billing"]
 
 
 def _page(path: str, template: str, title: str):
@@ -47,25 +46,38 @@ def legal(request: Request, slug: str):
     return render(request, "site/prose.html", {"title": LEGAL[slug], "html": page[1], "draft": True, "section": "legal"})
 
 
+# ------------------------------------------------------------- help centre --
+# The knowledge base (kb.py): sections and articles from content/kb/, the same pages the AT SUITE
+# server ships for its AI helper and its offline manual.
 @router.get("/docs")
 def docs_index(request: Request):
-    items = [(slug, content("docs", slug)[0]) for slug in DOCS if content("docs", slug)]
-    return render(request, "site/docs.html", {"title": "Documentation", "items": items})
+    k = kb.load()
+    return render(request, "site/kb_index.html", {"title": "Help centre", "kb": k})
+
+
+@router.get("/docs/search")
+def docs_search(request: Request, q: str = ""):
+    k = kb.load()
+    q = " ".join(q.split())[:200]
+    return render(request, "site/kb_search.html", {"title": f"Search: {q}" if q else "Search the help centre", "kb": k,
+                                                  "q": q, "results": kb.search(k, q) if q else []})
 
 
 @router.get("/docs/{slug}")
 def doc(request: Request, slug: str):
-    page = content("docs", slug) if slug in DOCS else None
-    if not page:
+    k = kb.load()
+    a = k.articles.get(slug)
+    if not a:
         raise HTTPException(404)
-    return render(request, "site/prose.html", {"title": page[0], "html": page[1], "section": "docs",
-                                               "docs": [(s, content("docs", s)[0]) for s in DOCS if content("docs", s)]})
+    before, after = k.neighbours(a)
+    return render(request, "site/kb_article.html", {"title": a.title, "kb": k, "a": a, "section": k.section_of(a),
+                                                    "before": before, "after": after})
 
 
 @router.get("/sitemap.xml")
 def sitemap(request: Request):
     base = shop(request).s.site_url
-    urls = list(PAGES) + ["/contact", "/docs"] + [f"/docs/{d}" for d in DOCS] + [f"/legal/{k}" for k in LEGAL]
+    urls = list(PAGES) + ["/contact", "/docs"] + [f"/docs/{d}" for d in kb.load().articles] + [f"/legal/{k}" for k in LEGAL]
     body = "".join(f"<url><loc>{base}{u}</loc></url>" for u in urls)
     return Response(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
                     f"{body}</urlset>", media_type="application/xml")

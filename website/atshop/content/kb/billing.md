@@ -1,3 +1,8 @@
+---
+summary: Update your card, get invoices, change plan, cancel, and sign in to your account on the AT SUITE website.
+audience: account owners
+keywords: billing, invoice, receipt, vat, card, payment, paddle, change plan, upgrade, downgrade, cancel, subscription, account, refund
+---
 # Billing and your account
 
 ## Update your card

@@ -1,0 +1,78 @@
+# The AT SUITE knowledge base: the help centre at /docs on the website, the manual inside the app
+# (/guide/manual) and what the AI helper answers "how do I..." questions from.
+#
+# Sections and their articles, in reading order. Each article is <slug>.md in this folder.
+# Pictures are in website/atshop/static/kb/ (python website/tools/kb_screenshots.py retakes them).
+#
+# version: the AT SUITE release these pages describe. Every release updates the pages for what
+# changed, then sets this to the new VERSION; CI fails while it's behind (see CONTRIBUTING.md).
+version = "1.24.0"
+
+[[section]]
+slug = "start"
+title = "Getting started"
+summary = "What AT SUITE is, who does what, and the words we use."
+articles = ["welcome", "getting-started", "roles-and-permissions", "glossary", "whats-new"]
+
+[[section]]
+slug = "setup"
+title = "Install and set up"
+summary = "Install the server, run the setup wizard, then add rooms, people and settings."
+articles = ["self-hosted-install", "managed-hosting", "setup-wizard", "rooms-and-sites", "people-and-passwords",
+            "links", "settings", "licence-keys", "updates", "backups", "privacy"]
+
+[[section]]
+slug = "laptops"
+title = "Laptops and screens"
+summary = "Tech laptops, stage screens, overlays, and keeping an eye on them all."
+articles = ["laptop-app", "laptops-page", "pair-a-screen", "linux-screens", "test-patterns", "overlays"]
+
+[[section]]
+slug = "workspace"
+title = "The tech workspace"
+summary = "Everything a tech uses on show day: the timer, chat, help, notes and the windows they sit in."
+articles = ["start-the-day", "workspace-tour", "chat", "help-calls", "handover-notes", "notifications", "when-the-network-drops"]
+
+[[section]]
+slug = "timers"
+title = "Timers and stage screens"
+summary = "Run the room timer, build the running order and choose what the stage screens show."
+articles = ["run-the-timer", "cue-list", "stage-messages", "timer-views", "layout-designer", "companion"]
+
+[[section]]
+slug = "captions"
+title = "Live captions"
+summary = "Turn speech into captions on the laptop, show them to the audience and the stream, keep transcripts."
+articles = ["captions-quick-start", "caption-settings", "caption-screens", "transcripts"]
+
+[[section]]
+slug = "presenters"
+title = "Presenters"
+summary = "Events, running orders, presenters' slides and getting them to the room's laptop."
+articles = ["presenters-events", "presenter-links", "room-sync"]
+
+[[section]]
+slug = "venue"
+title = "Running the venue"
+summary = "For managers and admins: the console, the manager view, checks, reports and the audit log."
+articles = ["console-tour", "manager-view", "preshow-check", "show-reports", "audit-log", "bug-reports"]
+
+[[section]]
+slug = "ai"
+title = "AI helper"
+summary = "Ask the AI helper on show day, and set it up with what your venue knows."
+articles = ["ai-helper", "ai-helper-setup"]
+
+[[section]]
+slug = "scenarios"
+title = "Step-by-step scenarios"
+summary = "Real show-day jobs from start to finish."
+articles = ["scenario-new-venue", "scenario-new-tech", "scenario-conference-day", "scenario-caption-keynote",
+            "scenario-blank-screen", "scenario-shift-handover", "scenario-client-view", "scenario-late-slides",
+            "scenario-network-drop", "scenario-end-of-show", "scenario-new-server", "scenario-licence-ending"]
+
+[[section]]
+slug = "help"
+title = "Troubleshooting and your account"
+summary = "When something isn't right, and billing for your subscription."
+articles = ["troubleshooting", "billing"]

@@ -48,8 +48,11 @@ jobs:
       - name: Smoke test
         run: |
           docker run -d --name atsuit -p 8080:8080 -e ATSUIT_ASR=0 atsuit:ci
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/api/health && exit 0; sleep 2; done
-          docker logs atsuit; exit 1
+          ok=; for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/api/health && ok=1 && break; sleep 2; done
+          [ -n "$ok" ] || { docker logs atsuit; exit 1; }
+          # The manual is in the image: the Dockerfile copies the website's help centre into it.
+          curl -fsS http://127.0.0.1:8080/api/guide/manual | python3 -c "import json,sys; assert json.load(sys.stdin)['sections'], 'no manual in the image'"
+          curl -fsS -o /dev/null http://127.0.0.1:8080/guide/manual/img/console-dashboard.jpg
 
   web:
     # The Svelte screens (web/). Their built files are committed under
