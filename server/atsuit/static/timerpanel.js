@@ -57,6 +57,8 @@ var TimerPanel = (() => { // var: cuelist.js looks for window.TimerPanel
           <span><label title="Quick messages flash on the stage screens"><input type="checkbox" data-mblink ${blinkMsg ? "checked" : ""}>Blink</label>
           <button class="small hidden" data-medit title="Change the quick messages for every room">Edit</button></span></div>
         <div class="tp-m" data-msgs><span class="muted small">Loading…</span></div>
+        <div class="tp-row hidden" data-madd style="margin-top:.4rem"><input data-mnew maxlength="120" placeholder="Type a new quick message">
+          <button class="small primary" data-maddb title="Save it as a quick message for every room">Save message</button></div>
         <div class="hidden" data-meditor style="margin-top:.4rem"><textarea data-mtext placeholder="One message per line"></textarea>
           <div class="tp-row" style="justify-content:flex-end;margin-top:.3rem"><button class="small" data-mreset>Back to the defaults</button><button class="small" data-mcancel>Cancel</button><button class="small primary" data-msave>Save</button></div></div></div>
       <div><div class="tp-h"><span>Second line under the timer</span><span class="tp-sec-now small" data-snow style="text-transform:none;letter-spacing:0"></span>
@@ -77,9 +79,9 @@ var TimerPanel = (() => { // var: cuelist.js looks for window.TimerPanel
     el.querySelectorAll("[data-min]").forEach((b) => b.onclick = () => {
       if (b.classList.contains("cur") && s) {
         if (s.playback === "play") return toast(`The ${b.dataset.min} minute timer is already running`);
-        return guard(() => link("start")).then(shown, () => {});
+        return AT.busy(b, guard(() => link("start"))).then(shown, () => {});
       }
-      guard(() => link("preset", { minutes: +b.dataset.min, start: startOnTap })).then(shown, () => {});
+      AT.busy(b, guard(() => link("preset", { minutes: +b.dataset.min, start: startOnTap }))).then(shown, () => {});
     });
 
     // quick messages: tap to show, tap the one on stage to hide it
@@ -89,19 +91,32 @@ var TimerPanel = (() => { // var: cuelist.js looks for window.TimerPanel
       $("[data-msgs]").innerHTML = msgs.map((m, i) => `<button data-mi="${i}" class="${onStage(m) ? "on live" : ""}" title="${onStage(m) ? "On stage: tap to clear it" : "Tap to show on stage"}">${esc(m)}</button>`).join("") || '<span class="muted small">No quick messages.</span>';
       $("[data-msgs]").querySelectorAll("[data-mi]").forEach((b) => b.onclick = () => {
         const t = msgs[+b.dataset.mi];
-        guard(() => onStage(t) ? link("message/hide") : link("message/show", { text: t, blink: blinkMsg || undefined }) /* unticked leaves the Blink switch as it is */).then(shown, () => {});
+        AT.busy(b, guard(() => onStage(t) ? link("message/hide") : link("message/show", { text: t, blink: blinkMsg || undefined }) /* unticked leaves the Blink switch as it is */)).then(shown, () => {});
       });
       $("[data-medit]").classList.toggle("hidden", !canEdit || editing);
+      $("[data-madd]").classList.toggle("hidden", !canEdit || editing);
     }
     const loadMsgs = () => api("/api/timers-quick-messages").then((r) => { msgs = r.messages; canEdit = r.can_edit; renderMsgs(); }).catch(() => { $("[data-msgs]").innerHTML = ""; });
     loadMsgs();
     const editor = (on) => { editing = on; $("[data-meditor]").classList.toggle("hidden", !on); $("[data-msgs]").classList.toggle("hidden", on); renderMsgs(); };
     $("[data-medit]").onclick = () => { $("[data-mtext]").value = msgs.join("\n"); editor(true); };
     $("[data-mcancel]").onclick = () => editor(false);
+    // Admins and managers add a message of their own: saved on the server, for every room, until they change it.
+    const addMsg = () => {
+      const t = $("[data-mnew]").value.trim();
+      if (!t) { toast("Type the message first", "bad"); $("[data-mnew]").focus(); return; }
+      if (msgs.includes(t)) return toast("That one is already a quick message");
+      AT.busy($("[data-maddb]"), guard(() => put("/api/timers-quick-messages", { messages: [...msgs, t] })))
+        .then((r) => { if (r) { msgs = r.messages; $("[data-mnew]").value = ""; renderMsgs(); toast("Quick message saved", "good"); } }, () => {});
+    };
+    $("[data-maddb]").onclick = addMsg;
+    $("[data-mnew]").onkeydown = (e) => { if (e.key === "Enter") addMsg(); };
     $("[data-msave]").onclick = () => guard(() => put("/api/timers-quick-messages", { messages: $("[data-mtext]").value.split("\n") }))
       .then((r) => { if (r) { msgs = r.messages; editor(false); toast("Quick messages saved", "good"); } });
-    $("[data-mreset]").onclick = () => confirm("Put the quick messages back to the defaults?") &&
-      guard(() => del("/api/timers-quick-messages")).then((r) => { if (r) { msgs = r.messages; editor(false); } });
+    $("[data-mreset]").onclick = async () => {
+      if (!(await AT.ask("Put the quick messages back to the defaults? The ones saved for every room are replaced.", { yes: "Back to the defaults" }))) return;
+      guard(() => del("/api/timers-quick-messages")).then((r) => { if (r) { msgs = r.messages; editor(false); toast("Quick messages are back to the defaults", "good"); } }, () => {});
+    };
 
     // the second line
     const sec = (action, body) => guard(() => link(`secondary/${action}`, body || {})).then(shown, () => {});
@@ -128,7 +143,7 @@ var TimerPanel = (() => { // var: cuelist.js looks for window.TimerPanel
       let now = "";
       if (x.mode === "timer" && x.duration_ms) {
         const left = x.running ? x.remaining_ms - (Date.now() - (s._rx || Date.now())) : x.remaining_ms;
-        now = fmtTime(left).replace(/^\+/, "-") + (x.running ? "" : " (paused)");
+        now = fmtTime(left) + (x.running ? "" : " (paused)");
       } else if (x.text) now = `“${x.text}”`;
       const txt = now ? (x.visible ? "On stage: " : "Hidden: ") + now : "Off";
       if ($("[data-snow]").textContent !== txt) $("[data-snow]").textContent = txt;

@@ -215,7 +215,7 @@
     const a = Math.abs(ms), h = Math.floor(a / 3600000), m = Math.floor(a % 3600000 / 60000), sec = Math.floor(a % 60000 / 1000);
     return (ms < 0 ? "-" : "") + (h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`);
   };
-  const dur = (ms) => AT.fmtTime(ms).replace(/^\+/, "");
+  const dur = (ms) => AT.fmtTime(ms).replace(/^-/, "");
   // The venue's date (from the server), not the screen's own: a screen set to another time zone still shows the right day.
   const date = () => (s.venue_date ? new Date(s.venue_date + "T12:00:00") : new Date()).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
   const ago = (iso) => { const m = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.floor(m / 60)} h ${m % 60} min ago`; };
@@ -245,7 +245,7 @@
     }
     const tm = $("timer");
     if (tm.textContent !== text) tm.textContent = text;
-    tm.className = (phase || (!loaded && !clock ? "idle" : "")) + (s.message_blink ? " blink" : "");
+    tm.className = (phase || (!loaded && !clock ? "idle" : "")) + (!clock && loaded && AT.timerBlinks(s, left) ? " blink" : "");
     const pb = phase === "over" && s.playback === "play" ? "over" : s.playback;
     const label = { play: "RUNNING", pause: "PAUSED", armed: "READY", stop: "STOPPED", over: "OVERTIME" }[pb] || pb.toUpperCase();
     $("state").textContent = clock ? "CLOCK" : label; $("state").className = "pill " + (clock ? "" : pb);
