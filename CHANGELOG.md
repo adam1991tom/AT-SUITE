@@ -5,6 +5,17 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.5
+
+Admins and managers get their own screen in the Windows app: the manager view.
+
+- On a tech laptop, an admin or manager signs in on the start screen with their account and gets the manager view instead of a room's workspace. They don't pick a room or Main/Backup PC. Techs see no change.
+- The manager view is a desk of windows like the tech workspace: every room's timer, help requests (with On my way and Resolved), the pre-show check, laptops, chat, password resets, recent activity and the console's pages. Choose what to show ticks each window on or off, windows move, dock and tab, and the Layout menu saves layouts. Each person's layout is kept on that laptop.
+- Full console opens the admin portal in the same window. Work a room signs out of the manager view so an admin or manager can start the day in a room like a tech.
+- With tech passwords off, techs still type their name, and the start screen has a link for admins and managers to sign in with their account.
+- The laptop keeps reporting in while it shows the manager view, so it doesn't look offline in Laptops, and it still answers Identify, Reload and the overlay.
+- The manager view also opens at /manage in any browser or on a phone, and the console's side bar links to it.
+
 ## 1.20.3
 
 **UI improvements and visual enhancements**

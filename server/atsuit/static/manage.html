@@ -54,10 +54,11 @@
     <span class="muted" id="who"></span>
     <span class="grow"></span>
     <span class="pill" id="conn">connecting</span>
+    <div id="layoutMenu"></div>
     <div class="drop"><button id="pickBtn" aria-expanded="false" aria-controls="pickBox">Choose what to show</button>
       <div class="dropdown hidden" id="pickBox">
         <b>Windows</b>
-        <p class="muted small" style="margin:.2rem 0 .4rem">Tick what you want on screen. Drag a window by its title to move or dock it, and save layouts from Layouts at the bottom. Kept for you on this device.</p>
+        <p class="muted small" style="margin:.2rem 0 .4rem">Tick what you want on screen. Drag a window by its title to move or dock it, and save layouts from the Layout menu. Kept for you on this device.</p>
         <div id="pickList"></div>
         <div class="row" style="margin-top:.6rem"><button class="small" id="pickReset">Back to the starting layout</button></div>
       </div></div>
@@ -258,7 +259,7 @@
   F = T.resize(F, [], [0.64, 0.36]); F = T.resize(F, [0], [0.5, 0.5]); F = T.resize(F, [1], [0.45, 0.55]);
   F.closed.push("people", "activity", "console");
   // Each person's own layout, so two managers sharing a laptop don't move each other's windows.
-  ATDesk.start($("desk"), { key: `atsuit_manage1:${boot.me.id}`, fallback: F });
+  ATDesk.start($("desk"), { key: `atsuit_manage1:${boot.me.id}`, fallback: F, menu: $("layoutMenu") });
 
   // Choose what to show: a tick per window. Ticked is on screen (or a tab, or minimised); unticked waits in the taskbar.
   const shownNow = (id) => !!T.groupOf(ATDesk.layout(), id);
