@@ -1,6 +1,6 @@
 # Licence keys
 
-AT SUITE needs a licence key to run. The key holds who it's licensed to, the plan, how many laptops can connect, and the date it ends. Your server checks it offline, so no internet is needed.
+AT SUITE needs a licence key to run. The key holds who it's licensed to, the plan, how many laptops can connect, and the date it ends. Once a day your server checks in with this website: that's how renewals arrive by themselves. Venues whose server has no internet can ask us for an offline key.
 
 ## Where to find your key
 
@@ -16,13 +16,19 @@ Nothing else changes: settings, rooms and data are kept. On a new install, paste
 
 ## Renewals
 
-When your subscription renews, a new key for the next period appears in your account and arrives by email. Paste it into **Licence** before the old one ends. Each key runs 7 days past the paid period, so a renewal that's a little late never causes a problem.
+When your subscription renews, your server fetches the new key by itself at its next daily check-in. It also appears in your account and arrives by email, in case you want to paste it in yourself. Each key runs 7 days past the paid period, so a renewal that's a little late never causes a problem.
+
+## The daily check-in
+
+Your server sends its key to this website once a day. Nothing else is sent: no names, chat, captions or audio. If it can't get through, everything keeps working; admins see a note after 2 days, and everyone in the last week. After 14 days without a check-in AT SUITE locks (never during a show) until it gets through again. **Licence → Check now** tries straight away.
+
+If your venue's server can never reach the internet (strict NDA), [contact us](/contact) for an offline key. Offline keys don't check in, so they don't renew themselves: they run to a fixed date, usually a year.
 
 ## When a key ends
 
 | When | What happens |
 |---|---|
-| 30 days before | Admins see a reminder |
+| 30 days before | Admins see a reminder (7 days before for keys that renew themselves) |
 | 7 days before | Everyone sees a small reminder line |
 | After it ends | 14 days of grace, with everything still working |
 | After the grace | AT SUITE locks until a new key is pasted in. Only **Licence** works. Nothing is deleted |

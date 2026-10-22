@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from atshop import auth, hosting
 
 from conftest import ADMIN, Harness, sub_data, txn_data
+from test_journey import server_licence  # noqa: F401 (a fixture)
 
 
 def admin_client(h):
@@ -69,10 +70,26 @@ def test_manual_key_is_audited_and_needs_a_reason(h):
     rows = h.shop.db.all("SELECT * FROM audit WHERE target=?", lic["serial"])
     assert {r["action"] for r in rows} >= {"licence.issue", "admin.licence_issue"}
     assert all(r["actor"] == ADMIN for r in rows)
-    # Revoking stops refreshes and is logged too.
+    # It checks in with this website every day, like every key made here...
+    assert h.shop.signer.verify(lic["key"])["checkin"] == h.shop.s.site_url
+    # ...and revoking it tells the server at its next check-in, and is logged too.
     c.post(f"/admin/licences/{lic['serial']}/revoke", data={"csrf": csrf, "reason": "test"})
     assert h.shop.db.one("SELECT revoked_at FROM licences WHERE id=?", lic["id"])["revoked_at"]
-    assert h.client().post("/api/v1/licence/refresh", json={"key": lic["key"]}).json()["status"] == "unknown"
+    assert h.client().post("/api/v1/licence/refresh", json={"key": lic["key"]}).json()["status"] == "revoked"
+
+
+def test_offline_key_never_checks_in(h, server_licence):
+    c, _ = admin_client(h)
+    csrf = h.csrf(c, "/admin/licences")
+    until = (date.today() + timedelta(days=365)).isoformat()
+    r = c.post("/admin/licences/issue", data={"csrf": csrf, "email": "nda@example.com", "licensee": "NDA Venue",
+                                              "edition": "venue", "nodes": "30", "sites": "1", "until": until,
+                                              "note": "No internet at this venue", "offline": "1"})
+    assert r.status_code == 303
+    lic = h.shop.db.one("SELECT * FROM licences WHERE source='manual'")
+    assert "checkin" not in h.shop.signer.verify(lic["key"]) and "offline" in lic["note"]
+    parsed = server_licence.parse(lic["key"])
+    assert parsed.valid and parsed.checkin == ""
 
 
 def test_forms_without_the_right_csrf_token_are_refused(h):

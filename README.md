@@ -93,9 +93,11 @@ is where servers and laptops update from. See
 ## Licence
 
 AT-SUITE is proprietary (see [LICENSE](LICENSE)): using it needs a licence key
-from AT NET, and nothing works until one is installed. Keys are checked offline
-and carry the subscription's end date; there are warnings before it ends and 14
-days of grace after, and it never locks during a show. Issuing keys and the
+from AT NET, and nothing works until one is installed. Keys carry the
+subscription's end date; there are warnings before it ends and 14 days of grace
+after, and it never locks during a show. Keys from the website check in with it
+once a day to renew themselves (offline keys are available for venues with no
+internet). Issuing keys and the
 plans are in [docs/ADMIN.md](docs/ADMIN.md#licences-for-resellers).
 Versions before 1.0.4 were published under the MIT licence.
 
