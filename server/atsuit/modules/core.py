@@ -40,6 +40,8 @@ from ..security import (
     require_admin,
     require_user,
     token_hash,
+    ROUNDS,
+    password_rounds,
     verify_password,
 )
 
@@ -260,12 +262,15 @@ def check_login(c, username: str, password: str, request: Request, new_password:
         wait = int(LOGIN_WINDOW - (now - fails[0])) + 1
         raise HTTPException(429, f"Too many wrong passwords. Try again in {max(1, wait // 60)} min.")
     a = c.execute("SELECT * FROM accounts WHERE username=? AND active=1", (user,)).fetchone()
-    if not (a and verify_password(password, a["password_hash"])):  # the caller audits it: this transaction rolls back
+    rounds = password_rounds(password, a["password_hash"]) if a else None
+    if rounds is None:  # the caller audits it: this transaction rolls back
         _login_fails[key] = fails + [now]
         if len(_login_fails) > 10000:  # don't let made-up usernames grow this forever
             _login_fails.clear()
         raise HTTPException(401, "Wrong username or password")
     _login_fails.pop(key, None)
+    if rounds != ROUNDS:  # saved before 1.20.0: keep it, with today's rounds
+        c.execute("UPDATE accounts SET password_hash=? WHERE id=?", (hash_password(password), a["id"]))
     if a["must_change"]:
         if not new_password:
             raise HTTPException(428, "Choose a new password")
@@ -306,7 +311,7 @@ def logout(request: Request, response: Response):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
         with db.tx() as c:
-            c.execute("DELETE FROM sessions WHERE token_hash=?", (token_hash(token),))
+            c.execute("DELETE FROM sessions WHERE token_hash IN (?,?)", (token_hash(token, "sha512"), token_hash(token, "sha256")))
     response.delete_cookie(SESSION_COOKIE)
     return {"ok": True}
 
@@ -342,7 +347,9 @@ def change_password(body: PasswordIn, request: Request, p: Principal = Depends(r
         check_new_password(body.new, a["username"], a["password_hash"])
         c.execute("UPDATE accounts SET password_hash=?, must_change=0, reset_asked_at=NULL WHERE id=?", (hash_password(body.new), p.id))
         # A new password signs this account out everywhere else.
-        c.execute("DELETE FROM sessions WHERE account_id=? AND token_hash!=?", (p.id, token_hash(request.cookies.get(SESSION_COOKIE, ""))))
+        mine = request.cookies.get(SESSION_COOKIE, "")
+        c.execute("DELETE FROM sessions WHERE account_id=? AND token_hash NOT IN (?,?)",
+                  (p.id, token_hash(mine, "sha512"), token_hash(mine, "sha256")))
         db.audit(c, a["username"], "auth.password_changed", "")
     return {"ok": True}
 

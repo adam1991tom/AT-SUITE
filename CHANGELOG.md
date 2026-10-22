@@ -5,7 +5,7 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
-## 1.21.0
+## 1.22.0
 
 **The licence checks in with the website every day**
 
@@ -15,6 +15,99 @@ the GitHub release).
 - Licence shows the daily check, when it last got through and the deadline, with a **Check now** button.
 - Offline keys (Admin → Licences → "Offline key" on the website, or `tools/licence.py` without `--checkin`) never check in, for venues whose server has no internet. Keys made before this version are offline keys too, so nothing changes for servers already running.
 - Website: the check-in answers `"status": "revoked"` for a revoked key (or one whose renewal was revoked), with rate limits per key and a higher one per address for hosting servers.
+
+## 1.21.0
+
+A layout designer for timer views, and BDNG is built in.
+
+**Layout designer** (Timers → Layout designer)
+- Make your own timer views by placing their parts on a 16:9 screen, like stagetimer.io: the timer, cue title, next cue, time of day, stage message, second line, progress bar, status bar, logo, room name, your own text and plain shapes.
+- Drag a part to move it and its corners to resize it. Parts snap to the middle of the screen and to each other. With the keyboard: arrow keys move the picked part (Shift for bigger steps), Alt and the arrows resize it, Delete removes it, Ctrl+D copies it, Ctrl+Z undoes.
+- Each part has its own colour, background, round corners, text size, line up, bold and capitals. The view has its background, text colour, font, warning, danger and overtime colours, a see-through background for overlay windows, a background picture and a logo.
+- See it as the screens will in each state: running, warning, danger, overtime, with a stage message, or showing the clock.
+- Start from a ready-made layout: Standard, BDNG style, Speaker, Timer and clock, Lower third, or Blank.
+- Saving updates every screen, workspace preview and laptop app showing the view straight away. Views built with the older form open in the designer laid out the way they looked.
+
+**Timers page**
+- It has five tabs: Live, Screens, Quick messages (from 1.20.7), Views and Layout designer.
+- Views lists every view with a Preview button that shows it on the room you pick, and Open full screen.
+- Standard shows the site's logo, or nothing when there isn't one.
+
+**BDNG**
+- BDNG sponsor clock is a built-in view: no import needed. Screens set to BDNG, or to an imported copy of it, show the shipped view. Its logos, bottom text and status bar are set under Views, and screens show changes straight away.
+- The status bar for uploaded views draws again.
+
+## 1.20.9
+
+**Chat, notes, links, help calls and notifications feel like Messenger and Facebook**
+
+- Chat uses message bubbles: yours on the right in the brand colour, everyone else's on the left with their initials, grouped when they send several in a row
+- Each message shows its time, and your latest one says "Sent" or "Seen by ..." so you know who has read it
+- Urgent and important messages stand out with a red or amber border and a flag
+- Enter sends, Shift+Enter starts a new line; emoji and file buttons sit in the message box
+- The chat list shows each room's latest message and how long ago it was sent
+- Handover notes are posts with the author's face, "5 minutes ago" times, and Pin, Edit and Done buttons
+- Links are cards with a search box
+- Help calls are cards with On my way, Reply and Resolved; resolving asks for the fix inside the card (the app used to fail silently here)
+- In the server console, Help requests is now a help desk: the calls on the left, the room's chat on the right, so admins can answer straight away
+- The bell shows a red count of new chat, help calls, handover notes and problems, with All/Unread tabs and New/Earlier sections; timer warnings still pop up but never go in the count
+- The top bar shows only this laptop's room name; techs can no longer pick another room there
+- The manager view (1.20.8) gets the same look: Messenger-style chat, and help requests as cards with On my way, Reply and Resolved
+
+## 1.20.8
+
+Admins and managers get their own screen in the Windows app: the manager view.
+
+- On a tech laptop, an admin or manager signs in on the start screen with their account and gets the manager view instead of a room's workspace. They don't pick a room or Main/Backup PC. Techs see no change.
+- The manager view is a desk of windows like the tech workspace: every room's timer, help requests (with On my way and Resolved), the pre-show check, laptops, chat, password resets, recent activity and the console's pages. Choose what to show ticks each window on or off, windows move, dock and tab, and the Layout menu saves layouts. Each person's layout is kept on that laptop.
+- Full console opens the admin portal in the same window. Work a room signs out of the manager view so an admin or manager can start the day in a room like a tech.
+- With tech passwords off, techs still type their name, and the start screen has a link for admins and managers to sign in with their account.
+- The laptop keeps reporting in while it shows the manager view, so it doesn't look offline in Laptops, and it still answers Identify, Reload and the overlay.
+- The manager view also opens at /manage in any browser or on a phone, and the console's side bar links to it.
+
+## 1.20.7
+
+The room timer flashes only when it needs to, and the timer buttons say what they do.
+
+**Blink**
+- The timer's numbers flash only once the time is up (at 0:00 and on into overtime), or in the danger time when Blink or "Flash the timer at danger" is on. Before, Blink made them flash at any time, even with minutes left.
+- Stop clears the blink as well as the timer, so nothing is left flashing on stage. Before, a blink switched on by "Flash the timer at danger" stayed on after Stop.
+- Blink on its own still flashes a stage message that is showing.
+- The same rule on every screen: the stage views, backstage, the tech workspace, the console and the top bar.
+
+**Timer buttons**
+- GO and Start are green, Pause is amber and Stop is red. Start / pause now reads Start or Pause, whichever a press will do.
+- A button lights up the moment it's pressed and stays pressed until the server has it, so a press is never lost or pressed twice by mistake.
+
+**Quick messages**
+- Admins and managers can type a new quick message under the list in the workspace and save it for every room.
+- The console's Timers page has a Quick messages box to change the whole list, or put back the defaults.
+
+**Fixed**
+- "Back to the defaults" for quick messages, deleting a cue, sending the day's sessions to the timer, and the captions' "back to default look" and delete transcript did nothing in the laptop app. They ask in the page now.
+- Times shown without a sign (cue lengths, elapsed time) no longer pick up a minus.
+- Passwords saved before 1.20.0 sign in again (and are saved the new way at that sign-in), old Companion API keys work again, and signing out finds sessions of either kind. Ported from 1.20.5.
+- Captions from the microphone start again in the browser and the laptop app: the page's security policy allows the audio worklet. Ported from 1.20.5.
+
+## 1.20.4
+
+The AI helper is a chat now, and it knows a lot more about fixing shows.
+
+**Talk to it**
+- Asking the AI helper opens its own workspace window. Say what's wrong, then keep going: answer its questions, say "still not working" or "what if the cable's fine?", and it carries on from what you've already said.
+- Without an AI model it still talks. It offers the best entry from the tech guide and walks you through it with questions ("Does the channel's meter move? Yes / No"), shown as buttons. If that doesn't fix it, it tries something else on the same subject, then tells you to call for help.
+- With a model (Ollama) the whole conversation, the matching venue notes and the matching guide entries go to it, so it answers in context.
+- "This fixed it" saves the fix for next time; "Call for help" sends a help call with the first thing you asked. A help call sent from the Help menu starts a chat while the crew is on the way.
+- The conversation stays in that window only. The server keeps nothing of it.
+
+**A bigger tech guide**
+- New entries: no sound from the whole PA, one speaker down, gain structure, a frozen desk, in-ear monitor dropouts, projector lamp and filter warnings, a blank confidence monitor, fixtures not patching, DMX dropouts, haze machines, a network switch down, a device not on the network, wired or Wi-Fi, slides that won't advance, intercom down and run of show basics.
+- A new topic, Staging and rigging: anything overhead ("check with your rigger"), truss basics, stage decks and steps, drapes and screens.
+- 24 entries now have questions that narrow the fault down, step by step.
+
+**Admins can read and change it**
+- Settings → AI helper → Tech guide lists every topic. Change one and your copy is used instead of the built-in one (Reset brings it back), or add your own topic. It points out questions that are written wrong.
+- Venue notes still come first, ahead of the guide.
 
 ## 1.20.3
 
@@ -48,6 +141,14 @@ the GitHub release).
 - ASGI headers are a list of tuples, not a dict (fixed iteration logic)
 - This was causing 500 errors on health endpoint during updates
 - No other changes from 1.20.0
+
+## 1.20.1
+
+The tech workspace gets its bottom strip back, and the laptop app opens full size.
+
+- The taskbar along the bottom of the workspace is gone. Its buttons are now the **Layout** menu in the top bar: every window is listed there (click one to open it, bring it forward or minimise it), with the saved layouts underneath. A window with something unread still shows its count, on the menu button too.
+- Saving, deleting, resetting and sharing a layout ask in the menu itself. In the Windows app those buttons used to do nothing, because the app turns off the browser's question boxes.
+- The Windows app opens maximised (like pressing the maximise button, not full screen), and maximises again when a tech signs in or starts the day.
 
 ## 1.20.0
 
@@ -97,7 +198,6 @@ Report a bug goes to the console instead of an email app. Security hardening.
 - Implemented API rate limiting: 20 login attempts per minute per IP, 200 requests per minute per authenticated account to prevent brute force attacks.
 - Enhanced SSH fleet management with known_hosts support: upload verified host fingerprints for higher security in production environments.
 - Created comprehensive SECURITY.md documentation covering authentication, encryption, network security, and operational practices.
->>>>>>> ATSUITE
 
 ## 1.10.3
 

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Manager view</title>
+<link rel="icon" href="/static/brand/favicon.ico" sizes="any"><link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png"><meta name="theme-color" content="#0B1020">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/ui/desk.css">
+<link rel="stylesheet" href="/static/social.css">
+<script src="/static/theme.js"></script>
+<style>
+  /* The manager view: what admins and managers get when they sign in on a laptop (or open /manage on a
+     phone). The same windows as the tech workspace, so each manager picks what shows and where. */
+  :root { --ctl-h: 2.25rem; }
+  .top { display: flex; gap: .7rem; align-items: center; padding: .7rem 1rem; flex-wrap: wrap; position: sticky; top: 0; z-index: 900;
+    background: var(--side); border-bottom: 1px solid var(--line); box-shadow: inset 0 2px 0 var(--accent); }
+  .top b[data-product] { font-family: var(--brand-font); font-weight: 800; letter-spacing: .02em; }
+  .top .grow { flex: 1; }
+  #ws:not(.hidden) { display: flex; flex-direction: column; height: 100vh; }
+  #desk { flex: 1; min-height: 0; display: flex; }
+  @media (max-width: 900px) { #ws:not(.hidden) { height: auto; min-height: 100vh; } }
+  @media (max-width: 700px) { .top { position: static; } }
+  .drop { position: relative; }
+  .dropdown { position: absolute; right: 0; top: calc(100% + .4rem); width: min(340px, 92vw); max-height: 70vh; overflow: auto; z-index: 1000;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: .8rem; box-shadow: var(--shadow); }
+  @media (max-width: 600px) { .dropdown { position: fixed; left: .5rem; right: .5rem; top: 4rem; width: auto; } }
+  .pick { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; } .pick input { width: auto; margin: 0; }
+  .lic-bar { background: var(--banner); border-bottom: 1px solid var(--warn); color: var(--warn-ink); padding: .3rem 1rem; font-size: .85rem; }
+  .lic-bar.bad { border-color: var(--bad); color: var(--bad-ink); }
+  .lic-bar a { color: inherit; text-decoration: underline; }
+  .rooms { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+  .room { padding: .6rem .7rem; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }
+  .room h3 { margin: 0; font-size: 1rem; }
+  .room .clock { font-size: 2.2rem; line-height: 1.1; margin: .2rem 0; }
+  .item { padding: .45rem .55rem; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; margin-top: .4rem; }
+  .item.bad { border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }
+  .item .row { gap: .35rem; }
+  .lap { display: grid; grid-template-columns: auto 1fr auto; gap: .2rem .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--line); }
+  .lap:last-child { border-bottom: 0; }
+  .chat-pane { display: flex; flex-direction: column; height: 100%; min-height: 320px; }
+  .chat-pane .chat-mount { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .chat-pane .msgs { min-height: 0 !important; display: flex; flex-direction: column; }
+  .chat-pane .msgs .list { flex: 1; max-height: none; min-height: 0; }
+  .act { font-size: .85rem; padding: .3rem 0; border-bottom: 1px solid var(--line); } .act:last-child { border-bottom: 0; }
+  #ident { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12vw; font-weight: 800; background: var(--accent); color: #fff; z-index: 50; }
+</style>
+</head>
+<body>
+<div id="boot" class="gear-load"><img src="/static/brand/gear-64.png" alt=""><span>Starting AT-SUITE…</span></div>
+
+<div id="ws" class="hidden">
+  <div class="top">
+    <img class="brand-mark" src="/static/brand/icon-96.png" alt=""><b data-product>AT-SUITE</b>
+    <span class="pill">Manager view</span>
+    <span class="muted" id="who"></span>
+    <span class="grow"></span>
+    <span class="pill" id="conn">connecting</span>
+    <div id="layoutMenu"></div>
+    <div class="drop"><button id="pickBtn" aria-expanded="false" aria-controls="pickBox">Choose what to show</button>
+      <div class="dropdown hidden" id="pickBox">
+        <b>Windows</b>
+        <p class="muted small" style="margin:.2rem 0 .4rem">Tick what you want on screen. Drag a window by its title to move or dock it, and save layouts from the Layout menu. Kept for you on this device.</p>
+        <div id="pickList"></div>
+        <div class="row" style="margin-top:.6rem"><button class="small" id="pickReset">Back to the starting layout</button></div>
+      </div></div>
+    <a class="btn" id="consoleBtn" href="/#/dashboard">Full console</a>
+    <button id="techBtn" class="hidden" title="Sign out of the manager view and start this laptop's day in a room">Work a room</button>
+    <button id="out">Sign out</button>
+  </div>
+  <div id="licBar" class="lic-bar hidden"></div>
+  <div id="desk"></div>
+
+  <section data-win="rooms" data-title="Rooms" hidden><div class="rooms" id="roomList"></div></section>
+  <section data-win="help" data-title="Help requests" hidden><div id="helpList" class="hc-list"></div></section>
+  <section data-win="preshow" data-title="Pre-show check" hidden><div id="preBox"><p class="muted small">Checking every laptop, screen and caption mic…</p></div></section>
+  <section data-win="laptops" data-title="Laptops" hidden><div id="lapList"></div></section>
+  <section class="chat-pane" data-win="chat" data-title="Chat" hidden><div class="chat-mount" id="chat"></div></section>
+  <section data-win="people" data-title="Password resets" hidden><div id="resetList"></div></section>
+  <section data-win="activity" data-title="Recent activity" hidden><div id="actList"></div></section>
+  <section data-win="console" data-title="Console pages" hidden>
+    <p class="muted small" style="margin-top:0">The rest of the admin portal opens in this window. Its Tech workspace link brings you back here.</p>
+    <div class="tiles" id="pages"></div>
+  </section>
+</div>
+<div id="ident" class="hidden"></div>
+
+<script src="/static/common.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/ui/desk.js"></script>
+<script>
+(async () => {
+  const { esc, api, post, put, guard, toast, when } = AT;
+  const $ = (id) => ATDesk.find(id); // here, or in a window popped out of the desk
+  const APP = window.atsuitApp || null;
+  await AT.branding();
+
+  let boot;
+  try { boot = await api("/api/bootstrap"); } catch (_) { boot = null; }
+  // Only admins and managers: everyone else goes back to the workspace (which signs them in).
+  if (!boot || boot.me.kind !== "account" || !["admin", "manager"].includes(boot.me.role)) { location.replace("/node"); return; }
+  const isAdmin = boot.me.role === "admin";
+  document.getElementById("boot").remove();
+  $("ws").classList.remove("hidden");
+  $("who").textContent = `${boot.me.name} · ${isAdmin ? "Admin" : "Manager"}`;
+  if (boot.licence_notice) {
+    const n = boot.licence_notice, bar = $("licBar");
+    bar.textContent = n.text;
+    if (n.admin) bar.insertAdjacentHTML("beforeend", ' <a href="/#/licence">Open Licence</a>');
+    bar.classList.toggle("bad", n.level === "bad");
+    bar.classList.remove("hidden");
+  }
+  const mods = boot.modules, on = (m) => mods[m] !== false;
+
+  // ------------------------------------------------- this laptop, if it is one --
+  // In the AT-SUITE app (or a browser set up as a laptop) the laptop keeps reporting in, so the
+  // console doesn't show it as offline while a manager uses it, and still answers Identify and Reload.
+  let nodeToken = null;
+  if (APP) nodeToken = await APP.nodeToken().catch(() => null);
+  else try { nodeToken = localStorage.getItem("atsuit_node_token"); } catch (_) {}
+  const nodeHdr = () => ({ Authorization: `Node ${nodeToken}` });
+  let node = null;
+  if (nodeToken) { try { node = await api("/api/nodes/me", { headers: nodeHdr() }); } catch (_) { node = null; } }
+  if (node) {
+    const VERSION = APP ? `app-${await APP.version()}` : "web-0.1.0";
+    const beat = async () => {
+      const system = APP?.system ? await APP.system().catch(() => null) : null;
+      api("/api/nodes/heartbeat", { method: "POST", headers: nodeHdr(), body: { version: VERSION, current_url: location.href,
+        info: { user_agent: navigator.userAgent, screen: `${screen.width}x${screen.height}`, signed_in: `${boot.me.name} (manager view)`, room_id: null, ...(system ? { system } : {}) } } }).catch(() => {});
+    };
+    const commands = async () => {
+      let cmds = [];
+      try { cmds = await api("/api/nodes/commands", { headers: nodeHdr() }); } catch (_) { return; }
+      for (const c of cmds) {
+        let ok = true, detail = "";
+        if (c.kind === "reload") setTimeout(() => location.reload(), 500);
+        else if (c.kind === "message") toast(c.payload.text || "Message from the server");
+        else if (c.kind === "identify") { const el = $("ident"); el.textContent = node.node.name; el.classList.remove("hidden"); setTimeout(() => el.classList.add("hidden"), 6000); }
+        else if (c.kind === "overlay" && APP?.overlay) { const r = await APP.overlay(c.payload).catch((e) => ({ ok: false, error: String(e) })); ok = !!r.ok; detail = r.error || ""; }
+        else { ok = false; detail = "This laptop is in the manager view"; }
+        await api(`/api/nodes/commands/${c.id}/ack`, { method: "POST", headers: nodeHdr(), body: { ok, detail } }).catch(() => {});
+      }
+    };
+    beat(); setInterval(beat, 10000); setInterval(commands, 3000); commands();
+    if (node.node.kind === "tech") $("techBtn").classList.remove("hidden");
+  }
+  // Work a room: sign out of the manager view and start the day like a tech (the start screen knows why).
+  $("techBtn").onclick = async () => {
+    try { sessionStorage.setItem("atsuit_as_tech", boot.me.name); } catch (_) {}
+    await post("/api/auth/logout").catch(() => {});
+    location.href = "/node";
+  };
+  $("out").onclick = async () => { await post("/api/auth/logout").catch(() => {}); location.href = node ? "/node" : "/"; };
+
+  // ------------------------------------------------------------------ rooms --
+  // Every room's timer, live. Techs run them from their workspace; the views open in a new window.
+  const live = {};
+  function drawRooms() {
+    $("roomList").innerHTML = boot.rooms.map((r) => `<div class="room" data-room="${r.id}"><div class="row" style="justify-content:space-between"><h3>${esc(r.name)}</h3>
+      <a class="small" href="/timer/${r.id}" target="_blank" rel="noopener">Timer ↗</a></div>
+      <div class="clock">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div><div class="small who"></div></div>`).join("")
+      || '<p class="muted">No rooms yet. Add them in the console under Rooms.</p>';
+  }
+  drawRooms();
+  if (on("timers")) for (const r of boot.rooms) api(`/api/timers/${r.id}`).then((s) => { live[r.id] = s; }).catch(() => {});
+  setInterval(() => {
+    for (const [id, st] of Object.entries(live)) {
+      const card = $("roomList").querySelector(`[data-room="${id}"]`); if (!card || !st) continue;
+      const d = AT.timerDisplay(st), c = card.querySelector(".clock");
+      c.textContent = d.text; c.className = "clock " + d.cls;
+      card.querySelector(".now").textContent = (st.cue?.cue ? st.cue.cue + " · " : "") + (st.title || "") + (st.playback === "pause" ? " (paused)" : "");
+      card.querySelector(".next").textContent = (st.next ? `Next: ${st.next.title}` : "") + (st.message_visible ? `  ·  On stage: ${st.message}` : "");
+    }
+  }, 250);
+
+  // ------------------------------------------------------------------- help --
+  let helpOpen = 0;
+  async function drawHelp() {
+    if (!on("comms")) { $("helpList").innerHTML = '<p class="muted">Chat and help requests are switched off.</p>'; return; }
+    const rows = (await api("/api/comms/help").catch(() => [])).filter((h) => h.status !== "resolved").slice(0, 30);
+    helpOpen = rows.filter((h) => h.status === "open").length;
+    ATDesk.badge("help", helpOpen);
+    $("helpList").innerHTML = rows.map((h) => HelpCards.card(h, { reply: !!chat })).join("") || '<p class="muted">No help requests open. 👍</p>';
+    HelpCards.wire($("helpList"), rows, { onReply: (h) => replyTo(h) });
+  }
+  // Reply to a help call in its room's chat: the chat window opens on that room.
+  async function replyTo(h) {
+    const ch = (await api("/api/comms/channels").catch(() => [])).find((c) => c.kind === "room" && c.room_id === h.room_id);
+    ATDesk.open("chat");
+    if (ch && chat) await chat.open(ch.id);
+  }
+
+  // -------------------------------------------------------- pre-show check --
+  async function drawPreshow() {
+    const d = await api("/api/preshow").catch(() => null);
+    if (!d) return;
+    const KIND = { laptop: "Laptop", screen: "Screen", source: "Caption source", mic: "Captions" };
+    const label = (i) => i.kind === "laptop" ? ({ main: "Main PC", backup: "Backup PC" }[i.mode] || "Laptop") : KIND[i.kind];
+    const item = (i) => `<div class="pre ${esc(i.state)}"><span class="dot"></span><span class="grow"><b>${esc(i.name)}</b> <span class="muted small">${esc(label(i))}</span><div class="small what">${esc(i.detail)}</div></span></div>`;
+    const n = d.counts, all = n.good + n.warn + n.bad;
+    const cards = d.rooms.map((r) => `<div class="pre-room"><h3>${esc(r.name)}</h3>${r.items.map(item).join("") || '<p class="muted small">Nothing in this room yet.</p>'}</div>`);
+    if (d.unplaced.length) cards.push(`<div class="pre-room"><h3>Not in a room</h3>${d.unplaced.map(item).join("")}</div>`);
+    ATDesk.badge("preshow", n.bad);
+    $("preBox").innerHTML = `<div class="pre-sum">${all ? `<span class="pill good">${n.good} ready</span>${n.warn ? `<span class="pill warn">${n.warn} to check</span>` : ""}${n.bad ? `<span class="pill bad">${n.bad} not working</span>` : ""}` : ""}<span class="muted small">checked ${new Date(d.checked_at * 1000).toLocaleTimeString()}</span></div>
+      ${all || d.unplaced.length ? `<div class="grid" style="margin-top:.5rem">${cards.join("")}</div>` : '<p class="muted small">No laptops, screens or caption mics yet.</p>'}`;
+  }
+
+  // ---------------------------------------------------------------- laptops --
+  async function drawLaptops() {
+    if (!on("fleet")) { $("lapList").innerHTML = '<p class="muted">Laptops & screens are switched off.</p>'; return; }
+    const rows = await api("/api/fleet/nodes").catch(() => null);
+    if (!rows) return;
+    const kinds = { tech: "Tech laptop", kiosk: "Kiosk", caption: "Caption source", screen: "Screen" };
+    rows.sort((a, b) => (b.online - a.online) || a.name.localeCompare(b.name));
+    $("lapList").innerHTML = rows.map((n) => `<div class="lap"><span class="dot ${n.online ? "on" : "off"}" title="${n.online ? "online" : "offline"}"></span>
+        <span><b>${esc(n.name)}</b>${node && n.id === node.node.id ? ' <span class="muted small">(this one)</span>' : ""}<div class="muted small">${esc(kinds[n.kind] || n.kind)}${n.room_name ? ` · ${esc(n.room_name)}` : ""}${n.operator ? ` · ${esc(n.operator)}` : n.info?.signed_in ? ` · ${esc(n.info.signed_in)}` : ""}</div></span>
+        <span class="row" style="gap:.3rem">${n.mode ? `<span class="pill">${n.mode === "main" ? "Main" : "Backup"}</span>` : ""}<span class="pill ${n.online ? "good" : ""}">${n.online ? "online" : "offline"}</span></span></div>`).join("")
+      || '<p class="muted">No laptops or screens yet.</p>';
+  }
+
+  // --------------------------------------------------------- password resets --
+  function drawResets() {
+    const asks = boot.reset_asks || [];
+    ATDesk.badge("people", asks.length);
+    $("resetList").innerHTML = asks.length ? asks.map((a) => `<div class="item row" style="justify-content:space-between"><b>${esc(a.name)}</b> forgot their password <button class="small primary" data-reset="${a.id}">Reset to ChangeMe</button></div>`).join("")
+      + '<p class="muted small">They sign in with ChangeMe and choose a new password straight away.</p>'
+      : '<p class="muted">Nobody is waiting for a password reset.</p>';
+    $("resetList").querySelectorAll("[data-reset]").forEach((b) => (b.onclick = () => guard(() => post(`/api/admin/accounts/${b.dataset.reset}/reset`)).then(() => { toast("Reset. Tell them to sign in with ChangeMe.", "good"); refreshBoot(); })));
+  }
+  const refreshBoot = () => api("/api/bootstrap").then((b) => { boot.reset_asks = b.reset_asks; drawResets(); }).catch(() => {});
+
+  // -------------------------------------------------------- recent activity --
+  async function drawActivity() {
+    const rows = await api("/api/admin/audit?limit=40").catch(() => null);
+    if (!rows) return;
+    $("actList").innerHTML = rows.map((r) => `<div class="act"><span class="muted small">${when(r.at)}</span> <b>${esc(r.actor)}</b> ${esc(r.action)}${r.detail ? ` <span class="muted">${esc(r.detail)}</span>` : ""}</div>`).join("") || '<p class="muted">Nothing yet.</p>';
+  }
+
+  // ---------------------------------------------------------- console pages --
+  // The admin portal's pages this person may open (the same rules as the console's side bar).
+  const PAGES = [["dashboard", "Dashboard", "", "dashboard"], ["chat", "Chat", "", "comms"], ["help", "Help requests", "", "comms"], ["timers", "Timers", "", "timers"],
+    ["presenter", "Presenters", "", "presenter"], ["captions", "Captions", "", "captions"], ["reports", "Show reports", "manager"], ["rooms", "Rooms", "manager"],
+    ["laptops", "Laptops & screens", "", "fleet"], ["people", "People", "manager"], ["links", "Links", "manager", "dashboard"], ["settings", "Settings", "admin"],
+    ["licence", "Licence", "admin"], ["servers", "Servers", "admin"], ["backups", "Backups", "admin"], ["audit", "Audit log", "manager"]];
+  $("pages").innerHTML = PAGES.filter(([, , role, mod]) => (role !== "admin" || isAdmin) && (!mod || on(mod)))
+    .map(([k, t]) => `<a class="tile" href="/#/${k}">${esc(t)}</a>`).join("");
+
+  // -------------------------------------------------------------- the desk --
+  const WINS = [...document.querySelectorAll("[data-win]")].map((w) => [w.dataset.win, w.dataset.title, w]);
+  WINS.forEach(([id, title, w]) => ATDesk.add(id, w, title));
+  // Windows for a part of AT-SUITE that is switched off don't show at all.
+  const NEEDS = { chat: "comms", help: "comms", laptops: "fleet" };
+  const can = (id) => !NEEDS[id] || on(NEEDS[id]);
+  Object.keys(NEEDS).forEach((id) => ATDesk.available(id, can(id)));
+  // Where everything starts: the rooms big on the left with the pre-show check and laptops under them,
+  // help requests and chat on the right. The rest waits in the taskbar.
+  const T = ATDesk.tree, gid = (L, p) => T.groupOf(L, p).id;
+  let F = T.dock(T.empty(), "rooms", "root", "center");
+  F = T.dock(F, "help", "root", "right");
+  F = T.dock(F, ["preshow", "laptops"], gid(F, "rooms"), "bottom");
+  F = T.dock(F, "chat", gid(F, "help"), "bottom");
+  F = T.resize(F, [], [0.64, 0.36]); F = T.resize(F, [0], [0.5, 0.5]); F = T.resize(F, [1], [0.45, 0.55]);
+  F.closed.push("people", "activity", "console");
+  // Each person's own layout, so two managers sharing a laptop don't move each other's windows.
+  ATDesk.start($("desk"), { key: `atsuit_manage1:${boot.me.id}`, fallback: F, menu: $("layoutMenu") });
+
+  // Choose what to show: a tick per window. Ticked is on screen (or a tab, or minimised); unticked waits in the taskbar.
+  const shownNow = (id) => !!T.groupOf(ATDesk.layout(), id);
+  function drawPicker() {
+    $("pickList").innerHTML = WINS.filter(([id]) => can(id)).map(([id, title]) => `<label class="pick"><input type="checkbox" data-pick="${id}" ${shownNow(id) ? "checked" : ""}> ${esc(title)}</label>`).join("");
+    $("pickList").querySelectorAll("[data-pick]").forEach((c) => (c.onchange = () => { c.checked ? ATDesk.open(c.dataset.pick) : ATDesk.close(c.dataset.pick); }));
+  }
+  const pickBox = $("pickBox"), pickBtn = $("pickBtn");
+  pickBtn.onclick = (e) => { e.stopPropagation(); const show = pickBox.classList.contains("hidden"); if (show) drawPicker(); pickBox.classList.toggle("hidden", !show); pickBtn.setAttribute("aria-expanded", String(show)); };
+  pickBox.onclick = (e) => e.stopPropagation();
+  document.addEventListener("click", () => { pickBox.classList.add("hidden"); pickBtn.setAttribute("aria-expanded", "false"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { pickBox.classList.add("hidden"); pickBtn.setAttribute("aria-expanded", "false"); } });
+  $("pickReset").onclick = () => {
+    try { localStorage.removeItem(`atsuit_manage1:${boot.me.id}`); localStorage.removeItem(`atsuit_manage1:${boot.me.id}:current`); } catch (_) {}
+    location.reload();
+  };
+
+  // ------------------------------------------------------------ live updates --
+  let chat = null;
+  if (on("comms")) chat = Chat.mount($("chat"), { me: boot.me, compact: true });
+  const topics = [...boot.sites.map((s) => `site:${s.id}`), ...boot.rooms.map((r) => `room:${r.id}`), `dm:${boot.me.id}`, "fleet",
+    ...boot.rooms.map((r) => `timer:${r.id}`), "managers"];
+  AT.socket(topics, (evt) => {
+    if (chat) chat.onEvent(evt);
+    if (evt.type === "timer" && evt.data?.room_id in live) live[evt.data.room_id] = evt.data;
+    if (evt.type === "help.new") { toast(`Help needed in ${evt.data.room_name}: ${evt.data.description || evt.data.category}`, "bad"); ATDesk.flash("help"); drawHelp(); }
+    if (evt.type === "help.escalated") { toast(`Still no answer: help in ${evt.data.room_name}. ${evt.data.description || evt.data.category}`, "bad"); ATDesk.flash("help"); drawHelp(); }
+    if (evt.type === "help.updated") drawHelp();
+    if (evt.type === "node.changed") drawLaptops();
+    if (evt.type === "account.reset") refreshBoot();
+    if (evt.type === "rooms.changed") api("/api/bootstrap").then((b) => { boot.rooms = b.rooms; drawRooms(); }).catch(() => {});
+  }, (up) => { $("conn").textContent = up ? "live" : "reconnecting"; $("conn").className = "pill " + (up ? "good" : "bad"); });
+
+  drawHelp(); drawPreshow(); drawLaptops(); drawResets(); drawActivity();
+  setInterval(drawPreshow, 5000); setInterval(drawLaptops, 15000); setInterval(drawActivity, 30000); setInterval(drawHelp, 30000);
+})();
+</script>
+</body>
+</html>

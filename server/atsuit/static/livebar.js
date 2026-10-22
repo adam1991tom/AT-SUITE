@@ -43,7 +43,7 @@ const ATLiveBar = (() => {
       const state = pb === "pause" ? "paused" : pb === "armed" ? "ready" : pb === "stop" ? "stopped" : "";
       const flags = [tstate.message_visible && tstate.message ? "message on stage" : "", tstate.blackout ? "blackout" : ""].filter(Boolean);
       const title = tstate.title || tstate.cue?.title || "";
-      show("timer", `<span class="lb-k">Timer</span><b class="clock ${t.cls}">${esc(t.text)}</b>` +
+      show("timer", `<span class="lb-k">Timer</span><b class="clock ${t.cls}${t.blink ? " blink" : ""}">${esc(t.text)}</b>` +
         (state ? `<span class="lb-s">${state}</span>` : "") + (title ? `<span class="lb-sub">${esc(title)}</span>` : "") +
         flags.map((f) => `<span class="pill warn lb-flag">${f}</span>`).join(""),
         t.cls === "over" || t.cls === "danger" ? "bad" : t.cls === "warn" ? "warn" : "",

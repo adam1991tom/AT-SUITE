@@ -525,3 +525,36 @@ def test_admin_sets_the_starting_workspace_layout_for_every_laptop(admin, client
     assert admin.put("/api/workspace/layout", json={"layout": None}).status_code == 200
     assert admin.get("/api/workspace/layout").json() == {"layout": None}
     assert "workspace.layout" in [l["action"] for l in admin.get("/api/admin/audit").json()]
+
+
+def test_chat_shows_who_has_seen_a_message(admin, client, monkeypatch):
+    """Messenger-style receipts: "Seen by" names everyone who read it but the sender, the sender hears
+    about each new read as it happens, and the chat list carries each channel's newest message."""
+    from atsuit.hub import hub
+    sent = []
+    real = hub.publish
+
+    async def spy(topic, type_, data):
+        sent.append((topic, type_, data))
+        await real(topic, type_, data)
+    monkeypatch.setattr(hub, "publish", spy)
+    rid = admin.get("/api/bootstrap").json()["rooms"][0]["id"]
+    ch = next(c for c in admin.get("/api/comms/channels").json() if c["kind"] == "room" and c["room_id"] == rid)
+    code = admin.get("/api/fleet/enrolment").json()[0]["enrol_code"]
+    tok = admin.post("/api/nodes/enrol", json={"code": code, "name": "lap-s", "kind": "tech"}).json()["token"]
+    h = {"Authorization": f"Node {tok}"}
+    assert client.post("/api/nodes/me/start", headers=h, json={"operator": "Amy", "room_id": rid, "mode": "main"}).status_code == 200
+    m = admin.post(f"/api/comms/channels/{ch['id']}/messages", json={"body": "Doors in 5"}).json()
+    assert m["seen_by"] == []
+    admin.post(f"/api/comms/channels/{ch['id']}/read", json={"up_to": m["id"]})  # the sender's own read doesn't count
+    client.cookies.clear()
+    sent.clear()
+    assert client.post(f"/api/comms/channels/{ch['id']}/read", headers=h, json={"up_to": m["id"]}).status_code == 200
+    assert [(t, d["name"], d["up_to"]) for t, ty, d in sent if ty == "message.read"] == [(f"room:{rid}", "Amy", m["id"])]
+    sent.clear()
+    client.post(f"/api/comms/channels/{ch['id']}/read", headers=h, json={"up_to": m["id"]})
+    assert not [x for x in sent if x[1] == "message.read"]  # reading it again says nothing
+    got = next(x for x in client.get(f"/api/comms/channels/{ch['id']}/messages", headers=h).json() if x["id"] == m["id"])
+    assert got["seen_by"] == ["Amy"]
+    last = next(c for c in client.get("/api/comms/channels", headers=h).json() if c["id"] == ch["id"])["last"]
+    assert last["body"] == "Doors in 5" and last["sender_name"] == m["sender_name"]

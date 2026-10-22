@@ -178,6 +178,7 @@
     });
   }
 
+  const linkHost = (u) => { try { return new URL(u, location.href).host; } catch (_) { return u; } };
   const roomName = (id) => boot.rooms.find((r) => r.id === id)?.name || "";
   const roomOptions = (sel, blank = "No room") => `<option value="">${blank}</option>` + boot.rooms.map((r) => `<option value="${r.id}" ${r.id === sel ? "selected" : ""}>${esc(r.name)}</option>`).join("");
 
@@ -258,8 +259,8 @@
         <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`).join("")}</div>` : "";
     const pre = '<div class="panel" id="preshow" style="margin-top:.6rem"><p class="muted small">Checking every laptop, screen and caption mic…</p></div>';
     el.innerHTML = (strip ? strip.replace('<div class="grid" id="dashRooms"', pre + '<div class="grid" id="dashRooms"') : `<div class="row" style="justify-content:space-between"><h1>Dashboard</h1>${boot.me.role === "admin" ? '<a class="btn" href="#/links">Edit links</a>' : ""}</div>` + pre) + (strip ? '<h2 style="margin-top:1.4rem">Links</h2>' : "") +
-      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 style="margin-top:1.2rem">${esc(g)}</h3><div class="tiles">` +
-        ls.map((l) => `<a class="tile" href="${esc(l.url)}" target="_blank" rel="noopener"><span class="dot" data-ping="${l.id}"></span><span class="grow">${esc(l.label)}</span></a>`).join("") + "</div>").join("")
+      (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 class="lk-head">${esc(g)}</h3><div class="lk-grid">` +
+        ls.map((l) => `<a class="lk" href="${esc(l.url)}" target="_blank" rel="noopener">${Chat.avatar(l.label)}<span class="lk-txt"><b>${esc(l.label)}</b><span>${esc(linkHost(l.url))}</span></span><span class="dot" data-ping="${l.id}"></span></a>`).join("") + "</div>").join("")
         : '<p class="muted">No links yet. Admins can import the old Homarr board or add links in Links.</p>');
     const dash = el.querySelector("#dashRooms");
     if (dash) {
@@ -268,7 +269,7 @@
         for (const [id, st] of Object.entries(live)) {
           const card = dash.querySelector(`[data-room="${id}"]`); if (!card || !st) continue;
           const d = AT.timerDisplay(st), c = card.querySelector(".clock");
-          c.textContent = d.text; c.className = "clock " + d.cls;
+          c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
           card.querySelector(".now").textContent = (st.cue?.cue ? st.cue.cue + " · " : "") + (st.title || "") + (st.playback === "pause" ? " (paused)" : "");
           card.querySelector(".next").textContent = (st.next ? `Next: ${st.next.title}` : "") + (st.message_visible ? `  ·  On stage: ${st.message}` : "");
         }
@@ -288,63 +289,135 @@
   }
 
   // --------------------------------------------------------------- help --
+  // Help calls on the left as cards, and the chat of the room the picked one came from on the right,
+  // so an admin answers the tech straight from here ("Swap to the spare mic, on my way").
   async function help(el) {
-    const render = async () => {
-      const rows = await api("/api/comms/help");
-      el.innerHTML = `<h1>Help requests</h1><div class="panel"><table><tr><th>When</th><th>Room</th><th>From</th><th>What</th><th>Status</th><th></th></tr>` +
-        rows.map((h) => `<tr><td>${when(h.created_at)}</td><td>${esc(h.room_name)}</td><td>${esc(h.requested_by)}</td><td>${esc(h.category)}: ${esc(h.description)}</td>` +
-          `<td><span class="pill ${h.status === "open" ? "bad" : h.status === "resolved" ? "good" : "warn"}">${esc(h.status)}</span>${h.status === "open" && h.escalations ? ' <span class="pill bad" title="Nobody answered in time, so it went out again to every laptop and page">no answer</span>' : ""} ${esc(h.assigned_to)}</td>` +
-          `<td class="row">${h.status === "open" ? `<button class="small" data-s="acknowledged" data-id="${h.id}">On my way</button>` : ""}${h.status !== "resolved" ? `<button class="small" data-s="resolved" data-id="${h.id}">Resolved</button>` : ""}</td></tr>`).join("") +
-        "</table></div>";
-      el.querySelectorAll("[data-s]").forEach((b) => b.onclick = () => guard(() => put(`/api/comms/help/${b.dataset.id}`, { status: b.dataset.s })));
+    let rows = [], pick = null, filter = "live", roomChat = null, chans = null;
+    el.innerHTML = `<div class="row" style="justify-content:space-between"><h1>Help requests</h1></div>
+      <div class="helpdesk"><div class="hd-left"><div class="hd-filter" role="tablist">
+        <button type="button" class="chip" data-f="live">Open</button><button type="button" class="chip" data-f="all">All</button></div>
+        <div class="hc-list"></div></div>
+        <div class="hd-chat"><div class="chat-mount"></div></div></div>`;
+    const listEl = el.querySelector(".hc-list"), chatEl = el.querySelector(".chat-mount");
+    const draw = () => {
+      el.querySelectorAll("[data-f]").forEach((b) => { b.classList.toggle("on", b.dataset.f === filter); b.setAttribute("aria-selected", String(b.dataset.f === filter)); });
+      const shown = rows.filter((h) => filter === "all" || h.status !== "resolved");
+      listEl.innerHTML = shown.map((h) => HelpCards.card(h, { active: h.id === pick?.id })).join("") ||
+        `<p class="muted">${filter === "all" ? "No help calls yet." : "No open help calls. 🎉"}</p>`;
+      HelpCards.wire(listEl, rows, { onReply: (h) => openChat(h), onPick: (h) => openChat(h) });
     };
-    view = { onEvent: (e) => e.type.startsWith("help.") && render() };
-    render();
+    async function openChat(h) {
+      pick = h; draw();
+      chans ||= await api("/api/comms/channels");
+      const ch = chans.find((c) => c.kind === "room" && c.room_id === h.room_id);
+      if (!ch) { chatEl.innerHTML = '<p class="muted" style="padding:1rem">This room has no chat.</p>'; roomChat = null; return; }
+      roomChat = Chat.mount(chatEl, { me: boot.me, channel: ch.id, quiet: true });
+      setTimeout(() => chatEl.querySelector("textarea")?.focus(), 50);
+    }
+    el.querySelectorAll("[data-f]").forEach((b) => (b.onclick = () => { filter = b.dataset.f; draw(); }));
+    const load = async () => {
+      rows = await api("/api/comms/help");
+      if (pick) pick = rows.find((h) => h.id === pick.id) || pick;
+      draw();
+    };
+    view = { onEvent: (e) => { if (e.type.startsWith("help.")) load(); roomChat && roomChat.onEvent(e); } };
+    await load();
+    const first = rows.find((h) => h.status === "open") || rows.find((h) => h.status !== "resolved") || rows[0];
+    if (first) openChat(first);
+    else chatEl.innerHTML = '<div class="chat-empty" style="padding:2rem"><p class="muted">Pick a help call to answer the tech in their room\'s chat.</p></div>';
   }
 
   // ------------------------------------------------------------- timers --
-  async function timers(el) {
-    // Preview only: techs run timers and cue lists from their workspace. This
-    // page watches every room and routes the remote screens.
-    const states = {};
+  // The quick messages: one per line, saved on the server for every room until changed again.
+  async function quickMessages(box) {
+    const r = await api("/api/timers-quick-messages").catch(() => null);
+    if (!r) { box.innerHTML = '<p class="muted small">Couldn\'t load the quick messages.</p>'; return; }
+    box.innerHTML = `<label>Quick messages, one per line</label><textarea data-qm rows="10" style="min-height:12rem">${esc(r.messages.join("\n"))}</textarea>
+      <div class="row" style="justify-content:flex-end;margin-top:.5rem"><button data-qmreset>Back to the defaults</button><button class="primary" data-qmsave>Save messages</button></div>`;
+    const save = box.querySelector("[data-qmsave]");
+    save.onclick = () => AT.busy(save, guard(() => put("/api/timers-quick-messages", { messages: box.querySelector("[data-qm]").value.split("\n") })))
+      .then((x) => { if (x) { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast(`${x.messages.length} quick messages saved`, "good"); } }, () => {});
+    box.querySelector("[data-qmreset]").onclick = async () => {
+      if (!(await AT.ask("Put the quick messages back to the defaults? The ones saved now are replaced.", { yes: "Back to the defaults" }))) return;
+      guard(() => del("/api/timers-quick-messages")).then((x) => { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast("Quick messages are back to the defaults", "good"); }, () => {});
+    };
+  }
+
+  // Live: every room's timer. Screens: what each remote screen shows. Quick messages: the ready-made
+  // stage messages. Views: every timer view, with a preview. Layout designer: make your own views (layoutdesigner.js).
+  let timersEdit = null; // the designed view to open in the layout designer
+  async function timers(el, sub) {
+    const TABS = { live: "Live", screens: "Screens", messages: "Quick messages", views: "Views", designer: "Layout designer" };
+    if (boot.modules.fleet === false) delete TABS.screens;
+    const tab = TABS[sub] ? sub : "live";
+    el.innerHTML = `<h1>Timers</h1><div class="tabs sect">${Object.entries(TABS).map(([k, l]) => `<a class="btn${k === tab ? " on" : ""}" href="#/timers/${k}">${esc(l)}</a>`).join("")}</div><div id="tpage"></div>`;
+    const page = el.querySelector("#tpage"), isAdmin = boot.me.role === "admin";
     const views = await api("/api/timers-views?screens=1");
-    const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
-    el.innerHTML = `<h1>Timers</h1><p class="muted">Live preview of every room. Techs run the timer and cue list from their workspace; Companion can drive them with an API key.</p>
-      <div class="grid" id="tg"></div>
-      <div class="row${boot.modules.fleet === false ? " hidden" : ""}" style="justify-content:space-between;margin-top:1.4rem"><h2>Screens</h2><span class="muted small">Pick what each remote screen shows. A screen can also choose for itself: tap its top-left corner 5 times.</span></div>
-      ${boot.modules.fleet === false ? "" : '<div class="panel" id="screens"></div>'}
-      <h2 style="margin-top:1.4rem">Views</h2><div class="panel" id="views"></div>`;
-    const grid = el.querySelector("#tg");
-    for (const r of boot.rooms) {
-      states[r.id] = await api(`/api/timers/${r.id}`);
-      grid.insertAdjacentHTML("beforeend", `<div class="panel" data-room="${r.id}">
-        <div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><select class="tviews" data-room-views="${r.id}" title="Open a timer view in a new window" style="width:auto;padding:.15rem .3rem;font-size:.85rem"><option value="">Timer views ↗</option></select></div>
-        <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`);
-    }
-    api("/api/timers-views").then((views) => grid.querySelectorAll("[data-room-views]").forEach((sel) => {
-      const rid = sel.dataset.roomViews;
-      sel.insertAdjacentHTML("beforeend", views.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(""));
-      sel.onchange = () => {
-        const v = sel.value; sel.value = "";
-        if (v) open(v.startsWith("view:") ? `/room/${rid}/external/${encodeURIComponent(v.slice(5))}/` : `/timer/${rid}?view=${encodeURIComponent(v)}`, "_blank");
-      };
-    })).catch(() => {});
-    const tick = setInterval(() => {
-      if (!document.body.contains(grid)) return clearInterval(tick);
-      for (const [id, s] of Object.entries(states)) {
-        const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
-        const d = AT.timerDisplay(s), c = card.querySelector(".clock");
-        c.textContent = d.text; c.className = "clock " + d.cls;
-        card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
-        card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
+    const urlFor = (roomId, v) => v.startsWith("view:") ? `/room/${roomId}/external/${encodeURIComponent(v.slice(5))}/` : v === "bdng" ? `/room/${roomId}/external/bdng/` : `/timer/${roomId}?view=${encodeURIComponent(v)}`;
+    const states = {};
+    let pending = null;
+    view = { onEvent: (e) => {
+      if (e.type === "timer") states[e.data.room_id] = e.data;
+      if (tab === "screens" && e.topic === "fleet" && !pending) pending = setTimeout(() => { pending = null; renderScreens(); }, 1500);
+    } };
+
+    if (tab === "live") {
+      // Preview only: techs run timers and cue lists from their workspace.
+      page.innerHTML = `<p class="muted">Live preview of every room. Techs run the timer and cue list from their workspace; Companion can drive them with an API key.</p><div class="grid" id="tg"></div>`;
+      const grid = page.querySelector("#tg");
+      for (const r of boot.rooms) {
+        states[r.id] = await api(`/api/timers/${r.id}`);
+        grid.insertAdjacentHTML("beforeend", `<div class="panel" data-room="${r.id}">
+          <div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><select class="tviews" data-room-views="${r.id}" aria-label="Open a timer view for ${esc(r.name)} in a new window" style="width:auto;padding:.15rem .3rem;font-size:.85rem"><option value="">Timer views ↗</option></select></div>
+          <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`);
       }
-    }, 200);
+      if (!boot.rooms.length) grid.innerHTML = '<p class="muted">No rooms yet. Add them under Rooms.</p>';
+      grid.querySelectorAll("[data-room-views]").forEach((sel) => {
+        const rid = sel.dataset.roomViews;
+        sel.insertAdjacentHTML("beforeend", views.filter((v) => !v.test).map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(""));
+        sel.onchange = () => { const v = sel.value; sel.value = ""; if (v) open(urlFor(rid, v), "_blank"); };
+      });
+      const tick = setInterval(() => {
+        if (!document.body.contains(grid)) return clearInterval(tick);
+        for (const [id, s] of Object.entries(states)) {
+          const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
+          const d = AT.timerDisplay(s), c = card.querySelector(".clock");
+          c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
+          card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
+          card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
+        }
+      }, 200);
+      return;
+    }
+
+    if (tab === "designer") {
+      page.innerHTML = '<div id="designer"></div>';
+      const slug = timersEdit; timersEdit = null;
+      const d = LayoutDesigner.mount(page.querySelector("#designer"), { boot, slug, onSaved: () => {} });
+      view.leaving = () => d.isDirty();
+      return;
+    }
+
+    if (tab === "messages") {
+      page.innerHTML = `<p class="muted small">The ready-made messages techs tap to put on stage, in every room's workspace.</p><div class="panel" id="qmsgs"></div>`;
+      return quickMessages(page.querySelector("#qmsgs"));
+    }
+
+    if (tab === "screens") {
+      page.innerHTML = `<p class="muted small">Pick what each remote screen shows. A screen can also choose for itself: tap its top-left corner 5 times. Views made in the Layout designer show here as soon as they're saved.</p><div class="panel" id="screens"></div>`;
+      return renderScreens();
+    }
+
+    // ---- Views: every view a screen can show, with a preview
+    const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+    return renderViews();
 
     async function renderScreens() {
-      const box = el.querySelector("#screens");
+      const box = page.querySelector("#screens");
       if (!box) return;
+      const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
       const [all, rel] = await Promise.all([api("/api/fleet/nodes"), api("/api/fleet/screen-agent").catch(() => ({}))]);
-      const screens = all.filter((n) => n.kind === "kiosk"), isAdmin = boot.me.role === "admin";
+      const screens = all.filter((n) => n.kind === "kiosk");
       const agentVer = (n) => n.info?.agent || "";
       const status = (n) => {
         const v = agentVer(n);
@@ -381,107 +454,71 @@
       });
     }
 
-    let editing = null; // the built view open in the form
     async function renderViews() {
-      const box = el.querySelector("#views"), isAdmin = boot.me.role === "admin";
-      const custom = views.filter((v) => !v.builtin && !v.design);
+      const builtins = views.filter((v) => v.builtin && !v.test), custom = views.filter((v) => !v.builtin && !v.design);
       const [designs, hcc, bdng] = await Promise.all([api("/api/timers-designs"), api("/api/timers-views/look/hcc"), api("/api/timers-views/look/bdng")]);
-      const builtins = views.filter((v) => v.builtin && !v.test);
-      const bdngView = custom.find((v) => v.slug === "bdng");
       const looks = Object.fromEntries(await Promise.all([...builtins, ...custom].map((v) => api(`/api/timers-views/look/${encodeURIComponent(v.id)}`).then((l) => [v.id, l]).catch(() => [v.id, null]))));
-      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">Preview</a>`).join(" · ");
-      const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">${label}</span>
-        ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : `<span class="muted">${view === "bdng" ? "none" : "site logo"}</span>`}
-        ${isAdmin && view === "bdng" ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
-      const D = { name: "", background: "#000000", text: "#ffffff", timer_size: 24, title_size: 4, show_logo: false, show_title: true, show_next: false, show_progress: true, show_clock: false, show_message: true, show_status: true, show_secondary: true };
-      const SHOW = { show_logo: "Logo", show_title: "Title", show_next: "Next cue", show_progress: "Progress bar", show_clock: "Time of day", show_message: "Stage message", show_status: "Status bar", show_secondary: "Second line" };
-      box.innerHTML = `<p class="small muted">Built in: ${views.filter((v) => v.builtin && !v.test).map((v) => esc(v.name)).join(", ")}. All of them turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Overlay window is see-through, for a small window on a laptop or a bar across a screen.</p>
-        <div class="row small" style="flex-wrap:wrap;gap:.6rem">Status bar along the bottom (time now, state, cue, started, expected end):
-          ${builtins.map((v) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>${esc(v.name)}</label>`).join("")}</div>
-        <p class="small muted">Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to override it there.</p>
-        <h3>Standard and BDNG</h3>
-        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">Uses the site logo from Settings → General.</p></td></tr>
-          <tr><td><b>BDNG sponsor clock</b> <span class="pill">imported view</span>
-            <div class="small">${bdngView ? boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/bdng/">${esc(r.name)} ↗</a>`).join(" · ") : '<span class="muted">Not imported yet: screens set to BDNG show the Standard view.</span>'}</div>
-            <div class="small" style="margin-top:.3rem">${isAdmin ? `<button class="small${bdngView ? "" : " primary"}" data-impbdng>${bdngView ? "Import again" : "Import BDNG view"}</button> ` : ""}<a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></div></td>
-            <td>${logoCell("bdng", "top", bdng.logos.top, "Top logo")}${logoCell("bdng", "bottom", bdng.logos.bottom, "Bottom logo")}
-            <div class="row small" style="gap:.4rem;margin-top:.3rem"><span style="min-width:6.5rem">Bottom text</span><input data-btext aria-label="Bottom text" value="${esc(bdng.options.bottom_text || "")}" ${isAdmin ? "" : "disabled"} class="grow">${isAdmin ? '<button class="small" data-savetext>Save</button>' : ""}</div></td></tr></table>
-        <p class="small muted">BDNG is the client's view exactly as it was built in Ontime (the original HTML, run unchanged on AT-SUITE's Ontime feed). It is an uploaded view like the ones below; the logos and bottom text here are read by it.</p>
-        <h3 style="margin-top:1rem">Your own views</h3>
-        <table>${designs.map((d) => `<tr><td><b>${esc(d.name)}</b><div class="small">${links(d.id)}</div></td>
-          <td>${isAdmin ? `<button class="small" data-edit="${esc(d.slug)}">Edit</button> <button class="small danger" data-deldesign="${esc(d.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">None yet.</td></tr>'}</table>
-        ${isAdmin ? `<form id="builder" class="panel" style="margin-top:.6rem">
-          <div class="row" style="justify-content:space-between"><b data-btitle>Build a view</b><a class="small hidden" data-preview target="_blank">Preview ↗</a></div>
-          <div class="row" style="flex-wrap:wrap;margin-top:.4rem"><input name="name" placeholder="Name, e.g. Green room" required class="grow">
-            <label class="small row" style="margin:0;gap:.3rem">Background <input type="color" name="background" style="width:2.6rem;padding:0"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Text <input type="color" name="text" style="width:2.6rem;padding:0"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Timer size <input type="number" name="timer_size" min="5" max="40" style="width:4.5rem"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Title size <input type="number" name="title_size" min="1" max="12" style="width:4rem"></label></div>
-          <div class="row small" style="flex-wrap:wrap;margin-top:.4rem">Show: ${Object.entries(SHOW).map(([k, v]) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" name="${k}" style="width:auto">${v}</label>`).join("")}</div>
-          <div class="row small hidden" data-dlogo style="margin-top:.4rem"></div>
-          <div class="row" style="justify-content:flex-end;margin-top:.5rem"><button type="button" class="hidden" data-new>New view</button><button class="primary" data-bsave>Save view</button></div>
-          <p class="small muted" style="margin:.3rem 0 0">Sizes are a share of the screen width. Saved views show in the screen picker and in Screens above.</p></form>` : ""}
-        <h3 style="margin-top:1rem">Uploaded views</h3>
-        <p class="small muted">Custom views made for Ontime work as they are: upload the view's folder as a .zip (with index.html), or a single .html file. They get the room's live timer through Ontime's own websocket and data addresses. Status bar: an AT-SUITE strip over the view's bottom edge, off unless ticked.</p>
-        <table>${custom.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td class="small">${boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/${esc(v.slug)}/">${esc(r.name)} ↗</a>`).join(" · ")}</td>
-          <td class="small"><label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>Status bar</label></td>
-          <td>${isAdmin ? `<button class="small danger" data-delview="${esc(v.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">No custom views yet.</td></tr>'}</table>
-        ${isAdmin ? `<form class="row" id="upView" style="margin-top:.6rem"><input name="name" placeholder="View name, e.g. Lower third timer" required class="grow"><input type="file" name="file" accept=".zip,.html,.htm" required style="width:auto"><button class="primary">Upload view</button></form>` : ""}`;
-      const again = () => api("/api/timers-views?screens=1").then((v) => { views.splice(0, views.length, ...v); renderScreens(); return renderViews(); });
-      box.querySelectorAll("[data-delview]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/${b.dataset.delview}`)).then(() => timers(el)));
-      const f = box.querySelector("#upView");
-      if (f) f.onsubmit = (e) => { e.preventDefault(); guard(() => upload(`/api/timers-views?name=${encodeURIComponent(f.name.value)}`, f.file.files[0])).then(() => { toast("View added", "good"); timers(el); }); };
-      box.querySelectorAll("[data-logo]").forEach((i) => i.onchange = () => i.files[0] && guard(() => upload(`/api/timers-views/look/${i.dataset.logo.split("/")[0]}/logo/${i.dataset.logo.split("/")[1]}`, i.files[0])).then(() => { toast("Logo saved", "good"); renderViews(); }));
-      box.querySelectorAll("[data-unlogo]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/look/${b.dataset.unlogo.split("/")[0]}/logo/${b.dataset.unlogo.split("/")[1]}`)).then(renderViews));
-      box.querySelectorAll("[data-sbar]").forEach((i) => i.onchange = () => guard(() => put(`/api/timers-views/look/${encodeURIComponent(i.dataset.sbar)}`, { status_bar: i.checked })).then((r) => r && toast("Saved", "good")));
-      const ib = box.querySelector("[data-impbdng]");
-      if (ib) ib.onclick = () => (!bdngView || confirm("Replace the imported BDNG view with the one shipped with AT-SUITE?")) &&
-        guard(() => post("/api/timers-views/samples/bdng/import")).then((r) => { if (r) { toast("BDNG view imported", "good"); timers(el); } });
-      const st = box.querySelector("[data-savetext]");
-      if (st) st.onclick = () => guard(() => put("/api/timers-views/look/bdng", { bottom_text: box.querySelector("[data-btext]").value })).then(() => toast("Saved", "good"));
-      box.querySelectorAll("[data-deldesign]").forEach((b) => b.onclick = () => confirm("Remove this view? Screens showing it fall back to the stage timer.") && guard(() => del(`/api/timers-designs/${b.dataset.deldesign}`)).then(() => { if (editing === b.dataset.deldesign) editing = null; return again(); }));
-      const bf = box.querySelector("#builder");
-      if (!bf) return;
-      const fill = (d, slug) => {
-        editing = slug;
-        for (const [k, v] of Object.entries({ ...D, ...d })) if (bf[k]) bf[k].type === "checkbox" ? (bf[k].checked = v) : (bf[k].value = v);
-        bf.querySelector("[data-btitle]").textContent = slug ? `Edit ${d.name}` : "Build a view";
-        bf.querySelector("[data-new]").classList.toggle("hidden", !slug);
-        const pv = bf.querySelector("[data-preview]"), dl = bf.querySelector("[data-dlogo]");
-        pv.classList.toggle("hidden", !slug || !boot.rooms.length);
-        if (slug && boot.rooms.length) pv.href = `/timer/${boot.rooms[0].id}?view=built:${encodeURIComponent(slug)}`;
-        dl.classList.toggle("hidden", !slug);
-        if (slug) {
-          const url = designs.find((x) => x.slug === slug)?.logo;
-          dl.innerHTML = `Logo (top left): ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : '<span class="muted">none</span>'}
-            <input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" style="width:auto">${url ? '<button type="button" class="small" data-dunlogo>Remove</button>' : ""}`;
-          dl.querySelector("input").onchange = (e) => e.target.files[0] && guard(() => upload(`/api/timers-views/look/built:${slug}/logo/logo`, e.target.files[0])).then(() => { toast("Logo saved. Tick Show: Logo to use it.", "good"); renderViews(); });
-          dl.querySelector("[data-dunlogo]")?.addEventListener("click", () => guard(() => del(`/api/timers-views/look/built:${slug}/logo/logo`)).then(renderViews));
-        }
-      };
-      const cur = designs.find((x) => x.slug === editing);
-      cur ? fill(cur.design, cur.slug) : fill(D, null);
-      box.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => { const d = designs.find((x) => x.slug === b.dataset.edit); fill(d.design, d.slug); bf.scrollIntoView({ block: "nearest" }); });
-      bf.querySelector("[data-new]").onclick = () => fill(D, null);
-      bf.onsubmit = async (e) => {
-        e.preventDefault();
-        const body = {};
-        for (const k of Object.keys(D)) body[k] = bf[k].type === "checkbox" ? bf[k].checked : bf[k].type === "number" ? +bf[k].value : bf[k].value;
-        const r = await guard(() => editing ? put(`/api/timers-designs/${editing}`, body) : post("/api/timers-designs", body));
-        if (!r) return;
-        toast("View saved", "good");
-        editing = editing || r.slug;
-        await again();
-      };
-    }
+      const ABOUT = { hcc: "Logo top left, a big timer, the second line, the status bar and the progress bar. The view for the stage screens across the site.",
+        bdng: "The BDNG client's sponsor clock, exactly as it was built in Ontime: a logo at the top, the timer, a line of text and a logo at the bottom.",
+        minimal: "Just the numbers.", clock: "The time of day.", backstage: "A studio clock with the running order.",
+        preview: "For the speaker's own screen: the clock and help calls.", overlay: "See-through, for a small window on a laptop or a bar across a screen." };
+      // A logo slot: the picture if there is one, nothing if not.
+      const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem;margin:.2rem 0"><span style="min-width:6.5rem">${label}</span>
+        ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : ""}
+        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" aria-label="${esc(label)}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
+      const sbar = (id) => `<label class="row small" style="margin:0;gap:.3rem;font-weight:400"><input type="checkbox" data-sbar="${esc(id)}" style="width:auto" ${looks[id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>Status bar</label>`;
+      const pv = (id) => `<button class="small" data-pv="${esc(id)}">Preview</button>`;
+      // Standard shows the site's logo (Settings → General), or nothing when there isn't one.
+      const siteLogo = hcc.logos.top || hcc.site_logo;
+      const extra = { hcc: siteLogo ? `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">Logo</span><img src="${esc(siteLogo)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px"></div>` : "",
+        bdng: `${logoCell("bdng", "top", bdng.logos.top, "Top logo")}${logoCell("bdng", "bottom", bdng.logos.bottom, "Bottom logo")}
+          <div class="row small" style="gap:.4rem;margin-top:.3rem"><span style="min-width:6.5rem">Bottom text</span><input data-btext aria-label="Bottom text" value="${esc(bdng.options.bottom_text || "")}" ${isAdmin ? "" : "disabled"} class="grow" style="max-width:22rem">${isAdmin ? '<button class="small" data-savetext>Save</button>' : ""}</div>` };
+      page.innerHTML = `
+        <div class="panel" style="margin-bottom:1rem"><div class="row"><h2 style="margin:0">Preview</h2>
+            <select data-pvview aria-label="View to preview" style="width:auto">${views.filter((v) => !v.test).map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("")}</select>
+            <select data-pvroom aria-label="Room to preview" style="width:auto">${boot.rooms.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}</select>
+            <span class="grow"></span><a class="btn small" data-pvopen target="_blank" rel="noopener">Open full screen ↗</a></div>
+          ${boot.rooms.length ? '<div class="tv-preview" style="margin-top:.6rem"><iframe title="Preview of the timer view" tabindex="-1"></iframe></div>' : '<p class="muted small">Add a room to preview the views.</p>'}</div>
+        <h2>Built in</h2>
+        <div class="panel"><table>${builtins.map((v) => `<tr><td style="width:15rem"><b>${esc(v.name)}</b><div class="small muted">${esc(ABOUT[v.id] || "")}</div></td>
+          <td>${extra[v.id] || ""}</td><td style="width:7rem">${v.id === "clock" || v.id === "overlay" ? "" : sbar(v.id)}</td><td style="width:6rem">${pv(v.id)}</td></tr>`).join("")}</table>
+          <p class="small muted" style="margin:.6rem 0 0">They all turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to turn its status bar off or on there. <a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></p></div>
+        <div class="row" style="justify-content:space-between;margin-top:1.4rem"><h2 style="margin:0">Your layouts</h2>${isAdmin ? '<a class="btn small primary" href="#/timers/designer" data-newlayout>New layout</a>' : ""}</div>
+        <div class="panel" style="margin-top:.6rem"><table>${designs.map((d) => `<tr><td><b>${esc(d.name)}</b>${d.design.layout ? "" : ' <span class="pill">older view</span>'}</td>
+          <td style="width:16rem;text-align:right">${pv(d.id)} ${isAdmin ? `<button class="small" data-edit="${esc(d.slug)}">Edit</button> <button class="small danger" data-deldesign="${esc(d.slug)}">Remove</button>` : ""}</td></tr>`).join("") ||
+          '<tr><td class="muted small">None yet. Make one in the Layout designer: place the timer, title, clock, logo and more wherever you want them.</td></tr>'}</table></div>
+        <h2 style="margin-top:1.4rem">Uploaded views</h2>
+        <div class="panel"><p class="small muted" style="margin-top:0">Custom views made for Ontime work as they are: upload the view's folder as a .zip (with index.html), or a single .html file. They get the room's live timer through Ontime's own websocket and data addresses. Status bar: an AT-SUITE strip over the view's bottom edge, off unless ticked.</p>
+          <table>${custom.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td style="width:7rem">${sbar(v.id)}</td>
+            <td style="width:12rem;text-align:right">${pv(v.id)} ${isAdmin ? `<button class="small danger" data-delview="${esc(v.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">No uploaded views yet.</td></tr>'}</table>
+          ${isAdmin ? `<form class="row" id="upView" style="margin-top:.6rem"><input name="name" placeholder="View name, e.g. Lower third timer" aria-label="View name" required class="grow"><input type="file" name="file" aria-label="View file" accept=".zip,.html,.htm" required style="width:auto"><button class="primary">Upload view</button></form>` : ""}</div>`;
 
-    renderScreens();
-    renderViews();
-    let pending = null;
-    view = { onEvent: (e) => {
-      if (e.type === "timer") states[e.data.room_id] = e.data;
-      if (e.topic === "fleet" && !pending) pending = setTimeout(() => { pending = null; renderScreens(); }, 1500);
-    } };
+      // the preview: one view on one room, scaled down from a 1920 x 1080 screen
+      const frame = page.querySelector(".tv-preview iframe"), vs = page.querySelector("[data-pvview]"), rs = page.querySelector("[data-pvroom]"), op = page.querySelector("[data-pvopen]");
+      const showPreview = () => {
+        if (!boot.rooms.length) { op.classList.add("hidden"); return; }
+        const url = urlFor(rs.value, vs.value);
+        op.href = url;
+        if (frame.getAttribute("src") !== url) frame.src = url;
+      };
+      if (frame) new ResizeObserver(() => { frame.style.transform = `scale(${frame.parentElement.clientWidth / 1920})`; }).observe(frame.parentElement);
+      vs.onchange = rs.onchange = showPreview;
+      showPreview();
+      page.querySelectorAll("[data-pv]").forEach((b) => b.onclick = () => { vs.value = b.dataset.pv; showPreview(); page.querySelector(".panel").scrollIntoView({ behavior: "smooth", block: "start" }); });
+
+      const reload = () => timers(el, "views");
+      page.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => { timersEdit = b.dataset.edit; location.hash = "#/timers/designer"; });
+      page.querySelectorAll("[data-deldesign]").forEach((b) => b.onclick = () => confirm("Remove this view? Screens showing it go back to the Standard view.") && guard(() => del(`/api/timers-designs/${b.dataset.deldesign}`)).then(reload));
+      page.querySelectorAll("[data-delview]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/${b.dataset.delview}`)).then(reload));
+      const f = page.querySelector("#upView");
+      if (f) f.onsubmit = (e) => { e.preventDefault(); guard(() => upload(`/api/timers-views?name=${encodeURIComponent(f.name.value)}`, f.file.files[0])).then(() => { toast("View added", "good"); reload(); }); };
+      const refresh = () => { renderViews(); };
+      page.querySelectorAll("[data-logo]").forEach((i) => i.onchange = () => i.files[0] && guard(() => upload(`/api/timers-views/look/${i.dataset.logo.split("/")[0]}/logo/${i.dataset.logo.split("/")[1]}`, i.files[0])).then(() => { toast("Logo saved", "good"); refresh(); }));
+      page.querySelectorAll("[data-unlogo]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/look/${b.dataset.unlogo.split("/")[0]}/logo/${b.dataset.unlogo.split("/")[1]}`)).then(refresh));
+      page.querySelectorAll("[data-sbar]").forEach((i) => i.onchange = () => guard(() => put(`/api/timers-views/look/${encodeURIComponent(i.dataset.sbar)}`, { status_bar: i.checked })).then((r) => r && toast("Saved", "good")));
+      const st = page.querySelector("[data-savetext]");
+      if (st) st.onclick = () => guard(() => put("/api/timers-views/look/bdng", { bottom_text: page.querySelector("[data-btext]").value })).then(() => toast("Saved", "good"));
+    }
   }
 
   // ----------------------------------------------------------- captions --
@@ -814,21 +851,23 @@
   async function admAi(a) {
     const d = await api("/api/admin/ai"), s = d.settings;
     a.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr))"><form class="panel" id="aif"><h2>AI helper</h2>
-      <p class="small muted" style="margin-top:0">Techs ask it in the Help menu, and it answers each help call while the crew is on the way. It answers from your venue notes, from how past help calls were fixed (${d.help_fixes} so far), and from answers techs marked "This fixed it".</p>
+      <p class="small muted" style="margin-top:0">Techs chat with it from the Help menu, and it picks up each help call while the crew is on the way. It answers from your venue notes, from how past help calls were fixed (${d.help_fixes} so far), and from answers techs marked "This fixed it".</p>
       <label><input type="checkbox" name="enabled" ${s.enabled ? "checked" : ""} style="width:auto"> Turn on the AI helper</label>
       <label>Venue notes</label><textarea name="venue_notes" rows="10" placeholder="One topic per paragraph, its first line a heading. E.g.&#10;Hall A projector&#10;Use input HDMI 2. The remote is on the lectern shelf.">${esc(s.venue_notes)}</textarea>
       <label><input type="checkbox" name="learn_help" ${s.learn_help ? "checked" : ""} style="width:auto"> Learn from how help calls were fixed</label>
       <label><input type="checkbox" name="builtin_guide" ${s.builtin_guide !== false ? "checked" : ""} style="width:auto"> Use the built-in tech guide</label>
-      <p class="small muted" style="margin:.1rem 0 .4rem">Show-day fixes for sound, video, presenters' laptops, hybrid events, lighting, safety and running the show, built into AT-SUITE. It works offline. Your own notes and fixes always come first.</p>
+      <p class="small muted" style="margin:.1rem 0 .4rem">Fault finding for sound, video, lighting, staging and rigging, networks, presenters' laptops, hybrid events, safety and running the show, built into AT-SUITE. It works offline. Your own notes and fixes always come first. You can read and change it under Tech guide.</p>
       <h2 style="margin-top:1rem">Private AI model (optional)</h2>
-      <p class="small muted" style="margin-top:0">With a model on your own network (<a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>), it writes a short answer from those notes. Without one it lists what worked before. Leave the address empty to use the one set in Presenters${d.presenter_ai_url ? ` (${esc(d.presenter_ai_url)})` : ""}.</p>
+      <p class="small muted" style="margin-top:0">With a model on your own network (<a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a>), it writes its replies from those notes and the whole conversation. Without one it still chats: it offers the best match and asks the guide's questions to narrow the fault down. Leave the address empty to use the one set in Presenters${d.presenter_ai_url ? ` (${esc(d.presenter_ai_url)})` : ""}.</p>
       <label>Ollama address</label><input name="ai_url" placeholder="http://192.168.1.50:11434" value="${esc(s.ai_url)}">
       <label>Model</label><input name="ai_model" value="${esc(s.ai_model)}">
       <h2 style="margin-top:1rem">Web quick search</h2>
       <label><input type="checkbox" name="web_search" ${s.web_search ? "checked" : ""} style="width:auto"> Look up questions on the web when the venue's notes don't cover them</label>
       <p class="small muted" style="margin:.1rem 0 .4rem">Off by default. When on, only the question is sent (to DuckDuckGo), never your notes, chat, names or rooms. Leave it off for NDA work.</p>
       <div class="row" style="margin-top:.8rem"><button class="primary">Save</button></div></form>
-      <div class="panel"><h2>Learned from techs</h2>${d.learned.length ? `<table><tr><th>Question</th><th>Answer</th><th>By</th><th></th></tr>${d.learned.map((k) => `<tr><td>${esc(k.question)}</td><td class="small" style="white-space:pre-wrap">${esc(k.answer)}</td><td class="small muted">${esc(k.added_by)}<br>${when(k.created_at)}</td><td><button class="small danger" data-forget="${k.id}">Forget</button></td></tr>`).join("")}</table>` : '<p class="muted">Nothing yet. When an answer fixes something, techs press "This fixed it".</p>'}</div></div>`;
+      <div class="panel"><h2>Learned from techs</h2>${d.learned.length ? `<table><tr><th>Question</th><th>Answer</th><th>By</th><th></th></tr>${d.learned.map((k) => `<tr><td>${esc(k.question)}</td><td class="small" style="white-space:pre-wrap">${esc(k.answer)}</td><td class="small muted">${esc(k.added_by)}<br>${when(k.created_at)}</td><td><button class="small danger" data-forget="${k.id}">Forget</button></td></tr>`).join("")}</table>` : '<p class="muted">Nothing yet. When an answer fixes something, techs press "This fixed it".</p>'}</div>
+      <div class="panel" id="aiGuide" style="grid-column:1/-1"></div></div>`;
+    admGuide(a.querySelector("#aiGuide"));
     const f = a.querySelector("#aif");
     f.onsubmit = (e) => {
       e.preventDefault();
@@ -837,6 +876,67 @@
     };
     a.querySelectorAll("[data-forget]").forEach((b) => b.onclick = () => confirm("Forget this answer?") && guard(() => del(`/api/admin/ai/learned/${b.dataset.forget}`)).then(() => admAi(a)));
   }
+
+  // The tech guide the AI helper answers from: AT-SUITE's topics, which admins can change (their copy
+  // replaces the built-in one until they reset it) or add to.
+  const GUIDE_SOURCE = { "built-in": ["Built in", ""], provider: ["From your provider", ""], edited: ["Changed here", "warn"], added: ["Added here", "good"] };
+  async function admGuide(box, open = "") {
+    const { topics } = await api("/api/admin/ai/guide");
+    box.innerHTML = `<h2>Tech guide</h2>
+      <p class="small muted" style="margin-top:0">What the AI helper knows about fault finding, one topic per file. Change a topic and your copy is used instead of the built-in one; Reset brings the built-in one back. Your venue notes still come first. Anyone can read the guide at <a href="/guide/help" target="_blank" rel="noopener">/guide/help</a>, so keep venue details (rooms, inputs, where kit is) in Venue notes.</p>
+      <table><tr><th>Topic</th><th>Entries</th><th>Questions</th><th>Where from</th><th></th></tr>${topics.map((t) => {
+        const [label, cls] = GUIDE_SOURCE[t.source] || [t.source, ""];
+        return `<tr><td><b>${esc(t.title)}</b> <span class="muted small">${esc(t.name)}</span></td><td>${t.entries}</td><td>${t.questions}</td><td><span class="pill ${cls}">${esc(label)}</span></td>
+          <td class="row" style="gap:.3rem"><button class="small" data-gedit="${esc(t.name)}">${t.source === "added" || t.source === "edited" ? "Edit" : "Read or change"}</button>${t.source === "edited" ? `<button class="small" data-greset="${esc(t.name)}">Reset</button>` : ""}${t.source === "added" ? `<button class="small danger" data-greset="${esc(t.name)}">Delete</button>` : ""}</td></tr>`;
+      }).join("")}</table>
+      <div class="row" style="margin-top:.6rem"><button class="small" id="gAdd">Add a topic</button></div>
+      <div id="gEdit"></div>
+      <details style="margin-top:.8rem"><summary>How to write a topic</summary><pre class="small" style="white-space:pre-wrap"># Venue kit
+
+## Lectern mic not working
+Keywords: lectern, gooseneck, mic dead
+1. The lectern mic is a condenser: it needs phantom power on its channel.
+2. Spare goosenecks are in the blue case under the tech desk.
+
+### Ask meter: Does the lectern channel's meter move when someone speaks?
+- Yes: The sound reaches the desk: check the fader and the main mix. → main
+- No: Turn on phantom power, then swap the gooseneck.
+
+### Ask main: Does the master meter move too?
+- Yes: Check the amps are on.
+- No: Check the channel is routed to the main mix.</pre>
+      <p class="small muted">Each "## " heading is one entry: steps first, then optional questions. A question is "### Ask &lt;id&gt;: question", each answer a line "- Answer: what to do", and "→ id" goes on to another question. The helper shows the answers as buttons.</p></details>`;
+    const edit = async (name, fresh = false) => {
+      const t = fresh ? { name: "", markdown: "# New topic\n\n## First entry\nKeywords: \n1. \n", problems: [] } : await api(`/api/admin/ai/guide/${encodeURIComponent(name)}`);
+      const ed = box.querySelector("#gEdit");
+      ed.innerHTML = `<form method="post" class="panel" style="margin-top:.8rem" id="gForm"><h3 style="margin-top:0">${fresh ? "New topic" : esc(name)}${t.edited === false && t.built_in ? ' <span class="pill">built in: saving makes your own copy</span>' : ""}</h3>
+        ${fresh ? '<label for="gName">Name (lower case, numbers and dashes, e.g. venue-kit)</label><input id="gName" name="name" pattern="[a-z0-9][a-z0-9-]{0,39}" required>' : ""}
+        <label for="gText">Topic</label><textarea id="gText" name="markdown" rows="22" style="font-family:ui-monospace,monospace;font-size:.85rem">${esc(t.markdown)}</textarea>
+        <div id="gProblems">${probs(t.problems)}</div>
+        <div class="row" style="margin-top:.5rem"><button class="primary">Save</button><button type="button" class="small" id="gCancel">Close</button></div></form>`;
+      const f = ed.querySelector("#gForm");
+      ed.querySelector("#gCancel").onclick = () => { ed.innerHTML = ""; };
+      f.onsubmit = (e) => {
+        e.preventDefault();
+        const n = fresh ? f.name.value.trim() : name;
+        guard(() => put(`/api/admin/ai/guide/${encodeURIComponent(n)}`, { markdown: f.markdown.value })).then((r) => {
+          toast(r.problems.length ? "Saved, but some questions need a look" : "Saved", r.problems.length ? "warn" : "good");
+          admGuide(box, r.problems.length ? n : "");
+        }, () => {});
+      };
+      ed.scrollIntoView({ block: "nearest" });
+    };
+    const probs = (p) => p?.length ? `<div class="small" role="alert" style="margin-top:.4rem"><b>Check these:</b><ul>${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : "";
+    box.querySelectorAll("[data-gedit]").forEach((b) => b.onclick = () => edit(b.dataset.gedit));
+    box.querySelectorAll("[data-greset]").forEach((b) => b.onclick = () => confirm(b.textContent === "Delete" ? "Delete this topic?" : "Go back to the built-in topic? Your changes are lost.") &&
+      guard(() => del(`/api/admin/ai/guide/${encodeURIComponent(b.dataset.greset)}`)).then(() => admGuide(box)));
+    box.querySelector("#gAdd").onclick = () => edit("", true);
+    if (open) edit(open);
+  }
+
+  // Where Report a bug sends people, for now.
+  const BUG_EMAIL = "adam.tomlinson@outlook.com";
+
 
   async function admInfo(a) {
     const i = await api("/api/admin/info"), sv = i.server, st = i.storage, n = i.nodes, c = i.counts;

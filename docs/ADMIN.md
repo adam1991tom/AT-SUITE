@@ -59,8 +59,12 @@ the right page.
    order with ↑ ↓, GO starts the next cue. Each cue's *end action* says
    what happens at zero: keep going into overtime, stop, load the next cue,
    or play the next. An Ontime project file can be imported into a room.
-   The console's **Timers** page is a live preview of every room, with no
-   controls, plus the list of screens.
+   The console's **Timers** page has five tabs: **Live** (a preview of every
+   room, with no controls), **Screens**, **Quick messages** (the ready-made
+   stage messages techs tap), **Views** (every view, with a preview) and
+   **Layout designer**, where admins make their own views by
+   dragging the timer, title, clock, message, logo and the rest onto a
+   screen. Screens showing a view update as soon as it's saved.
    **Custom views** (the HTML views made for Ontime): Timers → Views → upload
    the view's folder as a .zip with `index.html` at the top (or one .html
    file). It shows at `/external/<view>/?room=<room id>` with the room's live
@@ -139,7 +143,7 @@ six-digit code. The tech, on their own laptop in the workspace:
 
 1. finds **Add a screen** next to the timer,
 2. types the code from the screen,
-3. picks what it shows: any timer view (built in, built in Timers → Views or
+3. picks what it shows: any timer view (built in, made in the Layout designer or
    uploaded), captions (audience screen, transparent overlay or subtitle bar),
    a test pattern, or *A web page…*,
 4. optionally names it (otherwise the computer's name, or `SCREEN-<code>`),
