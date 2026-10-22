@@ -169,37 +169,12 @@ var TimerLink = (() => { // var: cuelist.js and timerpanel.js look for window.Ti
     } finally { busy = false; }
   }
 
-  // What the press will do, shown on this laptop the moment it's made (the same rules as the
-  // server), so a button never waits on the network to look pressed. The server's answer
-  // replaces it as soon as it arrives. Only shown here: it isn't kept, queued or sent anywhere.
-  let flying = 0, lastShown = null; // presses still on their way, and what the last one showed
-  function preview(roomId, path, body) {
-    const base = flying && lastShown ? lastShown : state; // a second quick press builds on the first
-    if (!base || String(base.room_id) !== String(roomId)) return null;
-    try {
-      const x = apply(base, path, body || {}, cues, Date.now());
-      lastShown = x;
-      x._preview = true;
-      document.dispatchEvent(new CustomEvent("atsuit:timer", { detail: x }));
-      return x;
-    } catch (_) { return null; } // one the server has to decide (or refuse): wait for its answer
-  }
-  // The server said no: put back what was showing before the press.
-  function undo(before, shown) {
-    const x = { ...before, server_time: shown.server_time, _local: true, _preview: true };
-    document.dispatchEvent(new CustomEvent("atsuit:timer", { detail: x }));
-  }
-
   // Post a timer press. Resolves to the new state, from the server or worked out here.
   async function post(roomId, path, body) {
     use(roomId);
     if (!queue.length) {
-      const before = state, shown = preview(roomId, path, body);
-      flying++;
       try { return await AT.post(`/api/timers/${roomId}/${path}`, body); }
-      catch (e) {
-        if (!offline(e) || !state) { if (shown && before) undo(before, shown); throw e; }
-      } finally { if (!--flying) lastShown = null; }
+      catch (e) { if (!offline(e) || !state) throw e; }
     }
     const now = Date.now();
     const x = apply(state, path, body || {}, cues, now); // throws Refused, which the button shows
@@ -212,7 +187,7 @@ var TimerLink = (() => { // var: cuelist.js and timerpanel.js look for window.Ti
   return {
     post,
     apply, // for tests
-    seen(x) { if (x && !x._preview && (x.room_id === room || room === null)) state = x; },
+    seen(x) { if (x && (x.room_id === room || room === null)) state = x; },
     cues(list) { cues = list || []; },
     pending: () => queue.length,
     use,

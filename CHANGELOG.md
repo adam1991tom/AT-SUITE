@@ -17,7 +17,7 @@ The room timer flashes only when it needs to, and the timer buttons say what the
 
 **Timer buttons**
 - GO and Start are green, Pause is amber and Stop is red. Start / pause now reads Start or Pause, whichever a press will do.
-- A press shows on the timer at once, worked out on the laptop, and the server's answer replaces it a moment later. The button stays pressed until the server has it, so a press is never lost or pressed twice by mistake.
+- A button lights up the moment it's pressed and stays pressed until the server has it, so a press is never lost or pressed twice by mistake.
 
 **Quick messages**
 - Admins and managers can type a new quick message under the list in the workspace and save it for every room.
@@ -26,6 +26,8 @@ The room timer flashes only when it needs to, and the timer buttons say what the
 **Fixed**
 - "Back to the defaults" for quick messages, deleting a cue, sending the day's sessions to the timer, and the captions' "back to default look" and delete transcript did nothing in the laptop app. They ask in the page now.
 - Times shown without a sign (cue lengths, elapsed time) no longer pick up a minus.
+- Passwords saved before 1.20.0 sign in again (and are saved the new way at that sign-in), old Companion API keys work again, and signing out finds sessions of either kind. Ported from 1.20.5.
+- Captions from the microphone start again in the browser and the laptop app: the page's security policy allows the audio worklet. Ported from 1.20.5.
 
 ## 1.20.3
 
