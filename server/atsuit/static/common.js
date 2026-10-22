@@ -92,11 +92,53 @@ const AT = (() => {
   }
   addEventListener("unhandledrejection", (e) => { if (e.reason && e.reason.shown) e.preventDefault(); });
 
+  // 04:59, 1:02:03, and -00:05 once the time is up: overtime is always shown with a minus.
   function fmtTime(ms) {
     const neg = ms < 0; ms = Math.abs(ms);
     const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
     const body = h ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
     return (neg ? "-" : "") + body;
+  }
+
+  // Whether a timer's numbers flash: only once it has reached zero (and on into overtime),
+  // or in its danger time with Blink on. Never while it's stopped, or showing the clock.
+  function timerBlinks(state, left) {
+    const type = state.timer_type || "count-down";
+    if (state.playback === "stop" || state.show_clock || type !== "count-down" || !state.duration_ms) return false;
+    return left <= 0 || (!!state.message_blink && left <= state.danger_ms);
+  }
+
+  // A yes/no question in the page. confirm() is switched off in the AT-SUITE app (and can
+  // play the Windows sound), so ask here instead. Resolves true for yes, false otherwise.
+  function ask(question, { yes = "Yes", no = "Cancel", danger = false } = {}) {
+    return new Promise((resolve) => {
+      const d = document.createElement("dialog");
+      d.className = "at-ask";
+      d.setAttribute("aria-label", question);
+      d.style.cssText = "max-width:min(92vw,28rem);padding:1.1rem 1.2rem;border:1px solid var(--line,#444);border-radius:var(--radius,10px);background:var(--panel,#1b2029);color:var(--text,#fff);box-shadow:0 10px 40px #0008";
+      d.innerHTML = `<p style="margin:0 0 1rem;line-height:1.4">${esc(question)}</p>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap"><button type="button" data-no>${esc(no)}</button><button type="button" class="${danger ? "btn-stop" : "primary"}" data-yes>${esc(yes)}</button></div>`;
+      let done = false;
+      const end = (v) => { if (done) return; done = true; try { d.close(); } catch (_) {} d.remove(); resolve(v); };
+      d.querySelector("[data-yes]").onclick = () => end(true);
+      d.querySelector("[data-no]").onclick = () => end(false);
+      d.addEventListener("cancel", (e) => { e.preventDefault(); end(false); });
+      d.addEventListener("close", () => end(false));
+      document.body.append(d);
+      try { d.showModal(); } catch (_) { d.setAttribute("open", ""); }
+      d.querySelector("[data-yes]").focus();
+    });
+  }
+
+  // A button shows it was pressed the moment it is touched, and stays marked while what it
+  // started is on its way to the server (busy(button, promise)), so a press never feels lost.
+  function busy(btn, p) {
+    if (!btn || !p || typeof p.finally !== "function") return p;
+    btn.classList.add("busy");
+    btn.setAttribute("aria-busy", "true");
+    const off = () => { btn.classList.remove("busy"); btn.removeAttribute("aria-busy"); };
+    p.then(off, off);
+    return p;
   }
 
   // Marks when a timer state arrived (x._rx), which every page counts the time from.
@@ -149,12 +191,12 @@ const AT = (() => {
     const left = timerClock(state)();
     const type = state.timer_type || "count-down";
     let text = fmtTime(left);
-    if (type === "count-up") text = fmtTime(Math.max(0, state.duration_ms + (state.added_ms || 0) - left)).replace(/^\+/, "");
+    if (type === "count-up") text = fmtTime(Math.max(0, state.duration_ms + (state.added_ms || 0) - left));
     else if (type === "clock") text = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     else if (type === "none") text = "";
     const loaded = state.playback !== "stop";
     const cls = !loaded || type === "clock" || type === "none" ? "" : left < 0 ? "over" : left <= state.danger_ms ? "danger" : left <= state.warn_ms ? "warn" : "";
-    return { left, text: loaded || type === "clock" ? text : "--:--", cls };
+    return { left, text: loaded || type === "clock" ? text : "--:--", cls, blink: loaded && timerBlinks(state, left) };
   }
 
   function when(iso) {
@@ -263,8 +305,9 @@ const AT = (() => {
     return [...new Set(all)];
   }
 
-  return { esc, api, post, put, del, upload, socket, toast, guard, fmtTime, stamp, ticker, timerClock, timerDisplay, when, branding, h, detach, q, qa, passwordForm };
+  return { esc, api, post, put, del, upload, socket, toast, guard, ask, busy, fmtTime, timerBlinks, stamp, ticker, timerClock, timerDisplay, when, branding, h, detach, q, qa, passwordForm };
 })();
+window.AT = AT; // a top-level const isn't on window: the workspace desk (web/src/desk) looks for window.AT
 
 // Accessibility (WCAG 2.2 AA) for every page that loads this file, including parts drawn later:
 // - each field is tied to the label written just before it, or named from its table column,

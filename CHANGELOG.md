@@ -5,6 +5,28 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.4
+
+The room timer flashes only when it needs to, and the timer buttons say what they do.
+
+**Blink**
+- The timer's numbers flash only once the time is up (at 0:00 and on into overtime), or in the danger time when Blink or "Flash the timer at danger" is on. Before, Blink made them flash at any time, even with minutes left.
+- Stop clears the blink as well as the timer, so nothing is left flashing on stage. Before, a blink switched on by "Flash the timer at danger" stayed on after Stop.
+- Blink on its own still flashes a stage message that is showing.
+- The same rule on every screen: the stage views, backstage, the tech workspace, the console and the top bar.
+
+**Timer buttons**
+- GO and Start are green, Pause is amber and Stop is red. Start / pause now reads Start or Pause, whichever a press will do.
+- A press shows on the timer at once, worked out on the laptop, and the server's answer replaces it a moment later. The button stays pressed until the server has it, so a press is never lost or pressed twice by mistake.
+
+**Quick messages**
+- Admins and managers can type a new quick message under the list in the workspace and save it for every room.
+- The console's Timers page has a Quick messages box to change the whole list, or put back the defaults.
+
+**Fixed**
+- "Back to the defaults" for quick messages, deleting a cue, sending the day's sessions to the timer, and the captions' "back to default look" and delete transcript did nothing in the laptop app. They ask in the page now.
+- Times shown without a sign (cue lengths, elapsed time) no longer pick up a minus.
+
 ## 1.20.3
 
 **UI improvements and visual enhancements**
