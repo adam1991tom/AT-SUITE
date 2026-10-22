@@ -5,6 +5,34 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.20.9
+
+**Chat, notes, links, help calls and notifications feel like Messenger and Facebook**
+
+- Chat uses message bubbles: yours on the right in the brand colour, everyone else's on the left with their initials, grouped when they send several in a row
+- Each message shows its time, and your latest one says "Sent" or "Seen by ..." so you know who has read it
+- Urgent and important messages stand out with a red or amber border and a flag
+- Enter sends, Shift+Enter starts a new line; emoji and file buttons sit in the message box
+- The chat list shows each room's latest message and how long ago it was sent
+- Handover notes are posts with the author's face, "5 minutes ago" times, and Pin, Edit and Done buttons
+- Links are cards with a search box
+- Help calls are cards with On my way, Reply and Resolved; resolving asks for the fix inside the card (the app used to fail silently here)
+- In the server console, Help requests is now a help desk: the calls on the left, the room's chat on the right, so admins can answer straight away
+- The bell shows a red count of new chat, help calls, handover notes and problems, with All/Unread tabs and New/Earlier sections; timer warnings still pop up but never go in the count
+- The top bar shows only this laptop's room name; techs can no longer pick another room there
+- The manager view (1.20.8) gets the same look: Messenger-style chat, and help requests as cards with On my way, Reply and Resolved
+
+## 1.20.8
+
+Admins and managers get their own screen in the Windows app: the manager view.
+
+- On a tech laptop, an admin or manager signs in on the start screen with their account and gets the manager view instead of a room's workspace. They don't pick a room or Main/Backup PC. Techs see no change.
+- The manager view is a desk of windows like the tech workspace: every room's timer, help requests (with On my way and Resolved), the pre-show check, laptops, chat, password resets, recent activity and the console's pages. Choose what to show ticks each window on or off, windows move, dock and tab, and the Layout menu saves layouts. Each person's layout is kept on that laptop.
+- Full console opens the admin portal in the same window. Work a room signs out of the manager view so an admin or manager can start the day in a room like a tech.
+- With tech passwords off, techs still type their name, and the start screen has a link for admins and managers to sign in with their account.
+- The laptop keeps reporting in while it shows the manager view, so it doesn't look offline in Laptops, and it still answers Identify, Reload and the overlay.
+- The manager view also opens at /manage in any browser or on a phone, and the console's side bar links to it.
+
 ## 1.20.7
 
 The room timer flashes only when it needs to, and the timer buttons say what they do.
