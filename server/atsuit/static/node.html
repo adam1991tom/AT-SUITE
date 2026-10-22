@@ -169,6 +169,7 @@
           <p class="muted small" style="margin:.3rem 0 0">It opens a chat window: keep talking until it's fixed.</p>
         </div>
         <div class="row" style="margin-top:.7rem;border-top:1px solid var(--line);padding-top:.6rem"><span class="small muted grow">Something in AT SUITE not working right?</span><button class="small" id="bugBtn">Report a bug</button></div>
+        <div class="row" style="margin-top:.5rem"><span class="small muted grow">How do I…? Every screen and button, step by step.</span><a class="btn small" href="/guide/manual" target="_blank" rel="noopener">AT SUITE manual<span class="sr-only"> (opens in a new tab)</span></a></div>
       </div></div>
     <button id="laptopBtn" class="hidden">This laptop</button>
     <a class="btn hidden" id="consoleBtn" href="/#/dashboard" target="_blank">Console</a>
@@ -971,7 +972,7 @@
     ai.on = s.enabled;
     $("aiBox").classList.toggle("hidden", !s.enabled);
     ATDesk.available("ai", !!s.enabled);
-    const where = s.model ? "Private AI on your network, with this venue's notes and the tech guide" : "From this venue's notes, past fixes and the built-in tech guide";
+    const where = s.model ? "Private AI on your network, with this venue's notes, the tech guide and the AT SUITE manual" : "From this venue's notes, past fixes, the tech guide and the AT SUITE manual";
     $("aiWhere").textContent = "· " + where.toLowerCase(); $("aiWhere2").textContent = where;
     aiRender();
   }).catch(() => {});

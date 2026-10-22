@@ -5,6 +5,20 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.24.0
+
+A full knowledge base: the website's help centre and the manual inside AT SUITE are now one set of pages, and the AI helper answers "how do I..." questions from it.
+
+**Knowledge base**
+- 64 articles with fresh pictures of 1.24: getting started, install and setup, laptops and screens, the tech workspace, timers and stage screens, live captions, presenters, running the venue, the AI helper, 12 step-by-step show-day scenarios (a new venue, a conference day, captioning a keynote, a blank stage screen, the network dropping, late slides, the end of the day and more) and troubleshooting.
+- On the website: the help centre at `/docs`, by section, with search, pictures, tips and "On this page". The old `/docs` addresses still work.
+- In the app: **the AT SUITE manual** at `/guide/manual`, the same pages for the version you run, with no sign-in and no internet needed. It's linked from the console's side bar and the workspace's Help menu.
+- Each release updates the knowledge base: CI fails until its pages say they're for the new version (see CONTRIBUTING.md). `website/tools/kb_screenshots.py` retakes every picture from a demo venue.
+
+**AI helper**
+- Answers questions about AT SUITE itself ("how do I add a stage screen?", "how do I export the transcript?") step by step from the manual, and links to the page. Faults still get the tech guide's questions first.
+- **Use the AT SUITE manual** in Settings → AI helper (on by default).
+
 ## 1.23.0
 
 Backups of the whole server every night, the full venue's show report, and the audit log as a PDF. The Servers page is gone.

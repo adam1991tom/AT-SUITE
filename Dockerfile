@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 
 COPY server/atsuit ./atsuit
 COPY docs/COMPANION.md ./atsuit/companion.md
+# The AT SUITE manual: the website's help centre, for /guide/manual and the AI helper.
+COPY website/atshop/content/kb ./atsuit/manual
+COPY website/atshop/static/kb ./atsuit/manual/img
 COPY docs/views ./atsuit/views-samples
 COPY node-agent/atsuit_node.py ./atsuit/agent/atsuit_node.py
 COPY screen-agent/atsuit_screen.py screen-agent/install.sh ./atsuit/agent/screen/

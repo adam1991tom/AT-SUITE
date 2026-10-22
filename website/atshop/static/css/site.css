@@ -194,6 +194,58 @@ input:user-invalid, textarea:user-invalid { border-color: var(--bad); border-wid
 .side a { display: block; padding: 8px 12px; border-radius: 8px; color: var(--text); text-decoration: none; }
 .side a[aria-current="page"], .side a:hover { background: var(--surface-2); }
 
+/* help centre (the knowledge base: kb.py, templates/site/kb_*.html) */
+.kb .lead { margin-bottom: 24px; }
+.kb-search { margin: 0 0 12px; max-width: 46rem; }
+.kb-search label { display: block; margin-bottom: 6px; }
+.kb-search-row { display: flex; gap: 10px; }
+.kb-search-row input { flex: 1; min-width: 0; }
+.kb-quick { margin: 32px 0; }
+.kb-quick ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.kb-quick a { display: block; height: 100%; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  color: var(--text); text-decoration: none; }
+.kb-quick a:hover { border-color: var(--orange); }
+.kb-quick a span { display: block; color: var(--muted); font-size: .92rem; margin-top: 4px; }
+.kb-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px; }
+section.kb-sec { padding: 22px 24px; }
+.kb-sec ul { padding-left: 1.1em; margin: 0; }
+.kb-sec li { margin: 5px 0; }
+.kb-version { margin-top: 32px; }
+.kb-results { padding-left: 1.3em; }
+.kb-results li { margin: 0 0 18px; }
+.kb-results li > a { font-weight: 700; font-size: 1.1rem; margin-right: 8px; }
+.kb-results p { margin: 4px 0 0; color: var(--muted); }
+.kb-side { position: sticky; top: 88px; align-self: start; max-height: calc(100vh - 110px); overflow-y: auto; padding-right: 4px; }
+.kb-side .kb-home { font-weight: 700; }
+.kb-side details { margin: 4px 0; }
+.kb-side summary { cursor: pointer; padding: 8px 12px; border-radius: 8px; font-weight: 700; min-height: 24px; }
+.kb-side summary:hover { background: var(--surface-2); }
+.kb-side details a { padding-left: 24px; font-size: .95rem; }
+@media (max-width: 900px) { .kb-side { position: static; max-height: none; order: 2; } }
+.crumbs { color: var(--muted); margin-bottom: 8px; }
+.kb-for { margin: 0 0 6px; }
+.kb-article figure { margin: 1.4em 0; }
+.kb-article figure img { border-radius: 10px; border: 1px solid var(--line); }
+.kb-article figcaption { color: var(--muted); font-size: .9rem; margin-top: 8px; }
+.kb-article .shot { display: block; border: 0; box-shadow: none; }
+.kb-article li { margin: 4px 0; }
+.kb-article kbd { font: .85em ui-monospace, monospace; border: 1px solid var(--field-line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+.kb-article blockquote { margin: 1.2em 0; padding: 12px 16px; border-left: 4px solid var(--line); background: var(--surface); border-radius: 0 10px 10px 0; }
+.kb-article blockquote p:last-child { margin-bottom: 0; }
+.kb-article .callout.tip { border-left-color: var(--ok); }
+.kb-article .callout.note { border-left-color: #6EA8FE; }
+.kb-article .callout.important, .kb-article .callout.safety { border-left-color: var(--warn); }
+.table-wrap { overflow-x: auto; margin: 1em 0; }
+.table-wrap table { margin: 0; border-collapse: collapse; }
+.prose th, .prose td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.kb-toc { margin: 32px 0 0; max-width: 48rem; }
+.kb-toc ul { margin: 0; padding-left: 1.1em; }
+.kb-next { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; max-width: 48rem; }
+.kb-next a { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; text-decoration: none; color: var(--text); }
+.kb-next a[rel="next"] { text-align: right; grid-column: 2; }
+.kb-next a:hover { border-color: var(--orange); }
+@media (max-width: 640px) { .kb-next { grid-template-columns: 1fr; } .kb-next a[rel="next"] { grid-column: auto; text-align: left; } }
+
 /* account / admin */
 .dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .stat { font: 800 2rem/1.1 "Saira", sans-serif; }

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block description %}{{ a.summary or a.title }}{% endblock %}
+{% block main %}
+<div class="page kb"><div class="wrap sidebar-layout">
+<nav class="side kb-side" aria-label="Help centre">
+  <a href="/docs" class="kb-home">Help centre</a>
+  {% for sec in kb.sections %}
+  <details{% if sec.slug == section.slug %} open{% endif %}>
+    <summary>{{ sec.title }}</summary>
+    {% for x in sec.articles %}<a href="/docs/{{ x.slug }}"{% if x.slug == a.slug %} aria-current="page"{% endif %}>{{ x.title }}</a>{% endfor %}
+  </details>
+  {% endfor %}
+</nav>
+<div class="kb-main">
+<nav class="crumbs small" aria-label="Breadcrumb"><a href="/docs">Help centre</a> <span aria-hidden="true">›</span> {{ section.title }}</nav>
+<article class="prose kb-article">
+{% if a.audience %}<p class="kb-for small"><span class="badge">For {{ a.audience }}</span></p>{% endif %}
+{{ a.html | safe }}
+</article>
+{% if a.toc|length > 2 %}
+<nav class="kb-toc card" aria-label="On this page"><h2 class="h3">On this page</h2><ul>
+{% for id, name in a.toc %}<li><a href="#{{ id }}">{{ name }}</a></li>{% endfor %}
+</ul></nav>
+{% endif %}
+<nav class="kb-next" aria-label="Previous and next">
+  {% if before %}<a class="card" href="/docs/{{ before.slug }}" rel="prev"><span class="small muted">Previous</span><strong>{{ before.title }}</strong></a>{% else %}<span></span>{% endif %}
+  {% if after %}<a class="card" href="/docs/{{ after.slug }}" rel="next"><span class="small muted">Next</span><strong>{{ after.title }}</strong></a>{% endif %}
+</nav>
+<p class="small muted kb-version">Written for AT SUITE {{ kb.version }}. Something not right, or not here? <a href="/contact?kind=support">Tell support</a>.</p>
+</div>
+</div></div>
+{% endblock %}
