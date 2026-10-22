@@ -4,7 +4,7 @@ const CueList = (() => {
   const { esc, api, post, put, del, upload, guard, toast, fmtTime, timerDisplay } = AT;
   const END = { none: "Keep going (overtime)", stop: "Stop at zero", "load-next": "Load next", "play-next": "Play next" };
   const TYPES = { "count-down": "Count down", "count-up": "Count up", clock: "Clock", none: "No timer" };
-  const dur = (ms) => fmtTime(ms).replace(/^\+/, "");
+  const dur = (ms) => fmtTime(ms).replace(/^-/, "");
   const parse = (s) => {
     const p = String(s).trim().split(":").map(Number);
     if (!s.trim() || p.some(isNaN)) return null;
@@ -21,19 +21,19 @@ const CueList = (() => {
       <div class="clock bigclock" data-clock>--:--</div>
       <div data-now style="font-weight:600"></div><div class="muted small" data-next></div>
       <div class="row" style="margin-top:.6rem;flex-wrap:wrap">
-        <button class="primary" data-a="go" title="Load the next cue and start it">GO ▶</button>
-        <button data-a="toggle">Start / pause</button><button data-a="stop">Stop</button>
+        <button class="btn-go" data-a="go" title="Start what is loaded, or load the next cue and start it">GO ▶</button>
+        <button class="btn-go" data-a="toggle" data-toggle title="Start the timer, or pause it while it runs">▶ Start</button><button class="btn-stop" data-a="stop" title="Stop and clear the timer (and its blink)">■ Stop</button>
         <button data-a="previous" title="Load the previous cue">◀ Prev</button><button data-a="next" title="Load the next cue without starting">Next ▶</button>
         <button data-add="-60000">−1m</button><button data-add="60000">+1m</button>
       </div>
       <div class="row" style="margin-top:.5rem;flex-wrap:wrap">
-        <button data-sw="blink" title="Flash the timer (and the message) on the stage screens">Blink</button>
+        <button data-sw="blink" title="Flash the stage message, and the timer in its danger time. The timer flashes by itself once its time is up; Stop ends it.">Blink</button>
         ${window.TimerPanel ? "" : '<button data-sw="clock" title="Show the time of day on the stage screens instead of the timer">Clock</button>'}
         <button data-sw="blackout" title="Blank the stage screens">Blackout</button>
       </div>
       <div class="row" style="margin-top:.5rem"><input data-msg class="grow" placeholder="Message to the stage">
         <button data-show>Show</button><button data-hide>Hide</button></div>
-      <label class="small muted" style="display:flex;gap:.3rem;align-items:center;margin:.4rem 0 0" title="Blinks the stage timer when a cue reaches its danger time, and stops when the next one starts"><input type="checkbox" data-flash style="width:auto">Flash the timer at danger</label>
+      <label class="small muted" style="display:flex;gap:.3rem;align-items:center;margin:.4rem 0 0" title="Blinks the stage timer when a cue reaches its danger time, and stops with Stop or when the next one starts"><input type="checkbox" data-flash style="width:auto">Flash the timer at danger</label>
       <div data-tp></div>
       <details style="margin-top:.6rem" open><summary><b>Cue list</b> <span class="muted small" data-count></span></summary>
         <div class="cues" data-list></div>
@@ -69,7 +69,8 @@ const CueList = (() => {
         const id = +row.dataset.q, i = cues.findIndex((q) => q.id === id);
         row.querySelector("[data-load]").onclick = () => act("load", { cue_id: id });
         row.querySelector("[data-edit]").onclick = () => startEdit(cues[i]);
-        row.querySelector("[data-del]").onclick = () => confirm(`Delete cue ${cues[i].cue || ""} ${cues[i].title}${s && s.cue && s.cue.id === id ? " (it's on the timer now)" : ""}?`) && guard(() => del(`/api/timers/${roomId}/cues/${id}`));
+        row.querySelector("[data-del]").onclick = async () => (await AT.ask(`Delete cue ${cues[i].cue || ""} ${cues[i].title}${s && s.cue && s.cue.id === id ? " (it's on the timer now)" : ""}?`, { yes: "Delete", danger: true })) &&
+          guard(() => del(`/api/timers/${roomId}/cues/${id}`)).catch(() => {});
         const move = (d) => { const ids = cues.map((q) => q.id); ids.splice(i + d, 0, ids.splice(i, 1)[0]); guard(() => post(`/api/timers/${roomId}/cues/reorder`, { ids })); };
         row.querySelector("[data-up]").onclick = () => move(-1);
         row.querySelector("[data-down]").onclick = () => move(1);
@@ -105,16 +106,17 @@ const CueList = (() => {
       e.target.value = "";
     };
     // Every timer button shows its result straight away from the reply, without waiting for the live feed.
-    const act = (path, body) => guard(() => link(path, body)).then(apply, () => {});
-    el.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a));
-    el.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => act("add", { delta_ms: +b.dataset.add }));
+    // The press shows at once (TimerLink works it out here first) and the button stays pressed until the server answers.
+    const act = (path, body, btn) => AT.busy(btn, guard(() => link(path, body))).then(apply, () => {});
+    el.querySelectorAll("[data-a]").forEach((b) => b.onclick = () => act(b.dataset.a, undefined, b));
+    el.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => act("add", { delta_ms: +b.dataset.add }, b));
     $("[data-show]").onclick = () => {
       const text = $("[data-msg]").value.trim();
       if (!text) { toast("Type the message first", "bad"); $("[data-msg]").focus(); return; }
-      act("message", { message: text, message_visible: true });
+      act("message", { message: text, message_visible: true }, $("[data-show]"));
     };
     $("[data-msg]").onkeydown = (e) => { if (e.key === "Enter") $("[data-show]").click(); };
-    el.querySelectorAll("[data-sw]").forEach((b) => b.onclick = () => act(b.dataset.sw, {}));
+    el.querySelectorAll("[data-sw]").forEach((b) => b.onclick = () => act(b.dataset.sw, {}, b));
     api("/api/timers-views").then((views) => {
       const sel = $("[data-views]");
       sel.insertAdjacentHTML("beforeend", views.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(""));
@@ -125,7 +127,7 @@ const CueList = (() => {
       };
     }).catch(() => {});
     $("[data-flash]").onchange = (e) => act("thresholds", { flash_danger: e.target.checked });
-    $("[data-hide]").onclick = () => act("message", { message_visible: false });
+    $("[data-hide]").onclick = () => act("message", { message_visible: false }, $("[data-hide]"));
 
     // The newest state wins, whether it came back from a button or over the live feed.
     function apply(x) {
@@ -146,11 +148,15 @@ const CueList = (() => {
       if (!s) return;
       const d = timerDisplay(s), c = $("[data-clock]");
       $("[data-flash]").checked = !!s.flash_danger;
-      for (const [k, on] of [["blink", s.message_blink], ["clock", s.show_clock], ["blackout", s.blackout]]) $(`[data-sw="${k}"]`).classList.toggle("lit", !!on);
+      for (const [k, on] of [["blink", s.message_blink], ["clock", s.show_clock], ["blackout", s.blackout]]) $(`[data-sw="${k}"]`)?.classList.toggle("lit", !!on);
+      // Start / pause says what a press will do: green Start, amber Pause while it runs.
+      const tg = $("[data-toggle]"), run = s.playback === "play", tl = run ? "❚❚ Pause" : "▶ Start";
+      if (tg.textContent !== tl) { tg.textContent = tl; tg.classList.toggle("btn-go", !run); tg.classList.toggle("btn-pause", run); }
       // Only touch the page when something changed: ten rewrites a second make the desk stutter.
       const put = (n, t) => { if (n.textContent !== t) n.textContent = t; };
       put(c, d.text);
-      if (c.className !== "clock bigclock " + d.cls) c.className = "clock bigclock " + d.cls;
+      const cc = "clock bigclock " + d.cls + (d.blink ? " blink" : "");
+      if (c.className !== cc) c.className = cc; // setting it again would restart the flash
       put($("[data-now]"), (s.cue ? `${s.cue.cue ? s.cue.cue + " · " : ""}` : "") + (s.title || "") + (s.playback === "pause" ? "  (paused)" : ""));
       put($("[data-next]"), (s.next ? `Next: ${s.next.title} (${dur(s.next.duration_ms)})` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : ""));
     }

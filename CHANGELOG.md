@@ -5,7 +5,7 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
-## 1.20.6
+## 1.20.9
 
 **Chat, notes, links, help calls and notifications feel like Messenger and Facebook**
 
@@ -20,6 +20,42 @@ the GitHub release).
 - In the server console, Help requests is now a help desk: the calls on the left, the room's chat on the right, so admins can answer straight away
 - The bell shows a red count of new chat, help calls, handover notes and problems, with All/Unread tabs and New/Earlier sections; timer warnings still pop up but never go in the count
 - The top bar shows only this laptop's room name; techs can no longer pick another room there
+- The manager view (1.20.8) gets the same look: Messenger-style chat, and help requests as cards with On my way, Reply and Resolved
+
+## 1.20.8
+
+Admins and managers get their own screen in the Windows app: the manager view.
+
+- On a tech laptop, an admin or manager signs in on the start screen with their account and gets the manager view instead of a room's workspace. They don't pick a room or Main/Backup PC. Techs see no change.
+- The manager view is a desk of windows like the tech workspace: every room's timer, help requests (with On my way and Resolved), the pre-show check, laptops, chat, password resets, recent activity and the console's pages. Choose what to show ticks each window on or off, windows move, dock and tab, and the Layout menu saves layouts. Each person's layout is kept on that laptop.
+- Full console opens the admin portal in the same window. Work a room signs out of the manager view so an admin or manager can start the day in a room like a tech.
+- With tech passwords off, techs still type their name, and the start screen has a link for admins and managers to sign in with their account.
+- The laptop keeps reporting in while it shows the manager view, so it doesn't look offline in Laptops, and it still answers Identify, Reload and the overlay.
+- The manager view also opens at /manage in any browser or on a phone, and the console's side bar links to it.
+
+## 1.20.7
+
+The room timer flashes only when it needs to, and the timer buttons say what they do.
+
+**Blink**
+- The timer's numbers flash only once the time is up (at 0:00 and on into overtime), or in the danger time when Blink or "Flash the timer at danger" is on. Before, Blink made them flash at any time, even with minutes left.
+- Stop clears the blink as well as the timer, so nothing is left flashing on stage. Before, a blink switched on by "Flash the timer at danger" stayed on after Stop.
+- Blink on its own still flashes a stage message that is showing.
+- The same rule on every screen: the stage views, backstage, the tech workspace, the console and the top bar.
+
+**Timer buttons**
+- GO and Start are green, Pause is amber and Stop is red. Start / pause now reads Start or Pause, whichever a press will do.
+- A button lights up the moment it's pressed and stays pressed until the server has it, so a press is never lost or pressed twice by mistake.
+
+**Quick messages**
+- Admins and managers can type a new quick message under the list in the workspace and save it for every room.
+- The console's Timers page has a Quick messages box to change the whole list, or put back the defaults.
+
+**Fixed**
+- "Back to the defaults" for quick messages, deleting a cue, sending the day's sessions to the timer, and the captions' "back to default look" and delete transcript did nothing in the laptop app. They ask in the page now.
+- Times shown without a sign (cue lengths, elapsed time) no longer pick up a minus.
+- Passwords saved before 1.20.0 sign in again (and are saved the new way at that sign-in), old Companion API keys work again, and signing out finds sessions of either kind. Ported from 1.20.5.
+- Captions from the microphone start again in the browser and the laptop app: the page's security policy allows the audio worklet. Ported from 1.20.5.
 
 ## 1.20.4
 

@@ -230,6 +230,11 @@ def create_app() -> FastAPI:
     def node_page():
         return page("node.html")
 
+    @app.get("/manage", include_in_schema=False)
+    def manage_page():
+        # The manager view: what admins and managers get when they sign in on a laptop or phone.
+        return page("manage.html")
+
     @app.get("/screen", include_in_schema=False)
     def screen_page():
         return page("screen.html")

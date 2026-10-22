@@ -269,7 +269,7 @@
         for (const [id, st] of Object.entries(live)) {
           const card = dash.querySelector(`[data-room="${id}"]`); if (!card || !st) continue;
           const d = AT.timerDisplay(st), c = card.querySelector(".clock");
-          c.textContent = d.text; c.className = "clock " + d.cls;
+          c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
           card.querySelector(".now").textContent = (st.cue?.cue ? st.cue.cue + " · " : "") + (st.title || "") + (st.playback === "pause" ? " (paused)" : "");
           card.querySelector(".next").textContent = (st.next ? `Next: ${st.next.title}` : "") + (st.message_visible ? `  ·  On stage: ${st.message}` : "");
         }
@@ -328,6 +328,21 @@
   }
 
   // ------------------------------------------------------------- timers --
+  // The quick messages: one per line, saved on the server for every room until changed again.
+  async function quickMessages(box) {
+    const r = await api("/api/timers-quick-messages").catch(() => null);
+    if (!r) { box.innerHTML = '<p class="muted small">Couldn\'t load the quick messages.</p>'; return; }
+    box.innerHTML = `<label>Quick messages, one per line</label><textarea data-qm rows="10" style="min-height:12rem">${esc(r.messages.join("\n"))}</textarea>
+      <div class="row" style="justify-content:flex-end;margin-top:.5rem"><button data-qmreset>Back to the defaults</button><button class="primary" data-qmsave>Save messages</button></div>`;
+    const save = box.querySelector("[data-qmsave]");
+    save.onclick = () => AT.busy(save, guard(() => put("/api/timers-quick-messages", { messages: box.querySelector("[data-qm]").value.split("\n") })))
+      .then((x) => { if (x) { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast(`${x.messages.length} quick messages saved`, "good"); } }, () => {});
+    box.querySelector("[data-qmreset]").onclick = async () => {
+      if (!(await AT.ask("Put the quick messages back to the defaults? The ones saved now are replaced.", { yes: "Back to the defaults" }))) return;
+      guard(() => del("/api/timers-quick-messages")).then((x) => { box.querySelector("[data-qm]").value = x.messages.join("\n"); toast("Quick messages are back to the defaults", "good"); }, () => {});
+    };
+  }
+
   async function timers(el) {
     // Preview only: techs run timers and cue lists from their workspace. This
     // page watches every room and routes the remote screens.
@@ -338,7 +353,10 @@
       <div class="grid" id="tg"></div>
       <div class="row${boot.modules.fleet === false ? " hidden" : ""}" style="justify-content:space-between;margin-top:1.4rem"><h2>Screens</h2><span class="muted small">Pick what each remote screen shows. A screen can also choose for itself: tap its top-left corner 5 times.</span></div>
       ${boot.modules.fleet === false ? "" : '<div class="panel" id="screens"></div>'}
+      <div class="row" style="justify-content:space-between;margin-top:1.4rem"><h2>Quick messages</h2><span class="muted small">The ready-made messages techs tap to put on stage, in every room's workspace.</span></div>
+      <div class="panel" id="qmsgs"></div>
       <h2 style="margin-top:1.4rem">Views</h2><div class="panel" id="views"></div>`;
+    quickMessages(el.querySelector("#qmsgs"));
     const grid = el.querySelector("#tg");
     for (const r of boot.rooms) {
       states[r.id] = await api(`/api/timers/${r.id}`);
@@ -359,7 +377,7 @@
       for (const [id, s] of Object.entries(states)) {
         const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
         const d = AT.timerDisplay(s), c = card.querySelector(".clock");
-        c.textContent = d.text; c.className = "clock " + d.cls;
+        c.textContent = d.text; c.className = "clock " + d.cls + (d.blink ? " blink" : "");
         card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
         card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
       }
