@@ -294,48 +294,76 @@
   }
 
   // ------------------------------------------------------------- timers --
-  async function timers(el) {
-    // Preview only: techs run timers and cue lists from their workspace. This
-    // page watches every room and routes the remote screens.
-    const states = {};
+  // Live: every room's timer. Screens: what each remote screen shows. Views: every timer
+  // view, with a preview. Layout designer: make your own views (layoutdesigner.js).
+  let timersEdit = null; // the designed view to open in the layout designer
+  async function timers(el, sub) {
+    const TABS = { live: "Live", screens: "Screens", views: "Views", designer: "Layout designer" };
+    if (boot.modules.fleet === false) delete TABS.screens;
+    const tab = TABS[sub] ? sub : "live";
+    el.innerHTML = `<h1>Timers</h1><div class="tabs sect">${Object.entries(TABS).map(([k, l]) => `<a class="btn${k === tab ? " on" : ""}" href="#/timers/${k}">${esc(l)}</a>`).join("")}</div><div id="tpage"></div>`;
+    const page = el.querySelector("#tpage"), isAdmin = boot.me.role === "admin";
     const views = await api("/api/timers-views?screens=1");
-    const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
-    el.innerHTML = `<h1>Timers</h1><p class="muted">Live preview of every room. Techs run the timer and cue list from their workspace; Companion can drive them with an API key.</p>
-      <div class="grid" id="tg"></div>
-      <div class="row${boot.modules.fleet === false ? " hidden" : ""}" style="justify-content:space-between;margin-top:1.4rem"><h2>Screens</h2><span class="muted small">Pick what each remote screen shows. A screen can also choose for itself: tap its top-left corner 5 times.</span></div>
-      ${boot.modules.fleet === false ? "" : '<div class="panel" id="screens"></div>'}
-      <h2 style="margin-top:1.4rem">Views</h2><div class="panel" id="views"></div>`;
-    const grid = el.querySelector("#tg");
-    for (const r of boot.rooms) {
-      states[r.id] = await api(`/api/timers/${r.id}`);
-      grid.insertAdjacentHTML("beforeend", `<div class="panel" data-room="${r.id}">
-        <div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><select class="tviews" data-room-views="${r.id}" title="Open a timer view in a new window" style="width:auto;padding:.15rem .3rem;font-size:.85rem"><option value="">Timer views ↗</option></select></div>
-        <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`);
-    }
-    api("/api/timers-views").then((views) => grid.querySelectorAll("[data-room-views]").forEach((sel) => {
-      const rid = sel.dataset.roomViews;
-      sel.insertAdjacentHTML("beforeend", views.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(""));
-      sel.onchange = () => {
-        const v = sel.value; sel.value = "";
-        if (v) open(v.startsWith("view:") ? `/room/${rid}/external/${encodeURIComponent(v.slice(5))}/` : `/timer/${rid}?view=${encodeURIComponent(v)}`, "_blank");
-      };
-    })).catch(() => {});
-    const tick = setInterval(() => {
-      if (!document.body.contains(grid)) return clearInterval(tick);
-      for (const [id, s] of Object.entries(states)) {
-        const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
-        const d = AT.timerDisplay(s), c = card.querySelector(".clock");
-        c.textContent = d.text; c.className = "clock " + d.cls;
-        card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
-        card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
+    const urlFor = (roomId, v) => v.startsWith("view:") ? `/room/${roomId}/external/${encodeURIComponent(v.slice(5))}/` : v === "bdng" ? `/room/${roomId}/external/bdng/` : `/timer/${roomId}?view=${encodeURIComponent(v)}`;
+    const states = {};
+    let pending = null;
+    view = { onEvent: (e) => {
+      if (e.type === "timer") states[e.data.room_id] = e.data;
+      if (tab === "screens" && e.topic === "fleet" && !pending) pending = setTimeout(() => { pending = null; renderScreens(); }, 1500);
+    } };
+
+    if (tab === "live") {
+      // Preview only: techs run timers and cue lists from their workspace.
+      page.innerHTML = `<p class="muted">Live preview of every room. Techs run the timer and cue list from their workspace; Companion can drive them with an API key.</p><div class="grid" id="tg"></div>`;
+      const grid = page.querySelector("#tg");
+      for (const r of boot.rooms) {
+        states[r.id] = await api(`/api/timers/${r.id}`);
+        grid.insertAdjacentHTML("beforeend", `<div class="panel" data-room="${r.id}">
+          <div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><select class="tviews" data-room-views="${r.id}" aria-label="Open a timer view for ${esc(r.name)} in a new window" style="width:auto;padding:.15rem .3rem;font-size:.85rem"><option value="">Timer views ↗</option></select></div>
+          <div class="clock" style="font-size:2.6rem">--:--</div><div class="small now" style="font-weight:600"></div><div class="muted small next"></div></div>`);
       }
-    }, 200);
+      if (!boot.rooms.length) grid.innerHTML = '<p class="muted">No rooms yet. Add them under Rooms.</p>';
+      grid.querySelectorAll("[data-room-views]").forEach((sel) => {
+        const rid = sel.dataset.roomViews;
+        sel.insertAdjacentHTML("beforeend", views.filter((v) => !v.test).map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join(""));
+        sel.onchange = () => { const v = sel.value; sel.value = ""; if (v) open(urlFor(rid, v), "_blank"); };
+      });
+      const tick = setInterval(() => {
+        if (!document.body.contains(grid)) return clearInterval(tick);
+        for (const [id, s] of Object.entries(states)) {
+          const card = grid.querySelector(`[data-room="${id}"]`); if (!card) continue;
+          const d = AT.timerDisplay(s), c = card.querySelector(".clock");
+          c.textContent = d.text; c.className = "clock " + d.cls;
+          card.querySelector(".now").textContent = (s.cue?.cue ? s.cue.cue + " · " : "") + (s.title || "") + (s.playback === "pause" ? " (paused)" : "");
+          card.querySelector(".next").textContent = (s.next ? `Next: ${s.next.title}` : "") + (s.message_visible ? `  ·  On stage: ${s.message}` : "");
+        }
+      }, 200);
+      return;
+    }
+
+    if (tab === "designer") {
+      page.innerHTML = '<div id="designer"></div>';
+      const slug = timersEdit; timersEdit = null;
+      const d = LayoutDesigner.mount(page.querySelector("#designer"), { boot, slug, onSaved: () => {} });
+      view.leaving = () => d.isDirty();
+      return;
+    }
+
+    if (tab === "screens") {
+      page.innerHTML = `<p class="muted small">Pick what each remote screen shows. A screen can also choose for itself: tap its top-left corner 5 times. Views made in the Layout designer show here as soon as they're saved.</p><div class="panel" id="screens"></div>`;
+      return renderScreens();
+    }
+
+    // ---- Views: every view a screen can show, with a preview
+    const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
+    return renderViews();
 
     async function renderScreens() {
-      const box = el.querySelector("#screens");
+      const box = page.querySelector("#screens");
       if (!box) return;
+      const viewOpts = (sel) => [...views, { id: "captions", name: "Captions" }].map((v) => `<option value="${esc(v.id)}" ${v.id === sel ? "selected" : ""}>${esc(v.name)}</option>`).join("");
       const [all, rel] = await Promise.all([api("/api/fleet/nodes"), api("/api/fleet/screen-agent").catch(() => ({}))]);
-      const screens = all.filter((n) => n.kind === "kiosk"), isAdmin = boot.me.role === "admin";
+      const screens = all.filter((n) => n.kind === "kiosk");
       const agentVer = (n) => n.info?.agent || "";
       const status = (n) => {
         const v = agentVer(n);
@@ -372,107 +400,69 @@
       });
     }
 
-    let editing = null; // the built view open in the form
     async function renderViews() {
-      const box = el.querySelector("#views"), isAdmin = boot.me.role === "admin";
-      const custom = views.filter((v) => !v.builtin && !v.design);
+      const builtins = views.filter((v) => v.builtin && !v.test), custom = views.filter((v) => !v.builtin && !v.design);
       const [designs, hcc, bdng] = await Promise.all([api("/api/timers-designs"), api("/api/timers-views/look/hcc"), api("/api/timers-views/look/bdng")]);
-      const builtins = views.filter((v) => v.builtin && !v.test);
-      const bdngView = custom.find((v) => v.slug === "bdng");
       const looks = Object.fromEntries(await Promise.all([...builtins, ...custom].map((v) => api(`/api/timers-views/look/${encodeURIComponent(v.id)}`).then((l) => [v.id, l]).catch(() => [v.id, null]))));
-      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">${esc(r.name)} ↗</a>`).join(" · ");
-      const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">${label}</span>
-        ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : `<span class="muted">${view === "bdng" ? "none" : "site logo"}</span>`}
-        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
-      const D = { name: "", background: "#000000", text: "#ffffff", timer_size: 24, title_size: 4, show_logo: false, show_title: true, show_next: false, show_progress: true, show_clock: false, show_message: true, show_status: true, show_secondary: true };
-      const SHOW = { show_logo: "Logo", show_title: "Title", show_next: "Next cue", show_progress: "Progress bar", show_clock: "Time of day", show_message: "Stage message", show_status: "Status bar", show_secondary: "Second line" };
-      box.innerHTML = `<p class="small muted">Built in: ${views.filter((v) => v.builtin && !v.test).map((v) => esc(v.name)).join(", ")}. All of them turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Overlay window is see-through, for a small window on a laptop or a bar across a screen.</p>
-        <div class="row small" style="flex-wrap:wrap;gap:.6rem">Status bar along the bottom (time now, state, cue, started, expected end):
-          ${builtins.map((v) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>${esc(v.name)}</label>`).join("")}</div>
-        <p class="small muted">Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to override it there.</p>
-        <h3>Standard and BDNG</h3>
-        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">No logo uploaded: the site logo from Settings → General.</p></td></tr>
-          <tr><td><b>BDNG sponsor clock</b> <span class="pill">imported view</span>
-            <div class="small">${bdngView ? boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/bdng/">${esc(r.name)} ↗</a>`).join(" · ") : '<span class="muted">Not imported yet: screens set to BDNG show the Standard view.</span>'}</div>
-            <div class="small" style="margin-top:.3rem">${isAdmin ? `<button class="small${bdngView ? "" : " primary"}" data-impbdng>${bdngView ? "Import again" : "Import BDNG view"}</button> ` : ""}<a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></div></td>
-            <td>${logoCell("bdng", "top", bdng.logos.top, "Top logo")}${logoCell("bdng", "bottom", bdng.logos.bottom, "Bottom logo")}
-            <div class="row small" style="gap:.4rem;margin-top:.3rem"><span style="min-width:6.5rem">Bottom text</span><input data-btext aria-label="Bottom text" value="${esc(bdng.options.bottom_text || "")}" ${isAdmin ? "" : "disabled"} class="grow">${isAdmin ? '<button class="small" data-savetext>Save</button>' : ""}</div></td></tr></table>
-        <p class="small muted">BDNG is the client's view exactly as it was built in Ontime (the original HTML, run unchanged on AT-SUITE's Ontime feed). It is an uploaded view like the ones below; the logos and bottom text here are read by it.</p>
-        <h3 style="margin-top:1rem">Your own views</h3>
-        <table>${designs.map((d) => `<tr><td><b>${esc(d.name)}</b><div class="small">${links(d.id)}</div></td>
-          <td>${isAdmin ? `<button class="small" data-edit="${esc(d.slug)}">Edit</button> <button class="small danger" data-deldesign="${esc(d.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">None yet.</td></tr>'}</table>
-        ${isAdmin ? `<form id="builder" class="panel" style="margin-top:.6rem">
-          <div class="row" style="justify-content:space-between"><b data-btitle>Build a view</b><a class="small hidden" data-preview target="_blank">Preview ↗</a></div>
-          <div class="row" style="flex-wrap:wrap;margin-top:.4rem"><input name="name" placeholder="Name, e.g. Green room" required class="grow">
-            <label class="small row" style="margin:0;gap:.3rem">Background <input type="color" name="background" style="width:2.6rem;padding:0"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Text <input type="color" name="text" style="width:2.6rem;padding:0"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Timer size <input type="number" name="timer_size" min="5" max="40" style="width:4.5rem"></label>
-            <label class="small row" style="margin:0;gap:.3rem">Title size <input type="number" name="title_size" min="1" max="12" style="width:4rem"></label></div>
-          <div class="row small" style="flex-wrap:wrap;margin-top:.4rem">Show: ${Object.entries(SHOW).map(([k, v]) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" name="${k}" style="width:auto">${v}</label>`).join("")}</div>
-          <div class="row small hidden" data-dlogo style="margin-top:.4rem"></div>
-          <div class="row" style="justify-content:flex-end;margin-top:.5rem"><button type="button" class="hidden" data-new>New view</button><button class="primary" data-bsave>Save view</button></div>
-          <p class="small muted" style="margin:.3rem 0 0">Sizes are a share of the screen width. Saved views show in the screen picker and in Screens above.</p></form>` : ""}
-        <h3 style="margin-top:1rem">Uploaded views</h3>
-        <p class="small muted">Custom views made for Ontime work as they are: upload the view's folder as a .zip (with index.html), or a single .html file. They get the room's live timer through Ontime's own websocket and data addresses. Status bar: an AT-SUITE strip over the view's bottom edge, off unless ticked.</p>
-        <table>${custom.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td class="small">${boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/${esc(v.slug)}/">${esc(r.name)} ↗</a>`).join(" · ")}</td>
-          <td class="small"><label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>Status bar</label></td>
-          <td>${isAdmin ? `<button class="small danger" data-delview="${esc(v.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">No custom views yet.</td></tr>'}</table>
-        ${isAdmin ? `<form class="row" id="upView" style="margin-top:.6rem"><input name="name" placeholder="View name, e.g. Lower third timer" required class="grow"><input type="file" name="file" accept=".zip,.html,.htm" required style="width:auto"><button class="primary">Upload view</button></form>` : ""}`;
-      const again = () => api("/api/timers-views?screens=1").then((v) => { views.splice(0, views.length, ...v); renderScreens(); return renderViews(); });
-      box.querySelectorAll("[data-delview]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/${b.dataset.delview}`)).then(() => timers(el)));
-      const f = box.querySelector("#upView");
-      if (f) f.onsubmit = (e) => { e.preventDefault(); guard(() => upload(`/api/timers-views?name=${encodeURIComponent(f.name.value)}`, f.file.files[0])).then(() => { toast("View added", "good"); timers(el); }); };
-      box.querySelectorAll("[data-logo]").forEach((i) => i.onchange = () => i.files[0] && guard(() => upload(`/api/timers-views/look/${i.dataset.logo.split("/")[0]}/logo/${i.dataset.logo.split("/")[1]}`, i.files[0])).then(() => { toast("Logo saved", "good"); renderViews(); }));
-      box.querySelectorAll("[data-unlogo]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/look/${b.dataset.unlogo.split("/")[0]}/logo/${b.dataset.unlogo.split("/")[1]}`)).then(renderViews));
-      box.querySelectorAll("[data-sbar]").forEach((i) => i.onchange = () => guard(() => put(`/api/timers-views/look/${encodeURIComponent(i.dataset.sbar)}`, { status_bar: i.checked })).then((r) => r && toast("Saved", "good")));
-      const ib = box.querySelector("[data-impbdng]");
-      if (ib) ib.onclick = () => (!bdngView || confirm("Replace the imported BDNG view with the one shipped with AT-SUITE?")) &&
-        guard(() => post("/api/timers-views/samples/bdng/import")).then((r) => { if (r) { toast("BDNG view imported", "good"); timers(el); } });
-      const st = box.querySelector("[data-savetext]");
-      if (st) st.onclick = () => guard(() => put("/api/timers-views/look/bdng", { bottom_text: box.querySelector("[data-btext]").value })).then(() => toast("Saved", "good"));
-      box.querySelectorAll("[data-deldesign]").forEach((b) => b.onclick = () => confirm("Remove this view? Screens showing it fall back to the stage timer.") && guard(() => del(`/api/timers-designs/${b.dataset.deldesign}`)).then(() => { if (editing === b.dataset.deldesign) editing = null; return again(); }));
-      const bf = box.querySelector("#builder");
-      if (!bf) return;
-      const fill = (d, slug) => {
-        editing = slug;
-        for (const [k, v] of Object.entries({ ...D, ...d })) if (bf[k]) bf[k].type === "checkbox" ? (bf[k].checked = v) : (bf[k].value = v);
-        bf.querySelector("[data-btitle]").textContent = slug ? `Edit ${d.name}` : "Build a view";
-        bf.querySelector("[data-new]").classList.toggle("hidden", !slug);
-        const pv = bf.querySelector("[data-preview]"), dl = bf.querySelector("[data-dlogo]");
-        pv.classList.toggle("hidden", !slug || !boot.rooms.length);
-        if (slug && boot.rooms.length) pv.href = `/timer/${boot.rooms[0].id}?view=built:${encodeURIComponent(slug)}`;
-        dl.classList.toggle("hidden", !slug);
-        if (slug) {
-          const url = designs.find((x) => x.slug === slug)?.logo;
-          dl.innerHTML = `Logo (top left): ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : '<span class="muted">none</span>'}
-            <input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" style="width:auto">${url ? '<button type="button" class="small" data-dunlogo>Remove</button>' : ""}`;
-          dl.querySelector("input").onchange = (e) => e.target.files[0] && guard(() => upload(`/api/timers-views/look/built:${slug}/logo/logo`, e.target.files[0])).then(() => { toast("Logo saved. Tick Show: Logo to use it.", "good"); renderViews(); });
-          dl.querySelector("[data-dunlogo]")?.addEventListener("click", () => guard(() => del(`/api/timers-views/look/built:${slug}/logo/logo`)).then(renderViews));
-        }
-      };
-      const cur = designs.find((x) => x.slug === editing);
-      cur ? fill(cur.design, cur.slug) : fill(D, null);
-      box.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => { const d = designs.find((x) => x.slug === b.dataset.edit); fill(d.design, d.slug); bf.scrollIntoView({ block: "nearest" }); });
-      bf.querySelector("[data-new]").onclick = () => fill(D, null);
-      bf.onsubmit = async (e) => {
-        e.preventDefault();
-        const body = {};
-        for (const k of Object.keys(D)) body[k] = bf[k].type === "checkbox" ? bf[k].checked : bf[k].type === "number" ? +bf[k].value : bf[k].value;
-        const r = await guard(() => editing ? put(`/api/timers-designs/${editing}`, body) : post("/api/timers-designs", body));
-        if (!r) return;
-        toast("View saved", "good");
-        editing = editing || r.slug;
-        await again();
-      };
-    }
+      const ABOUT = { hcc: "Logo top left, a big timer, the second line, the status bar and the progress bar. The view for the stage screens across the site.",
+        bdng: "The BDNG client's sponsor clock, exactly as it was built in Ontime: a logo at the top, the timer, a line of text and a logo at the bottom.",
+        minimal: "Just the numbers.", clock: "The time of day.", backstage: "A studio clock with the running order.",
+        preview: "For the speaker's own screen: the clock and help calls.", overlay: "See-through, for a small window on a laptop or a bar across a screen." };
+      // A logo slot: the picture if there is one, nothing if not.
+      const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem;margin:.2rem 0"><span style="min-width:6.5rem">${label}</span>
+        ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : ""}
+        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" aria-label="${esc(label)}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
+      const sbar = (id) => `<label class="row small" style="margin:0;gap:.3rem;font-weight:400"><input type="checkbox" data-sbar="${esc(id)}" style="width:auto" ${looks[id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>Status bar</label>`;
+      const pv = (id) => `<button class="small" data-pv="${esc(id)}">Preview</button>`;
+      const extra = { hcc: logoCell("hcc", "top", hcc.logos.top, "Logo"),
+        bdng: `${logoCell("bdng", "top", bdng.logos.top, "Top logo")}${logoCell("bdng", "bottom", bdng.logos.bottom, "Bottom logo")}
+          <div class="row small" style="gap:.4rem;margin-top:.3rem"><span style="min-width:6.5rem">Bottom text</span><input data-btext aria-label="Bottom text" value="${esc(bdng.options.bottom_text || "")}" ${isAdmin ? "" : "disabled"} class="grow" style="max-width:22rem">${isAdmin ? '<button class="small" data-savetext>Save</button>' : ""}</div>` };
+      page.innerHTML = `
+        <div class="panel" style="margin-bottom:1rem"><div class="row"><h2 style="margin:0">Preview</h2>
+            <select data-pvview aria-label="View to preview" style="width:auto">${views.filter((v) => !v.test).map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("")}</select>
+            <select data-pvroom aria-label="Room to preview" style="width:auto">${boot.rooms.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}</select>
+            <span class="grow"></span><a class="btn small" data-pvopen target="_blank" rel="noopener">Open full screen ↗</a></div>
+          ${boot.rooms.length ? '<div class="tv-preview" style="margin-top:.6rem"><iframe title="Preview of the timer view" tabindex="-1"></iframe></div>' : '<p class="muted small">Add a room to preview the views.</p>'}</div>
+        <h2>Built in</h2>
+        <div class="panel"><table>${builtins.map((v) => `<tr><td style="width:15rem"><b>${esc(v.name)}</b><div class="small muted">${esc(ABOUT[v.id] || "")}</div></td>
+          <td>${extra[v.id] || ""}</td><td style="width:7rem">${v.id === "clock" || v.id === "overlay" ? "" : sbar(v.id)}</td><td style="width:6rem">${pv(v.id)}</td></tr>`).join("")}</table>
+          <p class="small muted" style="margin:.6rem 0 0">They all turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to turn its status bar off or on there. ${bdng.uses_site_logo === false ? "" : ""}<a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></p></div>
+        <div class="row" style="justify-content:space-between;margin-top:1.4rem"><h2 style="margin:0">Your layouts</h2>${isAdmin ? '<a class="btn small primary" href="#/timers/designer" data-newlayout>New layout</a>' : ""}</div>
+        <div class="panel" style="margin-top:.6rem"><table>${designs.map((d) => `<tr><td><b>${esc(d.name)}</b>${d.design.layout ? "" : ' <span class="pill">older view</span>'}</td>
+          <td style="width:16rem;text-align:right">${pv(d.id)} ${isAdmin ? `<button class="small" data-edit="${esc(d.slug)}">Edit</button> <button class="small danger" data-deldesign="${esc(d.slug)}">Remove</button>` : ""}</td></tr>`).join("") ||
+          '<tr><td class="muted small">None yet. Make one in the Layout designer: place the timer, title, clock, logo and more wherever you want them.</td></tr>'}</table></div>
+        <h2 style="margin-top:1.4rem">Uploaded views</h2>
+        <div class="panel"><p class="small muted" style="margin-top:0">Custom views made for Ontime work as they are: upload the view's folder as a .zip (with index.html), or a single .html file. They get the room's live timer through Ontime's own websocket and data addresses. Status bar: an AT-SUITE strip over the view's bottom edge, off unless ticked.</p>
+          <table>${custom.map((v) => `<tr><td><b>${esc(v.name)}</b></td><td style="width:7rem">${sbar(v.id)}</td>
+            <td style="width:12rem;text-align:right">${pv(v.id)} ${isAdmin ? `<button class="small danger" data-delview="${esc(v.slug)}">Remove</button>` : ""}</td></tr>`).join("") || '<tr><td class="muted small">No uploaded views yet.</td></tr>'}</table>
+          ${isAdmin ? `<form class="row" id="upView" style="margin-top:.6rem"><input name="name" placeholder="View name, e.g. Lower third timer" aria-label="View name" required class="grow"><input type="file" name="file" aria-label="View file" accept=".zip,.html,.htm" required style="width:auto"><button class="primary">Upload view</button></form>` : ""}</div>`;
 
-    renderScreens();
-    renderViews();
-    let pending = null;
-    view = { onEvent: (e) => {
-      if (e.type === "timer") states[e.data.room_id] = e.data;
-      if (e.topic === "fleet" && !pending) pending = setTimeout(() => { pending = null; renderScreens(); }, 1500);
-    } };
+      // the preview: one view on one room, scaled down from a 1920 x 1080 screen
+      const frame = page.querySelector(".tv-preview iframe"), vs = page.querySelector("[data-pvview]"), rs = page.querySelector("[data-pvroom]"), op = page.querySelector("[data-pvopen]");
+      const showPreview = () => {
+        if (!boot.rooms.length) { op.classList.add("hidden"); return; }
+        const url = urlFor(rs.value, vs.value);
+        op.href = url;
+        if (frame.getAttribute("src") !== url) frame.src = url;
+      };
+      if (frame) new ResizeObserver(() => { frame.style.transform = `scale(${frame.parentElement.clientWidth / 1920})`; }).observe(frame.parentElement);
+      vs.onchange = rs.onchange = showPreview;
+      showPreview();
+      page.querySelectorAll("[data-pv]").forEach((b) => b.onclick = () => { vs.value = b.dataset.pv; showPreview(); page.querySelector(".panel").scrollIntoView({ behavior: "smooth", block: "start" }); });
+
+      const reload = () => timers(el, "views");
+      page.querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => { timersEdit = b.dataset.edit; location.hash = "#/timers/designer"; });
+      page.querySelectorAll("[data-deldesign]").forEach((b) => b.onclick = () => confirm("Remove this view? Screens showing it go back to the Standard view.") && guard(() => del(`/api/timers-designs/${b.dataset.deldesign}`)).then(reload));
+      page.querySelectorAll("[data-delview]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/${b.dataset.delview}`)).then(reload));
+      const f = page.querySelector("#upView");
+      if (f) f.onsubmit = (e) => { e.preventDefault(); guard(() => upload(`/api/timers-views?name=${encodeURIComponent(f.name.value)}`, f.file.files[0])).then(() => { toast("View added", "good"); reload(); }); };
+      const refresh = () => { renderViews(); };
+      page.querySelectorAll("[data-logo]").forEach((i) => i.onchange = () => i.files[0] && guard(() => upload(`/api/timers-views/look/${i.dataset.logo.split("/")[0]}/logo/${i.dataset.logo.split("/")[1]}`, i.files[0])).then(() => { toast("Logo saved", "good"); refresh(); }));
+      page.querySelectorAll("[data-unlogo]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/look/${b.dataset.unlogo.split("/")[0]}/logo/${b.dataset.unlogo.split("/")[1]}`)).then(refresh));
+      page.querySelectorAll("[data-sbar]").forEach((i) => i.onchange = () => guard(() => put(`/api/timers-views/look/${encodeURIComponent(i.dataset.sbar)}`, { status_bar: i.checked })).then((r) => r && toast("Saved", "good")));
+      const st = page.querySelector("[data-savetext]");
+      if (st) st.onclick = () => guard(() => put("/api/timers-views/look/bdng", { bottom_text: page.querySelector("[data-btext]").value })).then(() => toast("Saved", "good"));
+    }
   }
 
   // ----------------------------------------------------------- captions --
