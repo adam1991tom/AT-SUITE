@@ -132,10 +132,13 @@
     <div id="startName"><label>Your name</label><input name="operator" maxlength="60" placeholder="e.g. Adam"></div>
     <div id="startAcct" class="hidden"><label>Username</label><input name="username" autocomplete="username" maxlength="64">
       <label>Password</label><input name="password" type="password" autocomplete="current-password"></div>
+    <p class="muted small" id="startMgr" style="margin:.35rem 0 0">Admins and managers: sign in with your account to open the manager view. You don't need a room.</p>
+    <p class="small hidden" id="startAsTech" style="margin:.35rem 0 0">Sign in again to work a room on this laptop as a tech.</p>
+    <p class="small hidden" id="startUseAcct" style="margin:.35rem 0 0"><a href="#" id="startAcctLink">Admin or manager? Sign in with your account</a></p>
     <label>Room</label><div class="tiles" id="startRooms"></div>
     <label>This PC is the</label>
     <div class="opts">
-      <label class="opt"><input type="radio" name="mode" value="main" required><b>Main PC</b><span>The laptop on screen. No pop-ups or notifications at all.</span></label>
+      <label class="opt"><input type="radio" name="mode" value="main"><b>Main PC</b><span>The laptop on screen. No pop-ups or notifications at all.</span></label>
       <label class="opt"><input type="radio" name="mode" value="backup"><b>Backup PC</b><span>Pop-ups on top for chat and help. Never any sound.</span></label>
     </div>
     <p id="startErr" class="muted" style="color:#fecaca"></p>
@@ -374,16 +377,29 @@
     roomId = node.room?.id || null;
     let me = null;
     try { me = await api("/api/auth/me"); } catch (_) {}
+    // An admin or manager signed in on this laptop: the manager view, not a room's workspace.
+    if (me && me.kind === "account" && ["admin", "manager"].includes(me.role)) { location.replace("/manage"); return; }
     const signedIn = me && me.kind === "node" && me.id === node.node.id;
     if (!roomId || !node.node.operator || !node.node.mode || !signedIn) {
       $("start").classList.remove("hidden");
       $("startNode").textContent = node.node.name;
       const f = $("startForm"), withPw = node.tech_passwords !== false;
-      // With tech passwords on, each tech signs in with their own account; otherwise they type their name.
-      $("startName").classList.toggle("hidden", withPw);
-      $("startAcct").classList.toggle("hidden", !withPw);
-      f.operator.required = !withPw; f.username.required = withPw; f.password.required = withPw;
-      const pw = withPw ? AT.passwordForm(f, $("startErr")) : null;
+      // Back from the manager view to work a room: that admin or manager signs in as a tech.
+      let asTech = ""; try { asTech = sessionStorage.getItem("atsuit_as_tech") || ""; } catch (_) {}
+      // With tech passwords on, each tech signs in with their own account; otherwise they type their
+      // name, and an admin or manager can still sign in with their account for the manager view.
+      let useAcct = withPw;
+      const fields = () => {
+        $("startName").classList.toggle("hidden", useAcct);
+        $("startAcct").classList.toggle("hidden", !useAcct);
+        $("startUseAcct").classList.toggle("hidden", useAcct || !!asTech);
+        $("startMgr").classList.toggle("hidden", !useAcct || !!asTech);
+        $("startAsTech").classList.toggle("hidden", !(asTech && useAcct));
+        f.operator.required = !useAcct; f.username.required = useAcct; f.password.required = useAcct;
+      };
+      fields();
+      const pw = AT.passwordForm(f, $("startErr"));
+      $("startAcctLink").onclick = (e) => { e.preventDefault(); useAcct = true; fields(); f.username.focus(); };
       if (!withPw) f.operator.value = node.node.operator || "";
       if (node.node.mode) f.querySelector(`[name=mode][value=${node.node.mode}]`).checked = true;
       // Picking the room is the tech's job: every room is offered, with the laptop's room for today already picked.
@@ -396,17 +412,22 @@
       tiles();
       f.onsubmit = async (e) => {
         e.preventDefault();
-        if (!pick) { $("startErr").textContent = "Pick the room you're in."; return; }
         const mode = f.querySelector("[name=mode]:checked")?.value;
+        // A tech picks both; with an account the server says what's missing, as admins and managers need neither.
+        if (!useAcct && !pick) { $("startErr").textContent = "Pick the room you're in."; return; }
+        if (!useAcct && !mode) { $("startErr").textContent = "Pick Main PC or Backup PC."; return; }
         try {
           await post("/api/auth/logout").catch(() => {}); // this laptop, not someone's account
-          const who = withPw ? { username: f.username.value, password: f.password.value, ...pw.extra() } : { operator: f.operator.value };
-          await api("/api/nodes/me/start", { method: "POST", headers: nodeHdr(), body: { ...who, room_id: pick, mode } });
-          if (APP) { await APP.setSettings({ popups: mode === "backup" }); await APP.maximise?.().catch(() => {}); }
+          const who = useAcct ? { username: f.username.value, password: f.password.value, ...pw.extra(), as_tech: !!asTech } : { operator: f.operator.value };
+          const r = await api("/api/nodes/me/start", { method: "POST", headers: nodeHdr(), body: { ...who, room_id: pick || null, mode: mode || null } });
+          try { sessionStorage.removeItem("atsuit_as_tech"); } catch (_) {}
+          if (APP) await APP.maximise?.().catch(() => {});
+          if (r.view === "manage") { location.replace("/manage"); return; }
+          if (APP) await APP.setSettings({ popups: mode === "backup" });
           location.reload();
-        } catch (ex) { if (!pw?.handle(ex)) $("startErr").textContent = ex.message; }
+        } catch (ex) { if (!pw.handle(ex)) $("startErr").textContent = ex.message; }
       };
-      if (withPw) f.username.focus();
+      if (useAcct) f.username.focus();
       else if (!f.operator.value) f.operator.focus();
       return;
     }

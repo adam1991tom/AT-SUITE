@@ -125,3 +125,55 @@ def test_upgraded_sites_keep_name_sign_in(tmp_path, monkeypatch):
         assert db.get_setting(c, "tech_passwords", True) is False
     c = sqlite3.connect(config.cfg.db_path)
     assert "must_change" in [r[1] for r in c.execute("PRAGMA table_info(accounts)")]
+
+
+def test_admins_and_managers_get_the_manager_view_on_a_tech_laptop(strict):
+    """An admin or manager signing in on a tech laptop gets an account session for the
+    manager view, with no room or main/backup to pick; as_tech works a room like a tech."""
+    admin = strict
+    node = _tech_laptop(admin)
+    room = admin.get("/api/bootstrap").json()["rooms"][0]["id"]
+    admin.post("/api/admin/accounts", json={"username": "meg", "display_name": "Meg", "role": "manager", "password": "meg-first-1"})
+    admin.post("/api/admin/accounts", json={"username": "dee", "display_name": "Dee", "role": "tech", "password": "dee-first-1"})
+
+    lap = _other(admin)
+    # the first sign-in still changes the password
+    assert lap.post("/api/nodes/me/start", headers=node, json={"username": "meg", "password": "meg-first-1"}).status_code == 428
+    r = lap.post("/api/nodes/me/start", headers=node, json={"username": "meg", "password": "meg-first-1", "new_password": "meg-chosen-1"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "view": "manage", "role": "manager"}
+    me = lap.get("/api/auth/me").json()
+    assert me["kind"] == "account" and me["role"] == "manager"
+    assert lap.get("/api/preshow").status_code == 200  # the manager's own reach, nothing more
+    assert lap.get("/api/admin/settings").status_code == 403
+    # the laptop's day isn't started by the manager view
+    assert lap.get("/api/nodes/me", headers=node).json()["node"]["operator"] == ""
+    assert any(e["action"] == "node.manage" for e in admin.get("/api/admin/audit").json())
+
+    # signing out of the manager view leaves the laptop for the next person
+    lap.post("/api/auth/logout")
+    assert lap.get("/api/auth/me").status_code == 401
+
+    # a manager can work a room as a tech instead
+    tech = _other(admin)
+    assert tech.post("/api/nodes/me/start", headers=node, json={"username": "meg", "password": "meg-chosen-1", "as_tech": True}).status_code == 422
+    r = tech.post("/api/nodes/me/start", headers=node, json={"username": "meg", "password": "meg-chosen-1", "as_tech": True, "room_id": room, "mode": "main"})
+    assert r.json() == {"ok": True, "view": "tech"}
+    assert tech.get("/api/nodes/me", headers=node).json()["node"]["operator"] == "Meg"
+
+    # a tech still has to pick the room, and a password changed with a missing room isn't kept
+    t2 = _other(admin)
+    assert t2.post("/api/nodes/me/start", headers=node, json={"username": "dee", "password": "dee-first-1", "new_password": "dee-chosen-1", "mode": "main"}).status_code == 422
+    assert t2.post("/api/nodes/me/start", headers=node, json={"username": "dee", "password": "dee-first-1", "mode": "main", "room_id": room}).status_code == 428
+    r = t2.post("/api/nodes/me/start", headers=node, json={"username": "dee", "password": "dee-first-1", "new_password": "dee-chosen-1", "mode": "main", "room_id": room})
+    assert r.json() == {"ok": True, "view": "tech"}
+
+    # with tech passwords off, techs type their name and admins can still sign in for the manager view
+    admin.put("/api/admin/settings", json={"tech_passwords": False})
+    t3 = _other(admin)
+    assert t3.post("/api/nodes/me/start", headers=node, json={"operator": "Guest", "mode": "main"}).status_code == 422
+    assert t3.post("/api/nodes/me/start", headers=node, json={"username": "admin", "password": "correct-horse"}).json()["view"] == "manage"
+
+
+def test_manage_page_is_served(strict):
+    assert strict.get("/manage").status_code == 200
