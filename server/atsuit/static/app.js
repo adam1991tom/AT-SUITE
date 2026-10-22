@@ -389,10 +389,10 @@
       const builtins = views.filter((v) => v.builtin && !v.test);
       const bdngView = custom.find((v) => v.slug === "bdng");
       const looks = Object.fromEntries(await Promise.all([...builtins, ...custom].map((v) => api(`/api/timers-views/look/${encodeURIComponent(v.id)}`).then((l) => [v.id, l]).catch(() => [v.id, null]))));
-      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">${esc(r.name)} ↗</a>`).join(" · ");
+      const links = (id) => boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/timer/${r.id}?view=${encodeURIComponent(id)}">Preview</a>`).join(" · ");
       const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">${label}</span>
         ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : `<span class="muted">${view === "bdng" ? "none" : "site logo"}</span>`}
-        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
+        ${isAdmin && view === "bdng" ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
       const D = { name: "", background: "#000000", text: "#ffffff", timer_size: 24, title_size: 4, show_logo: false, show_title: true, show_next: false, show_progress: true, show_clock: false, show_message: true, show_status: true, show_secondary: true };
       const SHOW = { show_logo: "Logo", show_title: "Title", show_next: "Next cue", show_progress: "Progress bar", show_clock: "Time of day", show_message: "Stage message", show_status: "Status bar", show_secondary: "Second line" };
       box.innerHTML = `<p class="small muted">Built in: ${views.filter((v) => v.builtin && !v.test).map((v) => esc(v.name)).join(", ")}. All of them turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Overlay window is see-through, for a small window on a laptop or a bar across a screen.</p>
@@ -400,7 +400,7 @@
           ${builtins.map((v) => `<label class="row" style="margin:0;gap:.3rem"><input type="checkbox" data-sbar="${esc(v.id)}" style="width:auto" ${looks[v.id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>${esc(v.name)}</label>`).join("")}</div>
         <p class="small muted">Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to override it there.</p>
         <h3>Standard and BDNG</h3>
-        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">No logo uploaded: the site logo from Settings → General.</p></td></tr>
+        <table><tr><td><b>Standard</b><div class="small">${links("hcc")}</div></td><td>${logoCell("hcc", "top", hcc.logos.top, "Logo")}<p class="small muted" style="margin:.2rem 0 0">Uses the site logo from Settings → General.</p></td></tr>
           <tr><td><b>BDNG sponsor clock</b> <span class="pill">imported view</span>
             <div class="small">${bdngView ? boot.rooms.slice(0, 4).map((r) => `<a target="_blank" href="/room/${r.id}/external/bdng/">${esc(r.name)} ↗</a>`).join(" · ") : '<span class="muted">Not imported yet: screens set to BDNG show the Standard view.</span>'}</div>
             <div class="small" style="margin-top:.3rem">${isAdmin ? `<button class="small${bdngView ? "" : " primary"}" data-impbdng>${bdngView ? "Import again" : "Import BDNG view"}</button> ` : ""}<a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></div></td>
@@ -749,6 +749,10 @@
         res && ["Last update", `${res.result === "ok" ? '<span class="pill good">installed</span>' : '<span class="pill bad">failed</span>'} ${esc(res.version)} ${when(res.at)}${res.detail ? `<div class="small muted">${esc(res.detail)}</div>` : ""}`],
         u.live.length && ["Show on", `<span class="pill warn">waiting</span> A timer is running or paused in ${esc(u.live.join(", "))}. Nothing installs until it's stopped.`],
         u.requested && ["Install now", `<span class="pill warn">asked</span> ${esc(u.requested)} is installing now${u.live.length ? `, once the show in ${esc(u.live.join(", "))} is over` : ""}. The server restarts by itself in a minute or two. <button class="small" id="updCancel">Cancel</button>`]])}
+        ${u.progress && u.progress.step ? `<div class="panel" style="margin-top:.8rem"><h2>Installation progress</h2>
+          <div style="margin-bottom:.4rem"><b>${esc(u.progress.step)}</b>: ${esc(u.progress.message)}</div>
+          <div style="width:100%;background:var(--line);height:8px;border-radius:4px;overflow:hidden"><div style="width:${u.progress.percent}%;background:var(--accent);height:100%"></div></div>
+          <div class="small muted">${u.progress.percent}% complete</div></div>` : ""}
         <div class="row" style="margin-top:.8rem"><button id="updCheck">Check now</button>${u.available && !u.requested ? `<button class="primary" id="updInstall">Install ${esc(L.version)} now</button>` : ""}</div>
         <p class="small" id="updSaid" role="status" style="margin:.4rem 0 0"></p>
         ${u.host_updater ? "" : `<p class="small" style="color:var(--warn)">This server's automatic updater hasn't been in touch${u.host_seen_at ? ` since ${when(new Date(u.host_seen_at * 1000).toISOString())}` : ""}. Install now and Install by itself need it: on the server, run <code>sudo ./install.sh --updater</code> in the AT-SUITE folder once.</p>`}
@@ -760,7 +764,26 @@
         <p class="small muted">A read-only token (Contents: read; for the published image also read:packages). It stays on this server.${u.has_token ? ' <a href="#" id="updForget">Remove it</a>' : ""}</p>
         <div class="row" style="margin-top:.8rem"><button class="primary">Save</button></div></form></div>`;
     const again = () => admUpdates(a);
-    // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
+  let progressInterval = null;
+  // Auto-refresh when installation is in progress
+  if (u.progress && u.progress.step && u.progress.step !== "complete" && u.progress.step !== "failed") {
+    progressInterval = setInterval(() => {
+      guard(() => api("/api/admin/updates")).then((s) => {
+        if (s.progress && (s.progress.step === "complete" || s.progress.step === "failed")) {
+          clearInterval(progressInterval);
+        }
+        again();
+      }, () => {});
+    }, 2000);  // Refresh every 2 seconds during installation
+  }
+  // Clean up interval when leaving the tab
+  const originalAgain = again;
+  const cleanup = () => {
+    if (progressInterval) clearInterval(progressInterval);
+    removeEventListener("hashchange", cleanup);
+  };
+  addEventListener("hashchange", cleanup);
+  // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
     const said = (s) => s.helper ? ["This is a helper server. It updates with its main server.", ""]
       : s.error ? [`Couldn't check: ${s.error}`, "bad"]
       : s.available ? [`${s.latest.version} is out.`, "good"]

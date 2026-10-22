@@ -3,9 +3,9 @@
 Versions follow [semantic versioning](https://semver.org). To release, set
 `VERSION`, add a section here, merge to `ATSUITE`, then push a tag `vX.Y.Z` (or
 publish that release on GitHub); the release workflow publishes the image and
-the GitHub release.
+the GitHub release).
 
-## 1.20.2
+## 1.20.4
 
 The AI helper is a chat now, and it knows a lot more about fixing shows.
 
@@ -24,6 +24,39 @@ The AI helper is a chat now, and it knows a lot more about fixing shows.
 **Admins can read and change it**
 - Settings → AI helper → Tech guide lists every topic. Change one and your copy is used instead of the built-in one (Reset brings it back), or add your own topic. It points out questions that are written wrong.
 - Venue notes still come first, ahead of the guide.
+
+## 1.20.3
+
+**UI improvements and visual enhancements**
+
+- Timer display now shows negative time with "-" instead of "+"
+- Quick timer shortcuts made bigger for better touch targets
+- Pre-made message buttons enlarged for better visibility
+- Standard view links changed from "Room name ↗" to "Preview"
+- Removed logo upload from Standard view (now uses Settings → General only)
+- Buttons more responsive with hover lift effect and active depression
+- Added color-coded button classes: .btn-stop (red) and .btn-go (green)
+- Improved tactile feedback and visual hierarchy
+
+## 1.20.2
+
+**Installer-like progress display for updates**
+
+- Updates now show detailed progress like a real installer
+- Progress bar shows percentage complete
+- Step-by-step status: checking, downloading, building, stopping, starting, health check
+- Settings page auto-refreshes every 2 seconds during installation
+- update.sh reports progress at each stage of the update process
+- Clear visual feedback when installation completes or fails
+
+## 1.20.1
+
+**Critical bug fix** - Security headers caused server to fail on startup.
+
+- Fixed AttributeError in SecretsOutOfAddresses middleware
+- ASGI headers are a list of tuples, not a dict (fixed iteration logic)
+- This was causing 500 errors on health endpoint during updates
+- No other changes from 1.20.0
 
 ## 1.20.1
 
@@ -89,7 +122,6 @@ Check now in Settings → Updates says what it found.
 - Check now shows its answer next to the button: up to date, a new version is out, or why it couldn't check. Before, a check that changed nothing on the page looked like the button did nothing, and an error stayed hidden once the server had seen a release.
 - Check now asks GitHub even when updates are set to Off. Off still stops the checks the server does by itself.
 - The GitHub repository field is gone. Updates always come from AT SUITE's own releases, and a repository saved by an older version is ignored. The GitHub token stays.
->>>>>>> ATSUITE
 
 ## 1.10.2
 

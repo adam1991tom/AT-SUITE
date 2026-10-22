@@ -31,15 +31,22 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 button, .btn { background: var(--btn); color: var(--text); border: 1px solid var(--line); border-radius: var(--ctl-radius); padding: .3rem .9rem; min-height: var(--ctl-h);
   font: inherit; font-weight: 500; line-height: 1.25; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
-  transition: background-color .12s, border-color .12s, box-shadow .12s; }
-button:hover, .btn:hover { background: var(--btn-hover); border-color: color-mix(in srgb, var(--line) 70%, var(--muted)); }
-button:active, .btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,.2); }
+  transition: background-color .12s, border-color .12s, box-shadow .12s, transform .08s; }
+button:hover, .btn:hover { background: var(--btn-hover); border-color: color-mix(in srgb, var(--line) 70%, var(--muted)); transform: translateY(-1px); }
+button:active, .btn:active { box-shadow: inset 0 1px 2px rgba(0,0,0,.2); transform: translateY(0); }
 button.primary { background: var(--accent); border-color: color-mix(in srgb, var(--accent) 80%, #000); color: var(--accent-ink); font-weight: 600; }
-button.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #fff); border-color: var(--accent); }
-button.primary:active { background: var(--ember); border-color: var(--ember); color: #fff; }
+button.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #fff); border-color: var(--accent); transform: translateY(-1px); }
+button.primary:active { background: var(--ember); border-color: var(--ember); color: #fff; transform: translateY(0); }
 button.danger { color: var(--bad-ink); }
-button.danger:hover { background: #b42318; border-color: #b42318; color: #fff; }
+button.danger:hover { background: #b42318; border-color: #b42318; color: #fff; transform: translateY(-1px); }
 button.lit { background: var(--warn); border-color: var(--warn); color: #111; font-weight: 700; }
+/* Color-coded action buttons */
+button.btn-stop { background: #dc2626; border-color: #991b1b; color: #fff; }
+button.btn-stop:hover { background: #ef4444; border-color: #dc2626; transform: translateY(-1px); }
+button.btn-stop:active { background: #b91c1c; border-color: #991b1b; transform: translateY(0); }
+button.btn-go { background: #16a34a; border-color: #15803d; color: #fff; }
+button.btn-go:hover { background: #22c55e; border-color: #16a34a; transform: translateY(-1px); }
+button.btn-go:active { background: #15803d; border-color: #14532d; transform: translateY(0); }
 /* Something live on stage (a running timer, a message, the clock, blink, blackout): the button glows and pulses. */
 button.lit, button.live { animation: btn-live 1.6s ease-in-out infinite; }
 @keyframes btn-live { 0%, 100% { box-shadow: 0 0 0 0 var(--glow, rgba(250, 204, 21, .7)); filter: none; } 50% { box-shadow: 0 0 0 5px transparent; filter: brightness(1.3); } }
