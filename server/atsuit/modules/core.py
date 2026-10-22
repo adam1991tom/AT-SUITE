@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import os
 import platform
@@ -14,14 +13,13 @@ import sqlite3
 import subprocess
 import sys
 import time
-import zipfile
 from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import AfterValidator, BaseModel, Field
 
 from .. import VERSION, config, db, licence
@@ -855,33 +853,42 @@ def audit_log(limit: int = 200, p: Principal = Depends(require_manager)):
         return db.rows(c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (min(limit, 1000),)))
 
 
-@router.get("/api/admin/backup")
-def backup(p: Principal = Depends(require_admin)):
-    """Consistent snapshot of the database, uploads and key, as a zip."""
-    buf = io.BytesIO()
-    snap = config.cfg.data / ".backup.db"
-    src = db.connect()
-    dst = sqlite3.connect(snap)
-    try:
-        src.backup(dst)
-    finally:
-        dst.close()
-        src.close()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.write(snap, "atsuit.db")
-        key = config.cfg.data / "secret.key"
-        if key.exists():
-            z.write(key, "secret.key")
-        for f in config.cfg.uploads.rglob("*"):
-            if f.is_file():
-                z.write(f, f"uploads/{f.relative_to(config.cfg.uploads)}")
-        z.writestr("VERSION", VERSION)
-    snap.unlink(missing_ok=True)
+AUDIT_PDF_MAX = 20000
+
+
+@router.get("/api/admin/audit/pdf")
+def audit_pdf(q: str = Query("", max_length=200), p: Principal = Depends(require_manager)):
+    """The audit log as a PDF, newest first: every entry, or the ones matching the page's filter."""
+    from .backups import venue_zone
+    from .reports import Writer, latin
+
+    want = q.strip().lower()
+    with db.ro() as c:
+        zone, branding = venue_zone(c), get_branding(c)
+        rows = [r for r in c.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (AUDIT_PDF_MAX * 5,))
+                if not want or want in f"{r['actor']} {r['action']} {r['detail']}".lower()][:AUDIT_PDF_MAX]
+    now = datetime.now(zone)
+    d = {"organisation": branding.get("organisation") or "", "product": branding.get("product_name") or "AT-SUITE"}
+    def at(t: str) -> str:
+        try:
+            return datetime.fromisoformat(t).astimezone(zone).strftime("%d %b %Y %H:%M:%S")
+        except ValueError:
+            return t
+    count = f"{len(rows)} entr{'y' if len(rows) == 1 else 'ies'}" + (f' matching "{q.strip()}"' if want else "")
+    span = f", from {at(rows[-1]['at'])} to {at(rows[0]['at'])}" if rows else ""
+    w = Writer("audit log", "Audit log", [count + span,
+               f"Newest first. Times are {zone.key}. Made {now.strftime('%d %b %Y %H:%M')} by {d['product']} {VERSION} for {p.name}."],
+               f"{d['product']} audit log  \u00b7  {now.strftime('%d %b %Y')}", d, landscape=True)
+    if rows:
+        w.table((38, 40, 48, 139), ("When", "Who", "What", "Detail"),
+                [(at(r["at"]), r["actor"], r["action"], r["detail"]) for r in rows], size=7.5)
+    else:
+        w.para("Nothing in the audit log matches." if want else "The audit log is empty.")
     with db.tx() as c:
-        db.audit(c, p.name, "backup.download")
-    buf.seek(0)
-    return StreamingResponse(buf, media_type="application/zip",
-                             headers={"Content-Disposition": "attachment; filename=atsuit-backup.zip"})
+        db.audit(c, p.name, "audit.download", count)
+    name = f"Audit log {now.strftime('%Y-%m-%d')}.pdf"
+    return Response(w.output(), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{latin(name)}"', "Cache-Control": "no-store"})
 
 
 @router.get("/api/admin/diagnostics")
@@ -974,7 +981,7 @@ def server_info() -> dict:
                   for t in ("sites", "rooms", "accounts", "nodes", "messages", "links", "help_requests", "api_keys")}
         roles = dict(c.execute("SELECT role, COUNT(*) FROM accounts GROUP BY role").fetchall())
         open_help = c.execute("SELECT COUNT(*) FROM help_requests WHERE status!='resolved'").fetchone()[0]
-        last_backup = c.execute("SELECT at, actor FROM audit_log WHERE action='backup.download' ORDER BY id DESC LIMIT 1").fetchone()
+        last_backup = c.execute("SELECT at, actor FROM audit_log WHERE action IN ('backup.made','backup.download') ORDER BY id DESC LIMIT 1").fetchone()
         schema = c.execute("SELECT version FROM schema_version").fetchone()[0]
         sites = db.rows(c.execute("SELECT name, timezone FROM sites ORDER BY name"))
         lic = licence.current(c)

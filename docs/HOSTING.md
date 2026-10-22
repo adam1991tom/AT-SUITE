@@ -130,7 +130,7 @@ is pointed at `https://grandhall.atsuit.app`. No certificate to install: Cloudfl
 trusted everywhere, so browsers allow the microphone.
 
 What doesn't work from the cloud: things where the server reaches into the venue's own network
-(SSH control of old kiosk machines, and helper servers). Everything the laptops and screens do
+(SSH control of old kiosk machines). Everything the laptops and screens do
 themselves works.
 
 ## Testing it without any accounts

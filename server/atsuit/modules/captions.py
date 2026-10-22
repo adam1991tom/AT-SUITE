@@ -27,7 +27,6 @@ from pydantic import BaseModel, Field
 from .. import asr, config, db, dsp
 from ..hub import hub
 from ..security import Principal, decrypt, encrypt, require_admin, require_node, require_tech, require_user, ws_principal
-from . import cluster
 from .core import modules_enabled, require_module, room_or_404, site_ok
 
 router = APIRouter(dependencies=[Depends(require_module("captions"))])
@@ -85,13 +84,28 @@ class RoomState:
 rooms: dict[int, RoomState] = {}
 
 
+class Session:
+    """One room's recogniser on this server."""
+
+    def __init__(self, options: dict) -> None:
+        self.s = asr.engine.session(options)
+
+    async def feed(self, samples) -> list[dict]:
+        return await asyncio.to_thread(self.s.feed_samples, samples)
+
+    async def close(self) -> None:
+        pass
+
+
+def capacity() -> int:
+    """Rooms this server can caption at once."""
+    return config.cfg.asr_max_rooms if asr.engine.state == "ready" else 0
+
+
 def engine_status() -> dict:
     s = asr.engine.status()
     s["active_rooms"] = sum(1 for r in rooms.values() if r.ws)
-    s["max_rooms"] = cluster.capacity()
-    s["helpers"] = sum(1 for h in cluster.links.values() if h.ready)
-    if s["state"] != "ready" and s["helpers"]:  # a helper is doing the listening
-        s.update(state="ready", detail="")
+    s["max_rooms"] = capacity()
     return s
 
 
@@ -115,7 +129,6 @@ async def load_engine() -> None:
     with db.ro() as c:
         score = hotwords_score(c)
     vocab = all_vocabulary()
-    await cluster.push_config(vocab, score)
     await asyncio.to_thread(asr.engine.load, vocab, True, score)
     await hub.publish("fleet", "captions.engine", engine_status())
 
@@ -370,16 +383,15 @@ async def audio_in(ws: WebSocket, room_id: int):
     session = None
     if not local:
         active = sum(1 for r in rooms.values() if r.ws and not r.local)
-        if not (st.ws and not st.local) and active >= cluster.capacity():
+        if not (st.ws and not st.local) and active >= capacity():
             await ws.send_json({"type": "error", "message": "The server is captioning as many rooms as it can"})
             await ws.close(code=4001)
             return
-        try:
-            session = await cluster.start_session(room_id, st.options)
-        except RuntimeError as exc:
-            await ws.send_json({"type": "error", "message": str(exc)})
+        if asr.engine.state != "ready":
+            await ws.send_json({"type": "error", "message": asr.engine.detail or "Speech recognition isn't ready"})
             await ws.close(code=4002)
             return
+        session = Session(st.options)
     if st.ws:  # newest source wins, so a tech can take over from another laptop
         try:
             await st.ws.send_json({"type": "replaced", "by": p.name})
@@ -410,7 +422,7 @@ async def audio_in(ws: WebSocket, room_id: int):
             samples = st.eq.process(dsp.pcm16_to_float(data))
             try:
                 events = await session.feed(samples)
-            except RuntimeError as exc:  # its helper went and nothing else has room
+            except RuntimeError as exc:
                 await ws.send_json({"type": "error", "message": str(exc)})
                 await ws.close(code=4002)
                 break
@@ -694,7 +706,7 @@ async def save_settings(room_id: int, body: SettingsIn, p: Principal) -> dict:
             pass
     if appearance_changed:
         await hub.publish(f"captions:{room_id}", "appearance", cfg["appearance"])
-    if reload_engine and (asr.engine.state in ("ready", "error") or cluster.links):
+    if reload_engine and asr.engine.state in ("ready", "error"):
         asyncio.get_running_loop().create_task(load_engine())
     return out
 
@@ -809,7 +821,7 @@ async def correct(room_id: int, body: CorrectionIn, p: Principal = Depends(requi
         room_or_404(c, room_id, p)
         added = add_correction(c, room_id, original, corrected, p.name)
         db.audit(c, p.name, "captions.correction", f"room {room_id}: {original} -> {corrected}")
-    if added and (asr.engine.state in ("ready", "error") or cluster.links):
+    if added and asr.engine.state in ("ready", "error"):
         # Rooms already captioning keep going and pick up the new word at their next pause.
         asyncio.get_running_loop().create_task(load_engine())
     return {"ok": True, "added_to_vocabulary": added}

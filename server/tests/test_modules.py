@@ -153,61 +153,6 @@ def test_legacy_kiosk_agent(admin):
     assert admin.post("/heartbeat", json={"host": "atpi1"}).status_code == 404
 
 
-def test_imports(admin):
-    rooms_txt = ("CC|http://10.100.70.101:4001/external/HCC/|HCC STANDARD;\n"
-                 "CC|http://10.100.70.101:8000/emulator/CC|BUTTONS CONTROL;\n"
-                 "KING|http://10.100.70.101:4021/studio|STUDIO CLOCK;\n"
-                 "from flask import Flask\napp = Flask(__name__)\n")
-    r = admin.post("/api/admin/import/rooms-txt", files={"file": ("rooms.txt", rooms_txt.encode())}).json()
-    assert r["links"] == 3 and r["rooms_created"] == ["KING"] and r["skipped_count"] == 1
-    again = admin.post("/api/admin/import/rooms-txt", files={"file": ("rooms.txt", rooms_txt.encode())}).json()
-    assert again["links"] == 0 and again["duplicates"] == 3
-    tsv = ("BOARD/ITEM\tNAME\tHREF\tPING_URL\napp\tATLAP1\tHTTP://10.100.70.101\t\n"
-           "app\tIP SCANNER\thttp://10.100.70.100:5000/\t\nboard\tADMIN\tpublic=0\t\n")
-    r = admin.post("/api/admin/import/homarr", files={"file": ("h.tsv", tsv.encode())}).json()
-    assert r["links"] == 2
-    links = admin.get("/api/dashboard/links").json()
-    assert {l["label"]: l["board"] for l in links if l["room_id"] is None} == {"ATLAP1": "public", "IP SCANNER": "admin"}
-    r = admin.post("/api/admin/import/device-state",
-                   files={"file": ("state.json", b'{"ATPI2": {"ip": "10.100.70.131", "mac": "aa"}}')}).json()
-    assert r["nodes_created"] == 1
-
-
-def test_roomcomms_import(admin, tmp_path):
-    import hashlib, io, sqlite3, zipfile
-    from cryptography.fernet import Fernet
-    key = Fernet.generate_key()
-    f = Fernet(key)
-    p = tmp_path / "roomcomms.db"
-    c = sqlite3.connect(p)
-    c.executescript("""
-    CREATE TABLE accounts(id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT, role TEXT, active INTEGER);
-    CREATE TABLE rooms(id INTEGER PRIMARY KEY, name TEXT, short_name TEXT);
-    CREATE TABLE operators(id INTEGER PRIMARY KEY, name TEXT);
-    CREATE TABLE messages(id INTEGER PRIMARY KEY, scope TEXT, scope_id INTEGER, sender TEXT, body TEXT, priority TEXT, created_at TEXT);
-    CREATE TABLE help_requests(id INTEGER PRIMARY KEY, room_id INTEGER, room_name TEXT, requested_by TEXT, category TEXT, description TEXT, priority TEXT, status TEXT, created_at TEXT);
-    """)
-    salt = "cd" * 16
-    c.execute("INSERT INTO accounts VALUES(1,'sam',?,'Sam','technician',1)",
-              (f"{salt}${hashlib.pbkdf2_hmac('sha256', b'oldpass1', salt.encode(), 200000).hex()}",))
-    c.execute("INSERT INTO rooms VALUES(7,'Q1','Q1')")
-    c.execute("INSERT INTO messages VALUES(1,'room',7,'Sam',?,'normal','2026-01-01T00:00:00')", (f.encrypt(b"old room msg").decode(),))
-    c.execute("INSERT INTO messages VALUES(2,'all',NULL,'Sam',?,'urgent','2026-01-01T00:00:01')", (f.encrypt(b"venue msg").decode(),))
-    c.execute("INSERT INTO messages VALUES(3,'dm',1,'Sam',?,'normal','2026-01-01T00:00:02')", (f.encrypt(b"dm").decode(),))
-    c.execute("INSERT INTO help_requests VALUES(1,7,'Q1','Sam','av','No sound','urgent','open','2026-01-01')")
-    c.commit(); c.close()
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as z:
-        z.write(p, "data/roomcomms.db")
-        z.writestr("data/.encryption_key", key)
-    r = admin.post("/api/admin/import/roomcomms", files={"file": ("rc.zip", buf.getvalue())}).json()
-    assert r["accounts"] == 1 and r["messages"] == 2 and r["messages_skipped_dm"] == 1 and r["rooms_created"] == ["Q1"]
-    assert admin.post("/api/admin/import/roomcomms", files={"file": ("rc.zip", buf.getvalue())}).status_code == 409
-    assert admin.post("/api/auth/login", json={"username": "sam", "password": "oldpass1"}).status_code == 200
-    q1 = next(ch for ch in admin.get("/api/comms/channels").json() if ch["name"] == "Q1")
-    assert admin.get(f"/api/comms/channels/{q1['id']}/messages").json()[0]["body"] == "old room msg"
-
-
 def test_dashboard_permissions(admin):
     admin.post("/api/dashboard/links", json={"label": "Secret", "url": "http://x", "board": "admin"})
     admin.post("/api/dashboard/links", json={"label": "Public", "url": "http://y"})

@@ -240,7 +240,7 @@
   const PAGES = [["dashboard", "Dashboard", "", "dashboard"], ["chat", "Chat", "", "comms"], ["help", "Help requests", "", "comms"], ["timers", "Timers", "", "timers"],
     ["presenter", "Presenters", "", "presenter"], ["captions", "Captions", "", "captions"], ["reports", "Show reports", "manager"], ["rooms", "Rooms", "manager"],
     ["laptops", "Laptops & screens", "", "fleet"], ["people", "People", "manager"], ["links", "Links", "manager", "dashboard"], ["settings", "Settings", "admin"],
-    ["licence", "Licence", "admin"], ["servers", "Servers", "admin"], ["backups", "Backups", "admin"], ["audit", "Audit log", "manager"]];
+    ["licence", "Licence", "admin"], ["backups", "Backups", "admin"], ["audit", "Audit log", "manager"]];
   $("pages").innerHTML = PAGES.filter(([, , role, mod]) => (role !== "admin" || isAdmin) && (!mod || on(mod)))
     .map(([k, t]) => `<a class="tile" href="/#/${k}">${esc(t)}</a>`).join("");
 

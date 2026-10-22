@@ -639,9 +639,11 @@ def cmd_backup(a) -> None:
                        "mkdir -p /data/.snapshot && cp /data/atsuit.db /data/.snapshot/atsuit.db && "
                        "chown -R $(stat -c %u:%g /data) /data/.snapshot")
             # The live database files are left out (the snapshot is in), and so are caption
-            # transcripts (deleted after 12 hours; never kept in backups) and speech models.
+            # transcripts (deleted after 12 hours; never kept in backups), speech models and the
+            # venue server's own nightly backups (each is a whole copy; this backup is enough).
             restic(c, "backup", "--tag", f"venue:{slug}", "--host", "atcloud", "--json", "--quiet",
                    "--exclude", f"/venues/{slug}/models", "--exclude", f"/venues/{slug}/transcripts",
+                   "--exclude", f"/venues/{slug}/backups",
                    "--exclude", f"/venues/{slug}/atsuit.db", "--exclude", f"/venues/{slug}/atsuit.db-wal",
                    "--exclude", f"/venues/{slug}/atsuit.db-shm", "--exclude", f"/venues/{slug}/.snapshot/atsuit.db.part",
                    f"/venues/{slug}", volumes=[f"{vol}:/venues/{slug}:ro"])
@@ -670,10 +672,11 @@ def cmd_restore(a) -> None:
     say(f"{slug}: stopping and restoring {snap}…")
     docker("stop", "-t", "20", names(slug)["container"], check=False)
     owner = uid(image(c, t["version"]))
-    # Clear the venue's data (but not the shared model mount point or the transcripts, which never
-    # go in backups), restore into it, then make the snapshot the live database.
+    # Clear the venue's data (but not the shared model mount point, the transcripts or the venue's
+    # own nightly backups, which never go in this backup), restore into it, then make the snapshot
+    # the live database.
     docker("run", "--rm", "-v", f"{vol}:/data", HELPER_IMAGE, "sh", "-c",
-           "find /data -mindepth 1 -maxdepth 1 ! -name models ! -name transcripts -exec rm -rf {} +")
+           "find /data -mindepth 1 -maxdepth 1 ! -name models ! -name transcripts ! -name backups -exec rm -rf {} +")
     restic(c, "restore", f"{snap}:/venues/{slug}",
            "--tag", f"venue:{slug}", "--host", "atcloud", "--target", "/data", volumes=[f"{vol}:/data"])
     docker("run", "--rm", "-v", f"{vol}:/data", HELPER_IMAGE, "sh", "-c",

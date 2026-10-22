@@ -36,6 +36,7 @@ def test_show_report(admin, client, tmp_path):
 
     r = admin.get(f"/api/reports/{hd}/pdf")
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("attachment;")  # a download, not a page
     text = "".join(pg.extract_text() for pg in PdfReader(io.BytesIO(r.content)).pages)
     assert "Keynote: Priya Shah" in text and "Lectern mic is dead" in text and "Wrap up please" in text
     (tmp_path / "report.pdf").write_bytes(r.content)
@@ -46,12 +47,16 @@ def test_show_report(admin, client, tmp_path):
     assert [x["id"] for x in lst] == [saved["id"]]
     assert admin.get(f"/api/reports/saved/{saved['id']}.pdf").content[:4] == b"%PDF"
     from atsuit.modules import reports
-    assert reports.save_due(time.time() + 86400) == []  # already kept
-    assert admin.delete(f"/api/reports/saved/{saved['id']}").status_code == 200
+    made = reports.save_due(time.time() + 86400)  # HD is already kept; the full venue report is made
+    assert [(x.get("room_id"), x.get("site_id")) for x in made] == [(None, 1)]
+    assert reports.save_due(time.time() + 86400) == []
+    for x in admin.get("/api/reports").json()["reports"]:
+        assert admin.delete(f"/api/reports/saved/{x['id']}").status_code == 200
     assert admin.get("/api/reports").json()["reports"] == []
-    auto = reports.save_due(time.time() + 86400)  # the next morning: only HD had a show
-    assert [x["room_id"] for x in auto] == [hd]
-    assert [x["room_name"] for x in admin.get("/api/reports").json()["reports"]] == ["HD"]
+    auto = reports.save_due(time.time() + 86400)  # the next morning: only HD had a show, so the venue did too
+    assert [x.get("room_id") for x in auto] == [hd, None]
+    assert [x["room_name"] for x in admin.get("/api/reports").json()["reports"]] == ["Full venue", "HD"]
+    assert reports.save_due(time.time() + 86400) == []
 
     # Techs can't read reports.
     admin.post("/api/admin/accounts", json={"username": "tom", "password": "tom-password", "display_name": "Tom", "role": "tech"})
@@ -59,6 +64,56 @@ def test_show_report(admin, client, tmp_path):
     tech = TestClient(client.app)
     tech.post("/api/auth/login", json={"username": "tom", "password": "tom-password"})
     assert tech.get(f"/api/reports/{hd}").status_code == 403
+
+
+def test_full_venue_report(admin, client):
+    rooms = _rooms(admin)
+    hd, cc = rooms["HD"], rooms["CC"]
+    site = admin.get("/api/bootstrap").json()["sites"][0]["id"]
+    assert admin.post(f"/api/timers/{hd}/preset/10").status_code == 200
+    assert admin.post(f"/api/timers/{hd}/stop").status_code == 200
+    admin.post("/api/comms/help", json={"room_id": cc, "category": "Video", "description": "Projector flicker"})
+    v = admin.get(f"/api/reports/venue/{site}").json()
+    assert v["site"] == "Main Venue" and [d["room"] for d in v["rooms"]] == ["CC", "HD", "RH"]
+    assert {d["room"]: d["had_show"] for d in v["rooms"]} == {"CC": True, "HD": True, "RH": False}
+    assert v["summary"]["rooms"] == 3 and v["summary"]["rooms_with_show"] == 2
+    assert v["summary"]["runs"] == 1 and v["summary"]["help"] == 1
+    assert "transcript" not in v["rooms"][0]
+
+    r = admin.get(f"/api/reports/venue/{site}/pdf")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("attachment;")
+    pages = PdfReader(io.BytesIO(r.content)).pages
+    text = "".join(pg.extract_text() for pg in pages)
+    assert "FULL VENUE" in text and "Projector flicker" in text and "No show in RH" in text
+    assert len(pages) >= 3  # the venue's page, then CC and HD (RH had no show)
+
+    kept = admin.post(f"/api/reports/venue/{site}/save").json()
+    again = admin.post(f"/api/reports/venue/{site}/save").json()  # replaces the one kept for that day
+    lst = admin.get("/api/reports").json()["reports"]
+    assert [(x["id"], x["room_name"], x["venue"]) for x in lst] == [(again["id"], "Full venue", 1)] and kept["id"] != again["id"]
+    assert admin.get(f"/api/reports/saved/{again['id']}.pdf").content[:4] == b"%PDF"
+    assert admin.get("/api/reports/venue/999").status_code == 404
+    assert admin.get(f"/api/reports/venue/{site}?day=2026-13-01").status_code == 400
+
+
+def test_audit_log_pdf(admin, client):
+    from fastapi.testclient import TestClient
+
+    admin.post("/api/admin/accounts", json={"username": "mia", "password": "mia-password", "display_name": "Mia", "role": "manager"})
+    r = admin.get("/api/admin/audit/pdf")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("attachment;")
+    text = "".join(pg.extract_text() for pg in PdfReader(io.BytesIO(r.content)).pages)
+    assert "AUDIT LOG" in text and "setup.complete" in text and "account.add" in text
+    only = "".join(pg.extract_text() for pg in PdfReader(io.BytesIO(admin.get("/api/admin/audit/pdf?q=account.add").content)).pages)
+    assert "account.add" in only and "setup.complete" not in only and 'matching "account.add"' in only
+    assert any(l["action"] == "audit.download" for l in admin.get("/api/admin/audit").json())
+    mia = TestClient(client.app)
+    mia.post("/api/auth/login", json={"username": "mia", "password": "mia-password"})
+    assert mia.get("/api/admin/audit/pdf").status_code == 200  # managers read the audit log too
+    mia.post("/api/auth/logout")
+    assert TestClient(client.app).get("/api/admin/audit/pdf").status_code == 401
 
 
 def test_help_escalation(admin):

@@ -1,5 +1,5 @@
 // Console: the live pages (dashboard, chat, help, timers, captions), the venue (rooms, laptops,
-// people, links) and the site (settings, licence, servers, backups, audit log).
+// people, links) and the site (settings, licence, backups, audit log).
 (async () => {
   const { esc, api, post, put, del, upload, guard, toast, when } = AT;
   const main = document.getElementById("main");
@@ -29,13 +29,12 @@
     settings: { title: "Settings", role: "admin", tabs: { general: ["General", admGeneral], appearance: ["Look", admAppearance], chat: ["Chat", admChat], ai: ["AI helper", admAi], keys: ["API keys", admKeys], updates: ["Updates", admUpdates], info: ["About", admInfo] } },
     bugs: { title: "Bug reports", role: "admin", tabs: { bugs: ["Bug reports", admBugs] } },
     licence: { title: "Licence", role: "admin", tabs: { licence: ["Licence", admLicence] } },
-    servers: { title: "Servers", role: "admin", tabs: { servers: ["Servers", admServers] } },
-    backups: { title: "Backups & import", role: "admin", tabs: { backups: ["Backups", admData] } },
+    backups: { title: "Backups & restore", role: "admin", tabs: { backups: ["Backups", admData] } },
     audit: { title: "Audit log", role: "manager", tabs: { audit: ["Audit log", admAudit] } },
   };
   // Links into the old Admin page (#/admin/<tab>) and #/fleet still land in the right place.
   const OLD = { general: "settings/general", appearance: "settings/appearance", chat: "settings/chat", keys: "settings/keys", info: "settings/info",
-    servers: "servers", licence: "licence", sites: "rooms", accounts: "people", links: "links", fleet: "laptops/setup", overlays: "laptops/overlays",
+    licence: "licence", sites: "rooms", accounts: "people", links: "links", fleet: "laptops/setup", overlays: "laptops/overlays",
     data: "backups", import: "backups", audit: "audit" };
   const MODNAMES = { comms: "Chat & help requests", timers: "Timers", fleet: "Laptops & screens", captions: "Captions", overlays: "Overlays", dashboard: "Dashboard & links", presenter: "Presenters" };
   const MODS = { dashboard: "dashboard", chat: "comms", help: "comms", timers: "timers", presenter: "presenter", captions: "captions" };
@@ -206,38 +205,54 @@
 
   // -------------------------------------------------------- show reports --
   // After a show: each room's timer runs, help calls, stage messages and caption transcript as a
-  // PDF for the client. Each morning the day before is kept for every room that had a show.
+  // PDF for the client, or the full venue's in one. Each morning the day before is kept for every
+  // room that had a show, and for the venue.
   async function showReports(a) {
     const list = await api("/api/reports");
     const site = boot.sites[0]?.id, today = list.today[site] || new Date().toISOString().slice(0, 10);
+    const siteName = Object.fromEntries(boot.sites.map((x) => [x.id, x.name]));
+    const many = boot.sites.length > 1;
+    const venueLabel = (id) => many ? `Full venue: ${siteName[id] || "venue"}` : "Full venue";
     a.innerHTML = `<div class="panel"><h2>Make a report</h2>
-        <p class="small muted" style="margin-top:0">A show day runs from 05:00 to 05:00 the next morning. Today's report shows what has happened so far.</p>
+        <p class="small muted" style="margin-top:0">A show day runs from 05:00 to 05:00 the next morning. Today's report shows what has happened so far. Reports download as PDF.</p>
         <div class="row" style="flex-wrap:wrap;align-items:flex-end">
-          <span><label>Room</label><select id="rRoom">${boot.rooms.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}</select></span>
-          <span><label>Day</label><input id="rDay" type="date" value="${esc(today)}" max="${esc(today)}"></span>
+          <span><label for="rRoom">Report for</label><select id="rRoom">
+            <optgroup label="The whole venue">${boot.sites.map((x) => `<option value="venue:${x.id}">${esc(venueLabel(x.id))}</option>`).join("")}</optgroup>
+            <optgroup label="One room">${boot.rooms.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join("")}</optgroup></select></span>
+          <span><label for="rDay">Day</label><input id="rDay" type="date" value="${esc(today)}" max="${esc(today)}"></span>
           <label style="margin-bottom:.5rem"><input type="checkbox" id="rChat" style="width:auto"> Include the crew's chat messages</label>
         </div>
-        <div id="rSum" class="small" style="margin:.6rem 0"></div>
-        <div class="row"><button class="primary" id="rOpen">Open the PDF</button><button id="rKeep">Keep a copy</button></div></div>
+        <div id="rSum" class="small" role="status" style="margin:.6rem 0"></div>
+        <div class="row"><button class="primary" id="rOpen">Download PDF</button><button id="rKeep">Keep a copy</button></div></div>
       <div class="panel" style="margin-top:1rem"><h2>Kept reports</h2>
-        <p class="small muted" style="margin-top:0">Made by themselves each morning for every room that had a show the day before (the timer ran, a help call, a stage message or captions).</p>
-        ${list.reports.length ? `<table><tr><th>Day</th><th>Room</th><th>Made</th><th></th></tr>${list.reports.map((r) => `<tr><td>${esc(r.day)}</td><td>${esc(r.room_name)}</td><td class="small muted">${when(r.created_at)}</td>
-          <td class="row"><a class="btn small" href="/api/reports/saved/${r.id}.pdf" target="_blank">Open</a><button class="small danger" data-rm="${r.id}">Delete</button></td></tr>`).join("")}</table>` : '<p class="muted">None yet.</p>'}</div>`;
-    const q = () => `day=${encodeURIComponent(a.querySelector("#rDay").value)}`, room = () => a.querySelector("#rRoom").value;
+        <p class="small muted" style="margin-top:0">Made by themselves each morning for the venue and every room that had a show the day before (the timer ran, a help call, a stage message or captions).</p>
+        ${list.reports.length ? `<table><tr><th>Day</th><th>Report</th><th>Made</th><th><span class="sr-only">Actions</span></th></tr>${list.reports.map((r) => `<tr><td>${esc(r.day)}</td><td>${r.venue ? `<b>${esc(venueLabel(r.site_id))}</b>` : esc(r.room_name)}</td><td class="small muted">${when(r.created_at)}</td>
+          <td class="row"><a class="btn small" href="/api/reports/saved/${r.id}.pdf" download>Download PDF</a><button class="small danger" data-rm="${r.id}">Delete</button></td></tr>`).join("")}</table>` : '<p class="muted">None yet.</p>'}</div>`;
+    const q = () => `day=${encodeURIComponent(a.querySelector("#rDay").value)}`, pick = () => a.querySelector("#rRoom").value;
+    // Where a report's figures, PDF and Keep live: a room's, or the venue's.
+    const base = () => pick().startsWith("venue:") ? `/api/reports/venue/${pick().slice(6)}` : `/api/reports/${pick()}`;
     const summary = async () => {
       const box = a.querySelector("#rSum");
-      if (!room()) { box.textContent = "Add a room first."; return; }
+      if (!pick()) { box.textContent = "Add a room first."; return; }
       try {
-        const s = (await api(`/api/reports/${room()}?${q()}`)).summary;
+        const d = await api(`${base()}?${q()}`), s = d.summary;
         const mins = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
-        box.innerHTML = [`<b>${s.runs}</b> timer run${s.runs === 1 ? "" : "s"}`, s.over ? `<span style="color:var(--bad-ink)"><b>${s.over}</b> ran over (${mins(s.over_ms)} in all)</span>` : "nothing ran over",
+        box.innerHTML = [d.rooms ? `<b>${s.rooms_with_show}</b> of ${s.rooms} room${s.rooms === 1 ? "" : "s"} had a show` : "",
+          `<b>${s.runs}</b> timer run${s.runs === 1 ? "" : "s"}`, s.over ? `<span style="color:var(--bad-ink)"><b>${s.over}</b> ran over (${mins(s.over_ms)} in all)</span>` : "nothing ran over",
           `<b>${s.help}</b> help call${s.help === 1 ? "" : "s"}${s.escalated ? ` (${s.escalated} with no answer at first)` : ""}`, `<b>${s.stage_messages}</b> stage message${s.stage_messages === 1 ? "" : "s"}`,
-          `<b>${s.crew_messages}</b> chat message${s.crew_messages === 1 ? "" : "s"}`, s.captions_s ? `captions live ${Math.round(s.captions_s / 60)} min, ${s.transcript_lines} transcript lines` : "no captions"].join(" · ");
+          `<b>${s.crew_messages}</b> chat message${s.crew_messages === 1 ? "" : "s"}`, s.captions_s ? `captions live ${Math.round(s.captions_s / 60)} min, ${s.transcript_lines} transcript lines` : "no captions"]
+          .filter(Boolean).join(" · ");
       } catch (e) { box.textContent = e.message; }
     };
     a.querySelector("#rRoom").onchange = summary; a.querySelector("#rDay").onchange = summary;
-    a.querySelector("#rOpen").onclick = () => room() && open(`/api/reports/${room()}/pdf?${q()}${a.querySelector("#rChat").checked ? "&chat=1" : ""}`, "_blank");
-    a.querySelector("#rKeep").onclick = () => room() && guard(() => post(`/api/reports/${room()}/save?${q()}`)).then(() => { toast("Kept. It's in the list below.", "good"); showReports(a); });
+    a.querySelector("#rOpen").onclick = () => {
+      if (!pick()) return;
+      const link = document.createElement("a");
+      link.href = `${base()}/pdf?${q()}${a.querySelector("#rChat").checked ? "&chat=1" : ""}`;
+      link.download = "";
+      document.body.append(link); link.click(); link.remove();
+    };
+    a.querySelector("#rKeep").onclick = () => pick() && guard(() => post(`${base()}/save?${q()}`)).then((r) => { if (r) { toast("Kept. It's in the list below.", "good"); showReports(a); } });
     a.querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => confirm("Delete this kept report? You can make it again while the day's records are still on the server.") && guard(() => del(`/api/reports/saved/${b.dataset.rm}`)).then(() => showReports(a)));
     summary();
   }
@@ -261,7 +276,7 @@
     el.innerHTML = (strip ? strip.replace('<div class="grid" id="dashRooms"', pre + '<div class="grid" id="dashRooms"') : `<div class="row" style="justify-content:space-between"><h1>Dashboard</h1>${boot.me.role === "admin" ? '<a class="btn" href="#/links">Edit links</a>' : ""}</div>` + pre) + (strip ? '<h2 style="margin-top:1.4rem">Links</h2>' : "") +
       (links.length ? Object.entries(groups).map(([g, ls]) => `<h3 class="lk-head">${esc(g)}</h3><div class="lk-grid">` +
         ls.map((l) => `<a class="lk" href="${esc(l.url)}" target="_blank" rel="noopener">${Chat.avatar(l.label)}<span class="lk-txt"><b>${esc(l.label)}</b><span>${esc(linkHost(l.url))}</span></span><span class="dot" data-ping="${l.id}"></span></a>`).join("") + "</div>").join("")
-        : '<p class="muted">No links yet. Admins can import the old Homarr board or add links in Links.</p>');
+        : '<p class="muted">No links yet. Admins add them in Links.</p>');
     const dash = el.querySelector("#dashRooms");
     if (dash) {
       const tick = setInterval(() => {
@@ -772,8 +787,7 @@
     const MODES =[["auto", "Install by itself", "When a new version is out and no show is on, the server updates itself: backup first, health check, rolled back if it isn't healthy."],
       ["notify", "Tell me only", "Shows here when a new version is out. Press Install now to update."],
       ["off", "Off", "Doesn't check. Update with sudo ./update.sh on the server."]];
-    const state = u.helper ? '<span class="muted">A helper server updates with its main server.</span>'
-      : u.error ? `<span class="pill bad">Couldn't check</span> ${esc(u.error)}${L.version ? `<div class="small muted">The newest release it saw before was ${esc(L.version)}.</div>` : ""}`
+    const state = u.error ? `<span class="pill bad">Couldn't check</span> ${esc(u.error)}${L.version ? `<div class="small muted">The newest release it saw before was ${esc(L.version)}.</div>` : ""}`
       : !u.latest ? '<span class="muted">Not checked yet.</span>'
       : u.available ? `<span class="pill warn">${esc(L.version)} is out</span> ${L.published_at ? `<span class="muted small">released ${when(L.published_at)}</span>` : ""}`
       : u.ahead ? `<span class="pill">Ahead of GitHub</span><div class="small muted">This server runs ${esc(u.current)}, newer than the newest release on GitHub (${esc(L.version)}). It updates again once a release newer than ${esc(u.current)} is published. Press Check now if one just came out.</div>`
@@ -821,8 +835,7 @@
   };
   addEventListener("hashchange", cleanup);
   // Check now always says what it found, so a check that changes nothing on the page doesn't look like it did nothing.
-    const said = (s) => s.helper ? ["This is a helper server. It updates with its main server.", ""]
-      : s.error ? [`Couldn't check: ${s.error}`, "bad"]
+    const said = (s) => s.error ? [`Couldn't check: ${s.error}`, "bad"]
       : s.available ? [`${s.latest.version} is out.`, "good"]
       : s.ahead ? [`This server runs ${s.current}, newer than the newest release (${s.latest.version}).`, ""]
       : s.latest ? [`Up to date: ${s.current} is the newest release.`, "good"] : ["Checked, but GitHub has no release yet.", ""];
@@ -951,7 +964,7 @@ Keywords: lectern, gooseneck, mic dead
       <div class="panel"><h2>This app</h2>${kv([["Product", esc(i.product)], ["Organisation", esc(i.organisation) || '<span class="muted">not set</span>'], ["Version", `<b>${esc(i.version)}</b>`],
         ["Build", esc(i.build.number)], ["Commit", `<code>${esc(i.build.commit)}</code>`], i.build.date && ["Built", esc(new Date(i.build.date).toLocaleString())], ["Database schema", i.schema],
         ["Licence", `${pill(i.licence.valid, "Licensed", "Not licensed")} ${esc(i.licence.licensee)} · <a href="#/licence">details</a>`]])}</div>
-      <div class="panel"><h2>Servers</h2><p class="small muted">${i.server.count} server: everything runs on this one.</p>${kv([["Hostname", `<b>${esc(sv.hostname)}</b>`], ["Addresses", sv.ips.map(esc).join(", ") || "–"],
+      <div class="panel"><h2>Server</h2>${kv([["Hostname", `<b>${esc(sv.hostname)}</b>`], ["Addresses", sv.ips.map(esc).join(", ") || "–"],
         ["Opened as", `<code>${esc(location.origin)}</code>`], sv.public_url && ["Public address", esc(sv.public_url)], ["Running in", sv.in_docker ? "Docker" : "Python (no container)"],
         ["Up for", ago(sv.uptime_seconds)], sv.system_uptime_seconds != null && ["Machine up for", ago(sv.system_uptime_seconds)], ["Server time", `${esc(new Date(sv.time).toLocaleString())} (${esc(sv.timezone)})`],
         ["Site time zones", Object.entries(sv.site_timezones).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join("<br>")]])}</div>
@@ -1254,77 +1267,110 @@ Keywords: lectern, gooseneck, mic dead
     });
   }
 
-  // Helper servers: other machines that take caption work off this one.
-  async function admServers(a) {
-    const SPEECH = { ready: "Ready", loading: "Loading", downloading: "Downloading", off: "Off", unavailable: "Not installed", error: "Error" };
-    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
-    const row = (s) => `<tr><td><b>${esc(s.name)}</b>${s.main ? ' <span class="pill">main</span>' : ""}</td>
-      <td><span class="pill ${s.online ? "good" : "bad"}">${s.online ? "Online" : "Offline"}</span></td>
-      <td>${esc(SPEECH[s.speech] || s.speech || "–")}</td><td>${s.online ? `${s.rooms} of ${s.capacity}` : "–"}</td>
-      <td>${s.online ? pct(s.load) : "–"}</td><td class="small muted">${esc(s.version || "")}</td>
-      <td>${s.main ? "" : `<button class="small danger" data-rm="${s.id}" data-name="${esc(s.name)}">Remove</button>`}</td></tr>`;
-    let code = null;
-    const draw = async () => {
-      if (!a.isConnected) return clearInterval(tick);
-      const d = await api("/api/admin/helpers");
-      const names = Object.fromEntries((boot.rooms || []).map((r) => [r.id, r.name]));
-      a.innerHTML = `<div class="panel"><h2>Servers</h2>
-          <p class="small muted">This is the main server: it holds the rooms, people and screens. Add a helper server to share the heavy work, starting with live captions. If a helper goes offline, its rooms carry on here or on another helper.</p>
-          <table style="margin-top:.6rem"><tr><th>Server</th><th>Status</th><th>Speech</th><th>Rooms captioning</th><th>CPU</th><th>Version</th><th></th></tr>
-            <tbody>${row(d.main)}${d.helpers.map(row).join("")}</tbody></table>
-          <p class="small muted">Together they can caption ${d.capacity} room${d.capacity === 1 ? "" : "s"} at once.${d.placed.length ? " Now: " + d.placed.map((p) => `${esc(names[p.room_id] || "Room " + p.room_id)} on ${esc(p.server)}`).join(", ") + "." : ""}</p></div>
-        <div class="panel" style="margin-top:1rem"><h2>How to share the work</h2>
-          <div class="seg" id="mode">${[["share", "Share", "Each room goes to whichever server is least busy, this one included."], ["offload", "Offload", "Helpers take the work first; this server only steps in when they are full or offline."]].map(([k, t, h]) => `<button data-mode="${k}" class="${d.mode === k ? "on" : ""}" title="${h}">${t}</button>`).join("")}</div>
-          <p class="small muted" id="modehelp"></p></div>
-        <div class="panel" style="margin-top:1rem"><h2>Add a helper</h2>
-          <p class="small muted">On the new machine run AT-SUITE with <code>ATSUIT_ROLE=helper</code>, open its page in a browser and type this server's address and the code below. Or start it with <code>ATSUIT_MAIN_URL</code> and <code>ATSUIT_JOIN_CODE</code> set. A code works once, for 15 minutes.</p>
-          <div class="row"><button class="primary" id="mk">Make a join code</button><span id="code" style="font:600 1.4rem var(--num-font);letter-spacing:.12em">${code ? esc(code) : ""}</span></div>
-          <p class="small muted">This server's address: <code>${esc(location.origin)}</code></p></div>`;
-      const help = { share: "Each room goes to whichever server is least busy, this one included.", offload: "Helpers take the work first; this server only steps in when they are full or offline." };
-      a.querySelector("#modehelp").textContent = help[d.mode];
-      a.querySelectorAll("[data-mode]").forEach((b) => b.onclick = () => guard(async () => {
-        await api("/api/admin/helpers/mode", { method: "PUT", body: { mode: b.dataset.mode } }); toast("Saved", "good"); draw();
-      }));
-      a.querySelector("#mk").onclick = () => guard(async () => { code = (await api("/api/admin/helpers/code", { method: "POST" })).code; draw(); });
-      a.querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => guard(async () => {
-        if (!confirm(`Remove ${b.dataset.name}? Its rooms move to another server, and it needs a new code to join again.`)) return;
-        await api(`/api/admin/helpers/${b.dataset.rm}`, { method: "DELETE" }); toast("Removed", "good"); draw();
-      }));
-    };
-    const tick = setInterval(() => draw().catch(() => {}), 5000);
-    await draw();
-  }
-
   async function admAudit(a) {
     const log = await api("/api/admin/audit");
-    a.innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Audit log</h2><input id="flt" placeholder="Filter" style="width:14rem"></div>
+    a.innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><h2 style="margin:0">Audit log</h2>
+        <div class="row"><input id="flt" placeholder="Filter" aria-label="Filter the audit log" style="width:14rem"><a class="btn" id="pdf" href="/api/admin/audit/pdf" download>Download as PDF</a></div></div>
+      <p class="small muted" id="pdfNote" style="margin:.4rem 0 0">The PDF has every entry, newest first.</p>
       <table style="margin-top:.6rem"><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr><tbody id="log"></tbody></table></div>`;
     const draw = (q = "") => { a.querySelector("#log").innerHTML = log.filter((l) => !q || `${l.actor} ${l.action} ${l.detail}`.toLowerCase().includes(q)).map((l) => `<tr><td class="small">${when(l.at)}</td><td>${esc(l.actor)}</td><td>${esc(l.action)}</td><td class="small muted">${esc(l.detail)}</td></tr>`).join(""); };
     draw();
-    a.querySelector("#flt").oninput = (e) => draw(e.target.value.trim().toLowerCase());
+    a.querySelector("#flt").oninput = (e) => {
+      const q = e.target.value.trim();
+      draw(q.toLowerCase());
+      // The PDF takes the same filter, over the whole log rather than the newest 200 shown here.
+      a.querySelector("#pdf").href = "/api/admin/audit/pdf" + (q ? `?q=${encodeURIComponent(q)}` : "");
+      a.querySelector("#pdfNote").textContent = q ? `The PDF has every entry matching “${q}”, newest first.` : "The PDF has every entry, newest first.";
+    };
   }
 
+  // Backups of the whole server: every night by itself, or now; kept on the server, downloaded or restored.
   async function admData(a) {
-    const items = [
-      ["roomcomms", "RoomComms chat", "A zip of the RoomComms data folder (roomcomms.db and .encryption_key). Accounts keep their passwords."],
-      ["rooms-txt", "Device Suite rooms.txt", "Room kiosk links (Ontime views, Companion buttons). Lines that aren't ROOM|URL|LABEL; are skipped."],
-      ["device-state", "Device Suite state.json", "Known kiosks with their addresses."],
-      ["homarr", "Homarr links", "The TSV export of the Homarr USER CONTROL board."],
-    ];
-    const log = await api("/api/admin/audit");
-    const last = log.find((l) => l.action === "backup.download");
-    a.innerHTML = `<div class="panel"><h2>Backup</h2><p class="small muted">Database, uploads and the encryption key in one zip. Keep it somewhere safe; it can read every message.</p>
-        <div class="row"><a class="btn primary" href="/api/admin/backup" id="bk">Download backup</a><span class="small muted">${last ? `Last backup ${when(last.at)} by ${esc(last.actor)}` : "No backup downloaded yet."}</span></div></div>
-      <h2 style="margin-top:1.2rem">Import</h2><p class="small muted">Bring in data from the tools AT-SUITE replaces.</p>
-      <div class="grid">${items.map(([k, t, d]) => `<div class="panel" data-k="${k}"><h3>${t}</h3><p class="small muted">${d}</p><input type="file"><button class="small primary" style="margin-top:.5rem">Import</button><pre class="small muted" style="white-space:pre-wrap"></pre></div>`).join("")}</div>
-      <p class="small muted" style="margin-top:1rem">Every backup, import and change is listed in the <a href="#/audit">Audit log</a>.</p>`;
-    a.querySelector("#bk").onclick = () => setTimeout(() => admData(a), 3000);
-    a.querySelectorAll("[data-k]").forEach((p) => p.querySelector("button").onclick = async () => {
-      const f = p.querySelector("input").files[0]; if (!f) return toast("Choose a file to import first", "bad");
-      const r = await guard(() => upload(`/api/admin/import/${p.dataset.k}`, f));
-      p.querySelector("pre").textContent = JSON.stringify(r, null, 2);
-      boot = await api("/api/bootstrap");
-    });
+    const d = await api("/api/admin/backups");
+    const KIND = { nightly: "Nightly", manual: "Made by hand", "before-restore": "Before a restore", upload: "Uploaded" };
+    const s = d.settings;
+    a.innerHTML = `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))">
+      <div class="panel"><h2>Back up</h2>
+        <p class="small muted" style="margin-top:0">A backup is the whole server in one zip: rooms, people, chat and its files, timers and views, presenters' files, kept show reports, laptops and screens, settings, the licence and the encryption key. Speech models, caption transcripts and the Windows app aren't in it; they come back by themselves. A backup can read every message, so keep a downloaded one somewhere safe.</p>
+        <div class="row" style="flex-wrap:wrap"><button class="primary" id="bkNow">Back up now</button><a class="btn" href="/api/admin/backup" id="bkDl" download>Download a backup</a></div>
+        <p class="small" id="bkSaid" role="status" style="margin:.4rem 0 0"></p>
+        ${d.error ? `<p class="small" style="color:var(--bad-ink)"><b>Last night's backup didn't work:</b> ${esc(d.error)}</p>` : ""}
+        ${d.disk_free != null ? `<p class="small muted">${bytes(d.disk_free)} free on the server's disk.</p>` : ""}</div>
+      <form class="panel" id="bkSet"><h2>Every night</h2>
+        <label><input type="checkbox" name="nightly" ${s.nightly ? "checked" : ""} style="width:auto"> Back up every night</label>
+        <div class="row" style="flex-wrap:wrap;align-items:flex-end;margin-top:.4rem">
+          <span><label for="bkTime">At</label><input id="bkTime" name="time" type="time" value="${esc(s.time)}" required style="width:9.5rem"></span>
+          <span><label for="bkKeep">Keep the newest</label><input id="bkKeep" name="keep" type="number" min="1" max="365" value="${s.keep}" required style="width:6rem"></span>
+        </div>
+        <p class="small muted">Venue time (${esc(d.zone)}). If the server is off then, it backs up when it's back, up to six hours later. Older nightly backups are deleted by themselves; ones made by hand or before a restore stay until you delete them.${d.hosted ? " Your hosting provider also keeps its own nightly backup of this server." : ""}</p>
+        <div class="row"><button class="primary">Save</button></div></form></div>
+      <div class="panel" style="margin-top:1rem"><h2>On this server</h2>
+        ${d.backups.length ? `<table><tr><th>Made</th><th>Kind</th><th>Size</th><th><span class="sr-only">Actions</span></th></tr>${d.backups.map((b) => `<tr>
+          <td>${when(b.made_at)}</td><td>${KIND[b.kind] || esc(b.kind)}</td><td>${bytes(b.size)}</td>
+          <td class="row"><a class="btn small" href="/api/admin/backups/${encodeURIComponent(b.name)}" download>Download</a><button class="small" data-restore="${esc(b.name)}">Restore</button><button class="small danger" data-rm="${esc(b.name)}">Delete</button></td></tr>`).join("")}</table>`
+          : '<p class="muted">None yet. The first nightly backup is made tonight.</p>'}</div>
+      <div class="panel" style="margin-top:1rem"><h2>Restore</h2>
+        <p class="small muted" style="margin-top:0">Restoring puts the whole server back as it was in the backup, from this server or another AT SUITE server. Everything here now is replaced, so a backup of it is made first. The server then restarts by itself, which takes a minute; laptops and screens reconnect on their own.</p>
+        <label for="bkFile">A backup file (.zip)</label><input id="bkFile" type="file" accept=".zip,application/zip">
+        <div class="row" style="margin-top:.5rem"><button class="danger" id="bkUp">Restore this file</button></div>
+        <div id="bkAsk" class="hidden" role="alertdialog" aria-labelledby="bkAskQ" style="margin-top:.8rem;padding:.8rem;border:1px solid var(--bad);border-radius:8px">
+          <p id="bkAskQ" style="margin-top:0"></p>
+          <label for="bkType">Type RESTORE to go ahead</label><input id="bkType" autocomplete="off" style="width:10rem">
+          <div class="row" style="margin-top:.5rem"><button class="danger" id="bkGo">Restore</button><button type="button" id="bkNo">Cancel</button></div>
+        </div>
+        <p class="small" id="bkRes" role="status"></p></div>
+      <p class="small muted" style="margin-top:1rem">Every backup, download and restore is listed in the <a href="#/audit">Audit log</a>.</p>`;
+    const said = (el, text, kind = "") => { const p = a.querySelector(el); p.textContent = text; p.style.color = kind === "bad" ? "var(--bad-ink)" : ""; };
+    a.querySelector("#bkNow").onclick = (e) => {
+      e.target.disabled = true; said("#bkSaid", "Backing up…");
+      guard(() => post("/api/admin/backups")).then((b) => { if (b) { toast("Backed up", "good"); admData(a); } else { e.target.disabled = false; said("#bkSaid", ""); } });
+    };
+    a.querySelector("#bkSet").onsubmit = (e) => {
+      e.preventDefault();
+      const f = e.target;
+      guard(() => put("/api/admin/backups/settings", { nightly: f.nightly.checked, time: f.time.value, keep: Number(f.keep.value) })).then((r) => r && toast("Saved", "good"));
+    };
+    a.querySelectorAll("[data-rm]").forEach((b) => b.onclick = () => confirm("Delete this backup from the server? This can't be undone.") &&
+      guard(() => del(`/api/admin/backups/${encodeURIComponent(b.dataset.rm)}`)).then(() => admData(a)));
+    // Restoring replaces everything, so it asks to have RESTORE typed rather than one click.
+    let todo = null;
+    const ask = (question, run) => {
+      todo = run;
+      a.querySelector("#bkAskQ").textContent = question;
+      a.querySelector("#bkType").value = "";
+      a.querySelector("#bkAsk").classList.remove("hidden");
+      a.querySelector("#bkType").focus();
+    };
+    a.querySelector("#bkNo").onclick = () => { todo = null; a.querySelector("#bkAsk").classList.add("hidden"); };
+    a.querySelector("#bkGo").onclick = async () => {
+      if (a.querySelector("#bkType").value.trim().toUpperCase() !== "RESTORE") return said("#bkRes", "Type RESTORE first.", "bad");
+      const run = todo; todo = null;
+      a.querySelector("#bkAsk").classList.add("hidden");
+      said("#bkRes", "Checking the backup and saving one of what's here now…");
+      const r = await guard(run);
+      if (!r) return said("#bkRes", "");
+      said("#bkRes", `Restoring. The server is restarting with the backup${r.backup.made_at ? ` made ${when(r.backup.made_at)}` : ""}. This page signs you in again when it's back.`);
+      waitForRestart();
+    };
+    a.querySelectorAll("[data-restore]").forEach((b) => b.onclick = () => ask(
+      `Restore the backup made ${b.closest("tr").cells[0].textContent}? Everything on the server now is replaced by it.`,
+      () => post(`/api/admin/backups/${encodeURIComponent(b.dataset.restore)}/restore`)));
+    a.querySelector("#bkUp").onclick = () => {
+      const f = a.querySelector("#bkFile").files[0];
+      if (!f) return said("#bkRes", "Choose a backup file first.", "bad");
+      ask(`Restore ${f.name}? Everything on the server now is replaced by it.`, () => upload("/api/admin/restore", f));
+    };
+    // The server stops and Docker starts it again; reload once it answers.
+    const waitForRestart = () => {
+      let down = false;
+      const tick = setInterval(async () => {
+        try {
+          const r = await fetch("/api/health", { cache: "no-store" });
+          if (r.ok && down) { clearInterval(tick); location.reload(); }
+          if (!r.ok) down = true;
+        } catch (_) { down = true; }
+      }, 2000);
+    };
   }
 
 })();

@@ -64,7 +64,7 @@ def test_settings_and_check(admin, monkeypatch):
     updates.check()
     assert admin.get("/api/admin/updates").json()["latest"]["version"] == bump(VERSION)
     st = admin.post("/api/admin/updates/check").json()
-    assert st["latest"]["version"] == bump(VERSION, 2) and st["error"] == "" and not st["helper"]
+    assert st["latest"]["version"] == bump(VERSION, 2) and st["error"] == ""
     assert not admin.get("/api/admin/updates").json()["has_token"]
     admin.post("/api/auth/logout")
     assert admin.get("/api/admin/updates").status_code in (401, 403)

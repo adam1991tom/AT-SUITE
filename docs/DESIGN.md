@@ -265,8 +265,11 @@ fails if any of this comes back.
 
 ## 5. Data migration
 
-All importers are on the Backups page (and the `atsuit-import` CLI), run
-read-only against copies of the old data, are idempotent, and print a report
+The importers below were removed in 1.23.0 (the Backups page now backs up and
+restores the whole server); this section is kept as the record of the cut-over.
+
+All importers were on the Backups page (and the `atsuit-import` CLI), ran
+read-only against copies of the old data, were idempotent, and printed a report
 of what they took and skipped.
 
 | Source | What comes across | How |

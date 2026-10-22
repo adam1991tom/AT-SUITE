@@ -11,8 +11,8 @@ to install.
 
 - **One server** on the venue network: any 64-bit Linux machine (Ubuntu
   22.04 or newer is easiest) with 4 CPU cores, 8 GB of memory and 20 GB of
-  disk. Live captions use about one core per room; add
-  [helper servers](INSTALL.md#helper-servers) for more rooms.
+  disk. Captions made on the server use about one core per room; the AT-SUITE
+  app makes them on the laptop instead.
 - **A fixed address** for it (a DHCP reservation is fine), for example
   `10.0.0.10`.
 - **Tech laptops** with Windows 10 or 11 for the AT-SUITE app. Any other

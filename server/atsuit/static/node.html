@@ -867,7 +867,7 @@
         rows.forEach((l) => seen.add(l.id));
         return rows.length ? `<h4 class="lk-head">${name}</h4><div class="lk-grid">${rows.map(linkCard).join("")}</div>` : "";
       }).join("");
-      $("links").innerHTML = html || '<p class="muted small">No links yet. An admin adds them in Links, or imports the old Homarr board.</p>';
+      $("links").innerHTML = html || '<p class="muted small">No links yet. An admin adds them in Links.</p>';
     };
     $("linkFind").oninput = drawLinks; drawLinks();
   }

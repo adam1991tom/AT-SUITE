@@ -8,7 +8,7 @@ The console's side bar has three groups:
 
 - **Live**: Dashboard, Chat, Help requests, Timers, Presenters, Captions.
 - **Venue**: Rooms, Laptops & screens, People, Links. Managers and admins.
-- **Site**: Settings (General, Look, Chat, API keys, Updates, About), Licence, Servers,
+- **Site**: Settings (General, Look, Chat, API keys, Updates, About), Licence,
   Backups and the Audit log. Admins only, except the Audit log, which
   managers can read too.
 
@@ -26,8 +26,7 @@ the right page.
    enrolment code.
 4. **Links**: the dashboard. Room links (Companion buttons, Ontime
    views, kiosk pages) show up in that room's tech workspace. Admin-board
-   links only show to admins. The Backups page imports the
-   old Homarr board and Device Suite `rooms.txt`.
+   links only show to admins.
 5. **Laptops & screens → Add laptops**: the enrolment code (with Copy and New code) at
    the top, then one tab per kind of machine, each with its download:
    *Windows tech app* (installer, install steps, `node.json` for IT, publish
@@ -87,11 +86,13 @@ the right page.
    ended, modules, sites and nodes used against the limits, whether the
    signature checks out, the vendor key and the key itself to copy. Techs
    never see licence details, only the warning line while it runs out.
-13. **Backups**: download a backup (database, uploads and encryption key)
-   and import from the old tools.
+13. **Backups**: the whole server backs itself up every night (02:00 venue
+   time and the newest 14 kept, both changeable). Back up now, download,
+   delete, or restore a backup from the list or an uploaded file (type
+   RESTORE; a backup of what's there is made first, then the server restarts).
 14. **Settings → API keys**: a key for Companion.
-15. **Servers**: add helper servers to share the work (see INSTALL.md).
-16. **Audit log**: who changed what, with a filter. Managers can read it.
+16. **Audit log**: who changed what, with a filter. **Download as PDF** gives
+   every entry, or the ones matching the filter. Managers can read it.
 17. **Settings → Updates**: install new releases by itself, tell you only, or
    off, and the GitHub token a private repository needs. It never updates
    during a show (see INSTALL.md, Automatic updates).
