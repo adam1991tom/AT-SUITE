@@ -8,7 +8,7 @@ Last updated: [date]
 
 AT SUITE is provided by [COMPANY NAME] Ltd, company number [NUMBER], [ADDRESS] ("we", "us"). We are the controller of the personal data described in this policy. We are registered with the Information Commissioner's Office under number [ICO REGISTRATION NUMBER].
 
-For anything about your data, email [privacy email] or use the [contact form](/contact?kind=privacy).
+For anything about your data, email [support@atsuite.tech](mailto:support@atsuite.tech) or use the [contact form](/contact?kind=privacy).
 
 ## Data a venue puts into AT SUITE
 
@@ -58,7 +58,7 @@ You can ask to see your data and to have it corrected or deleted. You can also a
 
 ## Complaints
 
-If you're unhappy with how we've used your data, tell us first at [privacy email] or through [the complaints form]. We will acknowledge your complaint within 30 days and keep you updated. If you're still unhappy, you can complain to the Information Commissioner's Office at [ico.org.uk/make-a-complaint](https://ico.org.uk/make-a-complaint/) or on 0303 123 1113.
+If you're unhappy with how we've used your data, tell us first at [support@atsuite.tech](mailto:support@atsuite.tech) or through [the complaints form]. We will acknowledge your complaint within 30 days and keep you updated. If you're still unhappy, you can complain to the Information Commissioner's Office at [ico.org.uk/make-a-complaint](https://ico.org.uk/make-a-complaint/) or on 0303 123 1113.
 
 ## Cookies
 

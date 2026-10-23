@@ -30,8 +30,9 @@ Strict-NDA venues can still run AT-SUITE on their own server, as before (docs/IN
 - **Hosted mode** (`ATSUIT_HOSTED=1`, set by atcloud):
   - A new venue can only be set up from its **setup link**, which holds a one-time code. A stranger
     who finds the address can't claim it.
-  - The venue's admins see "Updates are looked after by your AT-SUITE provider". Nothing updates
-    by itself; you move venues to a new version with `atcloud update`, which never happens during a show.
+  - The venue's admins see "Updates are looked after by your AT-SUITE provider". You move venues
+    to a new version with `atcloud update`, which never happens during a show, or let the server do
+    it by itself (see **Updating by itself** below).
   - The server never makes captions (`ATSUIT_ASR=0`): laptops do, with a speech model they fetch
     from their venue once (`ATSUIT_LAPTOP_MODELS=1`). There is one shared, read-only copy of that
     model on the server. New venues start with private captions on, so captions stay on the
@@ -92,7 +93,42 @@ Start a second server, or a dedicated one for a big client, when it fills up.
    `docker login ghcr.io` with a token that can read packages. Set the version new venues get in
    `/srv/atcloud/atcloud.env` (`ATCLOUD_VERSION=1.11.0`).
 7. **Windows tech app**: `atcloud app --release v1.11.0` puts that release's app where every
-   venue's laptops update from.
+   venue's laptops update from. After that, `atcloud update` brings each release's app with it
+   (checked against its latest.yml), so nobody uploads it by hand.
+
+### On a Hostinger VPS (or another provider's Ubuntu image)
+
+The same steps work on a Hostinger KVM VPS with Ubuntu 24.04. Differences from Hetzner:
+
+- Docker is already installed, and Hostinger's `/etc/docker/daemon.json` has its own address pools.
+  bootstrap.sh puts the kit's pool (`10.200.0.0/14`, one `/24` per venue) in front of them and keeps theirs.
+- If the server already has an SSH key for root, bootstrap.sh turns password sign-in off. Hostinger's
+  browser **Web console** signs in with the root password, so add your own key first (hPanel → VPS →
+  SSH keys) and check you can sign in with it, or put password sign-in back with
+  `rm /etc/ssh/sshd_config.d/10-atcloud.conf && systemctl reload ssh`.
+- Hostinger's panel firewall can be left empty: the server's own firewall lets in SSH only, and the
+  front door turns away anything that doesn't come through Cloudflare.
+- Domains bought from Hostinger start on its parking nameservers. In Cloudflare, **Add a domain**
+  (Free plan), then in hPanel → Domains → the domain → **DNS / Nameservers → Change nameservers**,
+  put in the two Cloudflare gives you. It's live when Cloudflare says "Active".
+
+## Other sites on the same server
+
+The front door can also serve other sites on their own domains, for example the website and shop
+(`website/`) at `atsuite.co.uk` while venues are at `<venue>.atsuite.tech`. Each one is a Caddy file in
+`/srv/atcloud/extra/`, and only Cloudflare may connect to it, as for the venues.
+
+1. Run the site in Docker on a network of its own. The shop's `website/docker-compose.yml` calls it
+   `atsuite-shop`, and the shop answers there as `shop:8090`.
+2. Copy its Caddy file: `cp website/deploy/atcloud-edge.caddy /srv/atcloud/extra/shop.caddy` (edit the domain).
+3. Make a Cloudflare origin certificate for that domain (in that domain's Cloudflare zone) and save it as
+   `/srv/atcloud/certs/<domain>.pem` and `.key` (`chmod 600` the key).
+4. Add `ATCLOUD_EDGE_NETWORKS=atsuite-shop` to `/srv/atcloud/atcloud.env` (several are separated by spaces),
+   then `atcloud edge`.
+
+The shop holds the key that signs licences. The venues can't reach it (each venue is on its own network,
+read-only and not root), so sharing a server is fine while you start out; once you sell in volume, a small
+server of its own is the safer home for that key.
 
 ## Every day
 
@@ -105,8 +141,9 @@ atcloud licence grandhall new-key.txt   # renewals and plan changes
 atcloud suspend grandhall          # unpaid: their address says paused, data kept
 atcloud resume grandhall
 atcloud update --all --version 1.11.1   # copy first, health check, rolled back if not healthy;
-                                        # a venue with a show on is skipped (run again later)
-atcloud app --release v1.11.1      # the matching Windows app for the laptops
+                                        # a venue with a show on is skipped (run again later).
+                                        # The release's Windows app comes too, for each venue updated
+atcloud app --release v1.11.1      # the Windows app on its own (every venue), if it needs doing again
 atcloud backup                     # a backup now (it also runs every night)
 atcloud snapshots grandhall
 atcloud restore grandhall --yes    # put the last backup back (or --snapshot ID)
@@ -114,6 +151,24 @@ atcloud remove grandhall --yes     # last backup, then the venue and its data ar
 atcloud check                      # exit 1 if a venue isn't healthy (for monitoring)
 atcloud logs grandhall
 ```
+
+### Updating by itself
+
+With `ATCLOUD_AUTOUPDATE=yes` in `/srv/atcloud/atcloud.env`, `atcloud-autoupdate.timer` looks for a
+new GitHub release every hour (bootstrap.sh installs the timer; it does nothing until this is on).
+When there is one it:
+
+1. pulls the image, or, when it can't (the package is private), builds it from the release's
+   tag in `ATCLOUD_SOURCE`, a git clone of AT-SUITE (for example `/root/AT-SUITE`). The clone's
+   working tree isn't touched;
+2. sets `ATCLOUD_VERSION`, so new venues get it too;
+3. runs `atcloud update` for every venue on an older version: copy first, health check, rolled
+   back if not healthy, with the release's Windows app. A venue with a show on is left until a
+   later hour.
+
+`atcloud autoupdate --now` does the same once, even when it's off. `journalctl -u atcloud-autoupdate`
+shows what it did. A server set up before this timer existed: `cp /opt/atcloud/systemd/atcloud-autoupdate.*
+/etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now atcloud-autoupdate.timer`.
 
 Licence keys are made as before with `tools/licence.py` on your own computer; the venue's
 laptop limit comes from its key.

@@ -1,11 +1,27 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25.2, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.2: solid windows in the Futuristic look
+
+- With the **Futuristic** look, windows in the workspace (like the AI helper), menus, drop-down lists and pop-ups no longer show what is behind them. Pick a look in [Settings → Look](/docs/settings#look).
+
+## 1.25.1: our real email addresses
+
+- AT SUITE now uses its own addresses on atsuite.tech: **support@atsuite.tech** for help and bugs, **hello@atsuite.tech** for general enquiries and quotes. Emails from the website (sign-in links, licence keys, receipts) come from **noreply@atsuite.tech**; replying to one reaches support.
+- **Settings → About** shows where to email when a bug is urgent. See [Report a bug](/docs/bug-reports).
+
+## 1.25.0: logos and pictures in the layout designer, BDNG is gone
+
+- Upload a **logo** and a **background picture** for a view straight away: no need to save the view first. The Logo part has its own **Upload…** button too.
+- A new **Picture** part for sponsors' logos, photos and show graphics: as many as you like, each with its own picture. Drop picture files onto the screen to add them. See [Logos and pictures](/docs/layout-designer#logos-and-pictures).
+- **Save as new** copies a view's pictures.
+- The **BDNG sponsor clock** is no longer a built-in timer view, and **BDNG style** is no longer a ready-made layout in the layout designer. A screen or link still set to it shows the [Standard view](/docs/timer-views) instead. Layouts you already made from BDNG style are yours and stay.
 
 ## 1.24.0: the knowledge base and the manual
 
@@ -28,7 +44,7 @@ The latest changes, newest first. Your server updates itself (see [Updates](/doc
 ## 1.21.0: the layout designer
 
 - Make your own timer views by placing the timer, title, clock, message, logo and more on a 16:9 screen. See [The layout designer](/docs/layout-designer).
-- **BDNG sponsor clock** is built in. The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
+- The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
 
 ## 1.20.9: Messenger-style chat
 

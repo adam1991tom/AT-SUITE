@@ -14,8 +14,8 @@
     return (ms < 0 ? "-" : "") + (h ? `${h}:${pad(mi)}:${pad(s)}` : `${mi}:${pad(s)}`);
   };
 
-  // When the view's logos or text change in the console, show them straight away.
-  const view = slug === "bdng" ? "bdng" : `view:${slug}`;
+  // When the view's settings change in the console, show them straight away.
+  const view = `view:${slug}`;
   let ws = null;
   (function listen(delay) {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?topics=timer:${room}`);
@@ -73,7 +73,7 @@
       set("elapsed", s.started_at && pb !== "stop" ? fmt(Math.max(0, total - left)) : "—");
       set("end", pb === "play" ? hm(now + left) : pb === "pause" || pb === "armed" ? `${fmt(Math.max(0, left))} left` : "—");
     };
-    // Sit just above a progress bar fixed along the view's bottom edge (like BDNG's), if it has one.
+    // Sit just above a progress bar fixed along the view's bottom edge if it has one.
     const lift = () => {
       let h = 0;
       for (const e of document.body.querySelectorAll("*")) {

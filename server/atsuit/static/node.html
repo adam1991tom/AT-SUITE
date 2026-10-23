@@ -755,7 +755,7 @@
     try { all = await api("/api/fleet/nodes"); } catch (_) { return; }
     if (!views.length) try { views = await api("/api/timers-views?screens=1"); } catch (_) {}
     const screens = all.filter((n) => n.kind === "kiosk" && n.room_id === roomId)
-      .map((n) => ({ ...n, screen_view: n.screen_view === "stage" ? "hcc" : n.screen_view })); // the old Stage view is Standard now
+      .map((n) => ({ ...n, screen_view: ["stage", "bdng", "view:bdng"].includes(n.screen_view) ? "hcc" : n.screen_view })); // the old Stage and BDNG views are Standard now
     liveBar.screens(screens);
     // Redraw only when something changed, so a tech typing in the list isn't interrupted by the refresh.
     const sig = JSON.stringify(screens.map((n) => [n.id, n.name, n.online, n.screen_view]));

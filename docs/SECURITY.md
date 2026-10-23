@@ -250,4 +250,4 @@ AT-SUITE is designed with security as a core principle. The application handles 
 
 **Last Updated:** 2026-10-18
 **Maintained By:** AT NET
-**Contact:** security@example.com (replace with actual contact)
+**Contact:** support@atsuite.tech

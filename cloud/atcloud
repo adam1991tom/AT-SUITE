@@ -19,6 +19,10 @@ sends each address to its venue; Cloudflare sits in front of it.
                                             move venues to a version: copy first, health check,
                                             back to the old version if it isn't healthy. Never
                                             while a show is on, unless --force
+                                            The Windows tech app of that release comes too
+  atcloud autoupdate                        when ATCLOUD_AUTOUPDATE=yes (hourly, by timer): a newer release
+                                            is fetched (or built from ATCLOUD_SOURCE) and every venue
+                                            updated as above; a venue with a show on waits an hour
   atcloud app [--release v1.11.0 | --dir DIR]
                                             the Windows tech app laptops update from, for every venue
   atcloud models                            fetch the speech model laptops caption with, once for all
@@ -38,6 +42,8 @@ Settings live in $ATCLOUD_ROOT/atcloud.env (default /srv/atcloud). Only Python 3
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import re
@@ -46,6 +52,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,7 +66,9 @@ AI_IMAGE = "ollama/ollama:0.5.7"
 RESTIC_IMAGE = "restic/restic:0.17.3"
 HELPER_IMAGE = "alpine:3.20"
 SPEECH_MODEL = "sherpa-onnx-streaming-zipformer-en-2023-06-21"
-RELEASES = "https://github.com/adam1991tom/AT-SUITE-releases/releases/download"
+# Where releases are, asked in turn: the releases-only repository (and its old name), then the
+# source repository, which has them until the releases-only one does (as the venues' updater).
+RELEASE_REPOS = ("adam1991tom/AT-SUITE-releases", "adam1991tom/AT-SUIT-releases", "adam1991tom/AT-SUITE")
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
 RESERVED = {"www", "admin", "api", "app", "mail", "smtp", "status", "help", "kb", "docs", "cloud", "edge", "portal",
             "billing", "shop", "support", "dashboard", "login", "account", "accounts", "static", "cdn", "ns1", "ns2"}
@@ -74,6 +83,9 @@ DEFAULTS = {
     "ATCLOUD_TRUSTED_PROXIES": "private_ranges",
     "ATCLOUD_AI": "0",
     "ATCLOUD_AI_MODEL": "llama3.2:3b",
+    "ATCLOUD_EDGE_NETWORKS": "",  # other sites' docker networks the front door joins (extra/*.caddy)
+    "ATCLOUD_AUTOUPDATE": "no",  # yes: atcloud-autoupdate.timer installs each new release by itself
+    "ATCLOUD_SOURCE": "",  # a git clone of AT-SUITE to build the image from when it can't be pulled
     "RESTIC_REPOSITORY": "",
     "RESTIC_KEEP": "--keep-daily 7 --keep-weekly 4",
 }
@@ -286,7 +298,7 @@ def join(container: str, network: str) -> None:
 
 # --------------------------------------------------------------- commands --
 def cmd_init(a) -> None:
-    for d in ("tenants", "tenants/removed", "sites", "certs", "kb", "app", "models", "backups"):
+    for d in ("tenants", "tenants/removed", "sites", "extra", "certs", "kb", "app", "models", "backups"):
         (ROOT / d).mkdir(parents=True, exist_ok=True)
     c = conf()
     changes = {k: v for k, v in DEFAULTS.items() if k not in c or not (ROOT / "atcloud.env").is_file()}
@@ -323,7 +335,9 @@ def cmd_init(a) -> None:
 def cloudflare_ranges() -> list[str]:
     out = []
     for v in ("v4", "v6"):
-        with urllib.request.urlopen(f"https://www.cloudflare.com/ips-{v}", timeout=20) as r:
+        # Cloudflare answers 403 to Python's default User-Agent
+        req = urllib.request.Request(f"https://www.cloudflare.com/ips-{v}", headers={"User-Agent": "atcloud"})
+        with urllib.request.urlopen(req, timeout=20) as r:
             out += [ln.strip() for ln in r.read().decode().split() if ln.strip()]
     if not out:
         raise Fail("Couldn't get Cloudflare's addresses")
@@ -335,6 +349,7 @@ def cmd_edge(a=None) -> None:
     need_init(c)
     if exists("container", EDGE):
         docker("rm", "-f", EDGE)
+    (ROOT / "extra").mkdir(exist_ok=True)  # servers set up before extra/ existed
     if not exists("volume", "atcloud-edge-data"):
         docker("volume", "create", "atcloud-edge-data")
     docker("run", "-d", "--name", EDGE, "--restart", "unless-stopped",
@@ -344,9 +359,14 @@ def cmd_edge(a=None) -> None:
            "--security-opt", "no-new-privileges:true", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
            "-e", f"ATCLOUD_DOMAIN={c['ATCLOUD_DOMAIN']}", "-e", f"ATCLOUD_TRUSTED_PROXIES={c['ATCLOUD_TRUSTED_PROXIES']}",
            "-v", f"{KIT / 'Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{ROOT / 'sites'}:/etc/caddy/sites:ro",
+           "-v", f"{ROOT / 'extra'}:/etc/caddy/extra:ro",
            "-v", f"{ROOT / 'certs'}:/certs:ro", "-v", "atcloud-edge-data:/data", EDGE_IMAGE)
     for t in tenants():
         join(EDGE, names(t["slug"])["network"])
+    for n in c["ATCLOUD_EDGE_NETWORKS"].split():
+        if not exists("network", n):
+            say(f"Network {n} (ATCLOUD_EDGE_NETWORKS) isn't there yet; run `atcloud edge` again once its site is up.")
+        join(EDGE, n)
     for _ in range(30):
         # 127.0.0.1, not localhost: Caddy's admin listens on IPv4 only, and wget may try ::1 first
         probe = subprocess.run(["docker", "exec", EDGE, "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"],
@@ -502,6 +522,13 @@ def cmd_update(a) -> None:
     img = image(c, version)
     if not a.no_pull:
         docker("pull", "-q", img)
+    if version != "latest":  # laptops get the release's app with the server, never by hand
+        try:
+            if fetch_app(f"v{version}"):
+                say(f"Windows tech app {version} fetched; each venue publishes it once it's on {version}.")
+        except (Fail, OSError) as exc:  # OSError: GitHub unreachable, a timeout, a full disk
+            shutil.rmtree(ROOT / "app.new", ignore_errors=True)
+            say(f"Couldn't fetch the Windows tech app for {version} ({exc}); laptops stay on the one they have. `atcloud app` tries again.")
     failed = []
     for t in pick(a):
         slug, old = t["slug"], t["version"]
@@ -538,10 +565,68 @@ def cmd_update(a) -> None:
         raise Fail(f"Not updated: {', '.join(failed)}")
 
 
-def cmd_app(a) -> None:
-    c = conf()
+def release_file(tag: str, name: str, timeout: int = 60):
+    """A file of a release, from the first repository that has that release."""
+    for repo in RELEASE_REPOS:
+        req = urllib.request.Request(f"https://github.com/{repo}/releases/download/{tag}/{name}", headers={"User-Agent": "atcloud"})
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise Fail(f"GitHub answered {exc.code} for {name} of {tag}")
+    raise Fail(f"No release {tag} with {name}")
+
+
+def yml_field(yml: bytes, key: str) -> str:
+    m = re.search(rb"^" + key.encode() + rb":\s*['\"]?([^'\"\n]+?)['\"]?\s*$", yml, re.M)
+    return m.group(1).decode() if m else ""
+
+
+def fetch_app(tag: str) -> bool:
+    """The Windows tech app of a release into the folder venues publish from. False when that
+    version is there already."""
     dest = ROOT / "app"
     dest.mkdir(exist_ok=True)
+    with release_file(tag, "latest.yml") as r:
+        yml = r.read()
+    exe = yml_field(yml, "path")
+    if not exe:
+        raise Fail("The release's latest.yml names no installer")
+    have = dest / "latest.yml"
+    if have.is_file() and have.read_bytes() == yml and (dest / exe).is_file():
+        return False
+    stage = ROOT / "app.new"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir()
+    for n in (exe, f"{exe}.blockmap"):
+        say(f"Downloading {n}…")
+        with release_file(tag, n, timeout=600) as r, (stage / n).open("wb") as out:
+            shutil.copyfileobj(r, out)
+    want = yml_field(yml, "sha512")
+    h = hashlib.sha512()
+    with (stage / exe).open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    if want and base64.b64encode(h.digest()).decode() != want:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise Fail(f"{exe} doesn't match its latest.yml (a broken download?)")
+    (stage / "latest.yml").write_bytes(yml)
+    swap_app(stage)
+    return True
+
+
+def swap_app(stage: Path) -> None:
+    dest = ROOT / "app"
+    for f in dest.iterdir():  # swap in place: venues mount this folder
+        f.unlink()
+    for f in sorted(stage.iterdir(), key=lambda f: f.name == "latest.yml"):
+        f.replace(dest / f.name)
+    stage.rmdir()
+
+
+def cmd_app(a) -> None:
+    c = conf()
+    (ROOT / "app").mkdir(exist_ok=True)
     if a.dir:
         src = Path(a.dir)
         names_ = [f.name for f in src.iterdir() if f.name == "latest.yml" or f.suffix in (".exe", ".blockmap")]
@@ -552,34 +637,82 @@ def cmd_app(a) -> None:
         stage.mkdir()
         for n in names_:
             shutil.copyfile(src / n, stage / n)
+        swap_app(stage)
     else:
         tag = a.release or f"v{c['ATCLOUD_VERSION']}"
         if tag == "vlatest":
             raise Fail("Say which release: atcloud app --release v1.11.0")
-        stage = ROOT / "app.new"
-        shutil.rmtree(stage, ignore_errors=True)
-        stage.mkdir()
-        with urllib.request.urlopen(f"{RELEASES}/{tag}/latest.yml", timeout=60) as r:
-            yml = r.read()
-        m = re.search(rb"^path:\s*['\"]?([^'\"\n]+?)['\"]?\s*$", yml, re.M)
-        if not m:
-            raise Fail("The release's latest.yml names no installer")
-        exe = m.group(1).decode()
-        for n in (exe, f"{exe}.blockmap"):
-            say(f"Downloading {n}…")
-            with urllib.request.urlopen(f"{RELEASES}/{tag}/{n}", timeout=600) as r, (stage / n).open("wb") as out:
-                shutil.copyfileobj(r, out)
-        (stage / "latest.yml").write_bytes(yml)
-    for f in dest.iterdir():  # swap in place: venues mount this folder
-        f.unlink()
-    for f in sorted(stage.iterdir(), key=lambda f: f.name == "latest.yml"):
-        f.replace(dest / f.name)
-    stage.rmdir()
+        fetch_app(tag)
     for t in tenants():
         if t["status"] == "active" and state(t["slug"]) == "running":
             ok = subprocess.run(["docker", "exec", names(t["slug"])["container"], "python", "-m", "atsuit.hosted", "app", "/srv/app"],
                                 capture_output=True).returncode == 0
             say(f"{t['slug']}: {'published' if ok else 'FAILED'}")
+
+
+def vtuple(v: str) -> tuple:
+    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)$", v or "")
+    return tuple(int(x) for x in m.groups()) if m else (0,)
+
+
+def latest_release() -> str:
+    """The newest release's version (1.25.2), from the first repository that has releases. GitHub sends
+    /releases/latest on to /releases/tag/<tag> (no API, so no rate limit)."""
+    for repo in RELEASE_REPOS:
+        req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", method="HEAD",
+                                     headers={"User-Agent": "atcloud"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                tag = r.geturl().rstrip("/").rsplit("/tag/", 1)[-1] if "/tag/" in r.geturl() else ""
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            raise Fail(f"GitHub answered {exc.code} for the latest release of {repo}")
+        if vtuple(tag) > (0,):
+            return tag.lstrip("v")
+    raise Fail("No release found on GitHub")
+
+
+def get_image(c: dict, version: str) -> None:
+    """The image for a version: already here, pulled, or built from the release's code in ATCLOUD_SOURCE."""
+    img = image(c, version)
+    for probe in (["docker", "image", "inspect", img], ["docker", "pull", "-q", img]):
+        if subprocess.run(probe, capture_output=True).returncode == 0:
+            return
+    src = c["ATCLOUD_SOURCE"]
+    if not src:
+        raise Fail(f"Can't pull {img}, and ATCLOUD_SOURCE (a git clone to build it from) isn't set")
+    say(f"Building {img} from {src} at v{version}…")
+    run("git", "-C", src, "fetch", "-q", "--tags", "origin")
+    build = ROOT / "build"
+    shutil.rmtree(build, ignore_errors=True)
+    build.mkdir()
+    try:  # the release's own files, without touching the clone's working tree
+        run("sh", "-c", f'git -C "{src}" archive "v{version}" | tar -x -C "{build}"')
+        commit = run("git", "-C", src, "rev-parse", "--short", f"v{version}^{{commit}}").strip()
+        run("docker", "build", "-q", "-t", img, "--build-arg", f"VERSION=v{version}", "--build-arg", f"COMMIT={commit}",
+            "--build-arg", f"BUILD_DATE={now()}", str(build))
+    finally:
+        shutil.rmtree(build, ignore_errors=True)
+
+
+def cmd_autoupdate(a) -> None:
+    c = conf()
+    need_init(c)
+    if c["ATCLOUD_AUTOUPDATE"] != "yes" and not a.now:
+        return  # the timer runs every hour; it does nothing until this is switched on
+    version = latest_release()
+    behind = [t for t in tenants() if t["status"] == "active" and vtuple(t["version"]) < vtuple(version)]
+    if vtuple(c["ATCLOUD_VERSION"]) >= vtuple(version) and not behind:
+        say(f"Up to date ({version}).")
+        return
+    say(f"New release {version}.")
+    get_image(c, version)
+    if c["ATCLOUD_VERSION"] != "latest" and vtuple(c["ATCLOUD_VERSION"]) < vtuple(version):
+        save_conf({"ATCLOUD_VERSION": version})  # new venues get it too
+    if behind:
+        cmd_update(argparse.Namespace(venues=[t["slug"] for t in behind], all=False, version=version,
+                                      force=False, no_pull=True))
 
 
 def cmd_models(a) -> None:
@@ -811,6 +944,10 @@ def main(argv: list[str]) -> int:
     s.add_argument("--force", action="store_true", help="even while a show is on")
     s.add_argument("--no-pull", action="store_true")
     s.set_defaults(fn=cmd_update)
+
+    s = sub.add_parser("autoupdate", help="install a newer release by itself (atcloud-autoupdate.timer)")
+    s.add_argument("--now", action="store_true", help="even when ATCLOUD_AUTOUPDATE isn't yes")
+    s.set_defaults(fn=cmd_autoupdate)
 
     s = sub.add_parser("app", help="the Windows tech app for every venue")
     g = s.add_mutually_exclusive_group()

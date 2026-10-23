@@ -249,6 +249,8 @@ body:has(> .center:not(.hidden):not(#boot), > #shell:not(.hidden), > #ws:not(.hi
     linear-gradient(rgba(56,189,248,.035) 1px, transparent 1px) 0 0 / 100% 28px, var(--bg);
 }
 :root[data-theme="futuristic"] .panel { backdrop-filter: blur(8px); }
+/* windows, menus and pop-ups sit over other things, so they are solid: the same colours as a panel on the page, no see-through */
+:root[data-theme="futuristic"] :is(.dk-win, .dk-menu, .dropdown, .toast, dialog) { --panel: #09101e; --panel2: #101b30; }
 :root[data-theme="futuristic"] h1, :root[data-theme="futuristic"] h2 { text-transform: uppercase; letter-spacing: .08em; }
 :root[data-theme="futuristic"] button:hover, :root[data-theme="futuristic"] .btn:hover { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent); }
 :root[data-theme="futuristic"] .clock, :root[data-theme="futuristic"] .bigclock { font-family: var(--num-font); }
@@ -334,6 +336,9 @@ dialog.bugdlg summary { cursor: pointer; }
 .ld-grid .ld-f { grid-template-columns: 1fr; gap: .1rem; }
 label.ld-c { margin: .35rem 0; font-size: .85rem; }
 .ld-thumb { height: 28px; max-width: 90px; object-fit: contain; background: #555; border-radius: 4px; }
+.ld-file { position: relative; }
+.ld-file:focus-within { outline: 3px solid var(--accent); outline-offset: 1px; }
+.ld-canvas.drop { outline: 3px dashed var(--accent); outline-offset: 2px; }
 /* Timers → Views: the preview of a view on one room */
 .tv-preview { position: relative; width: 100%; max-width: 760px; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
 .tv-preview iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; pointer-events: none; }

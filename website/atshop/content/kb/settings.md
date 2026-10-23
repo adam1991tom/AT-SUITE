@@ -27,7 +27,7 @@ keywords: settings, general, branding, product name, accent colour, modules, pri
 
 ![Settings, Look tab: five themes (Dark, Light, Match the laptop, Modern, Futuristic), then spacing, corners, font and animation, and a preview](/static/kb/settings-look.jpg)
 
-One look for the whole site: every console, tech workspace, setup and presenter page. Pick a **theme** (Dark, Light, Match the laptop, Modern or Futuristic), then **spacing**, **corners**, **font** and **animation**. *Off (no flashing or animation)* suits anyone sensitive to motion. Press **Save for everyone**. Stage, caption and backstage screens keep their own look.
+One look for the whole site: every console, tech workspace, setup and presenter page. Pick a **theme** (Dark, Light, Match the laptop, Modern or Futuristic), then **spacing**, **corners**, **font** and **animation**. *Off (no flashing or animation)* suits anyone sensitive to motion. Press **Save for everyone**. Stage, caption and backstage screens keep their own look. Windows, menus and pop-ups are always solid, so nothing behind them shows through, even with Futuristic.
 
 ## Chat
 

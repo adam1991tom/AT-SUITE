@@ -53,7 +53,9 @@ docker ps --format '{{.Names}}' | grep -qx atsuit-tls && PROFILE=(--profile tls)
 
 # 1. Backup, and keep the running image under atsuit:rollback.
 ./backup.sh
-BACKUP="$(ls -t backups/atsuit-*.tgz | head -1)"
+# sed, not head: head stops reading after one line, so with a lot of backups ls is killed
+# mid-list (SIGPIPE), pipefail turns that into a failure and the update stops here.
+BACKUP="$(ls -t backups/atsuit-*.tgz | sed -n 1p)"
 OLD_IMAGE="$(docker inspect -f '{{.Image}}' atsuit 2>/dev/null || true)"
 [ -n "$OLD_IMAGE" ] && docker image tag "$OLD_IMAGE" atsuit:rollback
 

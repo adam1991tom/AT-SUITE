@@ -6,7 +6,7 @@
 #
 # It installs Docker, security updates, a firewall (SSH in; the venues' https is guarded by
 # the front door, which only lets Cloudflare in), a swap file, the atcloud tool and the
-# nightly backup timer, then runs `atcloud init`. Safe to run again.
+# nightly backup and hourly autoupdate timers, then runs `atcloud init`. Safe to run again.
 set -euo pipefail
 
 DOMAIN=""
@@ -40,7 +40,9 @@ python3 - <<'EOF'
 import json, pathlib
 p = pathlib.Path("/etc/docker/daemon.json")
 d = json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}
-d.setdefault("default-address-pools", [{"base": "10.200.0.0/14", "size": 24}])
+pools = d.setdefault("default-address-pools", [])
+if not any(x.get("base") == "10.200.0.0/14" for x in pools):
+    pools.insert(0, {"base": "10.200.0.0/14", "size": 24})  # first, ahead of any the host image set up
 d.setdefault("log-driver", "json-file")
 d.setdefault("log-opts", {"max-size": "10m", "max-file": "3"})
 d["live-restore"] = True  # venues keep running while Docker itself updates
@@ -73,9 +75,9 @@ mkdir -p /opt/atcloud
 cp -r "$KIT"/. /opt/atcloud/
 chmod +x /opt/atcloud/atcloud
 ln -sf /opt/atcloud/atcloud /usr/local/bin/atcloud
-cp /opt/atcloud/systemd/atcloud-backup.service /opt/atcloud/systemd/atcloud-backup.timer /etc/systemd/system/
+cp /opt/atcloud/systemd/atcloud-*.service /opt/atcloud/systemd/atcloud-*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now atcloud-backup.timer >/dev/null
+systemctl enable --now atcloud-backup.timer atcloud-autoupdate.timer >/dev/null
 
 atcloud init --domain "$DOMAIN" --cloudflare
 

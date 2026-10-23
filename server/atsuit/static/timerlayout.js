@@ -1,5 +1,5 @@
 // Draws a timer view made in the layout designer (Timers → Layout designer). Each part
-// (timer, cue title, clock, stage message, logo...) sits in its own box, placed as a
+// (timer, cue title, clock, stage message, logo, pictures...) sits in its own box, placed as a
 // share of the screen's width and height, so one layout fits any screen. The stage
 // screens (timer.html) and the designer's canvas both draw with this, so what the
 // admin sees while designing is what the screens show.
@@ -23,6 +23,7 @@ const TimerLayout = (() => {
     secondary: { label: "Second line", w: 60, h: 10, size: 80 },
     progress: { label: "Progress bar", w: 100, h: 2 },
     logo: { label: "Logo", w: 18, h: 12 },
+    image: { label: "Picture", w: 24, h: 24 },
     text: { label: "Text", w: 40, h: 8, size: 70, text: "Your text" },
     room: { label: "Room name", w: 24, h: 5, size: 70 },
     status: { label: "Status bar", w: 100, h: 7 },
@@ -48,7 +49,7 @@ const TimerLayout = (() => {
     .tl-el.t-secondary.over .tl-in { color: var(--tl-danger); }
     .tl-el.blink .tl-in { animation: tl-pulse .8s ease-in-out infinite; }
     @keyframes tl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .12; } }
-    .tl-el.t-logo img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+    .tl-el:is(.t-logo, .t-image) img { width: 100%; height: 100%; object-fit: var(--fit, contain); display: block; }
     .tl-el.t-progress { background: color-mix(in srgb, var(--c, var(--tl-fg)) 15%, transparent); }
     .tl-el.t-progress i { position: absolute; top: 0; bottom: 0; }
     .tl-el.t-progress .zn { background: var(--c, var(--tl-fg)); } .tl-el.t-progress .zw { background: var(--tl-warn); } .tl-el.t-progress .zd { background: var(--tl-danger); }
@@ -88,7 +89,7 @@ const TimerLayout = (() => {
 
   const withAlpha = (hex, pct) => pct >= 100 ? hex : `color-mix(in srgb, ${hex} ${pct}%, transparent)`;
 
-  // host: the element to draw in. look: { layout, background, text, logos: { logo, bg } }.
+  // host: the element to draw in. look: { layout, background, text, logos: { logo, bg }, pictures: { id: url } }.
   // edit: true in the designer (empty parts show their name so they can be found).
   function mount(host, look, { edit = false } = {}) {
     addCss();
@@ -114,7 +115,7 @@ const TimerLayout = (() => {
         (L.elements || []).filter((e) => !e.hidden).map((e, i) => part(e, i)).join("") +
         '<div class="tl-cover"><div></div></div><div class="tl-alert"></div>';
       nodes = new Map([...root.querySelectorAll(".tl-el")].map((n) => [n.dataset.id, n]));
-      for (const img of root.querySelectorAll(".t-logo img")) img.onerror = () => { img.remove(); };
+      for (const img of root.querySelectorAll(".tl-el img")) img.onerror = () => { img.parentNode.classList.add("empty"); img.remove(); };
       if (last) update(last, true);
     }
 
@@ -128,16 +129,24 @@ const TimerLayout = (() => {
       let inner = '<div class="tl-in"></div>';
       if (e.type === "progress") inner = '<i class="zn"></i><i class="zw"></i><i class="zd"></i><i class="mask"></i><i class="ot"></i>';
       if (e.type === "box") inner = "";
-      if (e.type === "logo") {
-        const url = look.logos && look.logos.logo;
-        inner = url ? `<img src="${esc(url)}" alt="">` : "";
+      const pic = picture(e);
+      if (e.type === "logo" || e.type === "image") {
+        inner = pic ? `<img src="${esc(pic)}" alt="">` : "";
+        style.push(`--fit:${{ cover: "cover", stretch: "fill" }[e.fit] || "contain"}`);
       }
       if (e.type === "status") {
         inner = [["tod", "Time now"], ["state", "Timer"], ["cue", "Now", "grow"], ["start", "Started"], ["elapsed", "Elapsed"], ["end", "Expected end"]]
           .map(([k, l, c]) => `<div class="it ${c || ""}" data-s="${k}"><b>${l}</b><span></span></div>`).join("");
       }
-      const empty = (e.type === "logo" && !(look.logos && look.logos.logo)) ? " empty" : "";
+      const empty = (e.type === "logo" || e.type === "image") && !pic ? " empty" : "";
       return `<div class="${cls}${empty}" data-id="${esc(e.id)}" data-label="${esc(T.label || e.type)}" style="${style.join(";")}">${inner}</div>`;
+    }
+
+    // The picture a logo or Picture part shows: the view's logo, or the one uploaded for the part.
+    function picture(e) {
+      if (e.type === "logo") return (look.logos && look.logos.logo) || "";
+      if (e.type === "image") return (e.src && look.pictures && look.pictures[e.src]) || "";
+      return "";
     }
 
     // Shrink a part's words until they fit its box (one line, or several for the ones that wrap).
@@ -240,7 +249,7 @@ const TimerLayout = (() => {
   function element(type, id) {
     const T = TYPES[type];
     const e = { id, type, x: +((100 - T.w) / 2).toFixed(1), y: +((100 - T.h) / 2).toFixed(1), w: T.w, h: T.h, align: "center", color: "", bg: T.bg || "",
-      bg_opacity: 100, radius: 0, size: T.size || 80, bold: true, upper: false, text: T.text || "", cover: T.cover ?? true, hidden: false };
+      bg_opacity: 100, radius: 0, size: T.size || 80, bold: true, upper: false, text: T.text || "", cover: T.cover ?? true, src: "", fit: "contain", hidden: false };
     if (type === "progress") Object.assign(e, { x: 0, y: 98 });
     if (type === "status") Object.assign(e, { x: 0, y: 91, size: 80 });
     return e;
@@ -255,14 +264,6 @@ const TimerLayout = (() => {
       ["secondary", 10, 70, 80, 11],
       ["status", 0, 88.5, 100, 7.5],
       ["progress", 0, 96, 100, 4],
-      ["message", 5, 20, 90, 60],
-    ]) } },
-    bdng: { name: "BDNG style", background: "#f5f5f5", text: "#1a1a1a", layout: { font: "arial", over: "#fa5656", danger: "#fa5656", elements: mk([
-      ["logo", 11, 3, 78, 22],
-      ["timer", 8, 30, 84, 34, { size: 92 }],
-      ["secondary", 15, 64, 70, 9],
-      ["text", 10, 76, 80, 6, { text: "Official Timekeeping Sponsor", size: 70, upper: true }],
-      ["progress", 0, 97, 100, 3],
       ["message", 5, 20, 90, 60],
     ]) } },
     speaker: { name: "Speaker", background: "#0b1020", text: "#ffffff", layout: { font: "saira", elements: mk([

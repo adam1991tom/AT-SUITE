@@ -44,15 +44,18 @@ class Settings:
     # The vendor private key that signs AT SUITE licence keys (a file, mode 600, never in git).
     signing_key_file: str = ""
     admin_emails: set[str] = field(default_factory=set)
+    # Other addresses that sign in to an existing account: {other: account's email}. The link goes to the
+    # address typed; the account (and so admin rights, which follow its email) is the same.
+    email_aliases: dict[str, str] = field(default_factory=dict)
     # Email. With no SMTP_HOST, mail is kept in the outbox (admin → Emails) and logged, not sent.
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_tls: bool = True
-    mail_from: str = "AT SUITE <hello@example.com>"
-    support_email: str = "support@example.com"
-    sales_email: str = "sales@example.com"
+    mail_from: str = "AT SUITE <noreply@atsuite.tech>"
+    support_email: str = "support@atsuite.tech"
+    sales_email: str = "hello@atsuite.tech"
     company_name: str = "[COMPANY NAME] Ltd"
     # Managed hosting: "manual" (jobs wait in admin → Hosting for you to run) or "ssh" (runs atcloud).
     hosting_mode: str = "manual"
@@ -121,14 +124,16 @@ def load() -> Settings:
         allow_live=_bool(e("SHOP_ALLOW_LIVE")),
         signing_key_file=e("LICENCE_SIGNING_KEY_FILE", ""),
         admin_emails={a.strip().lower() for a in e("ADMIN_EMAILS", "").split(",") if a.strip()},
+        email_aliases={k.strip().lower(): v.strip().lower() for k, v in
+                       (a.split("=", 1) for a in e("EMAIL_ALIASES", "").split(",") if "=" in a)},
         smtp_host=e("SMTP_HOST", ""),
         smtp_port=int(e("SMTP_PORT", "587") or 587),
         smtp_user=e("SMTP_USER", ""),
         smtp_password=_secret("SMTP_PASSWORD"),
         smtp_tls=_bool(e("SMTP_TLS"), True),
-        mail_from=e("MAIL_FROM", "AT SUITE <hello@example.com>"),
-        support_email=e("SUPPORT_EMAIL", "support@example.com"),
-        sales_email=e("SALES_EMAIL", "sales@example.com"),
+        mail_from=e("MAIL_FROM", "AT SUITE <noreply@atsuite.tech>"),
+        support_email=e("SUPPORT_EMAIL", "support@atsuite.tech"),
+        sales_email=e("SALES_EMAIL", "hello@atsuite.tech"),
         company_name=e("COMPANY_NAME", "[COMPANY NAME] Ltd"),
         hosting_mode=e("HOSTING_MODE", "manual").strip().lower(),
         hosting_domain=e("HOSTING_DOMAIN", "").strip().lower(),

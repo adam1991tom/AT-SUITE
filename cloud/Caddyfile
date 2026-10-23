@@ -12,13 +12,17 @@
 	}
 }
 
-*.{$ATCLOUD_DOMAIN} {
-	tls /certs/origin.pem /certs/origin.key
-	# Only Cloudflare may connect (Docker's published ports go round the server's own firewall).
+# Only Cloudflare may connect (Docker's published ports go round the server's own firewall).
+(cloudflare_only) {
 	@outside not remote_ip {$ATCLOUD_TRUSTED_PROXIES}
 	handle @outside {
 		abort
 	}
+}
+
+*.{$ATCLOUD_DOMAIN} {
+	tls /certs/origin.pem /certs/origin.key
+	import cloudflare_only
 	encode gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -32,3 +36,7 @@
 		respond "There's no AT-SUITE venue at this address." 404
 	}
 }
+
+# Other sites on this server, such as the website and shop on their own domain: one file each in
+# /srv/atcloud/extra (see "Other sites on the same server" in docs/HOSTING.md).
+import /etc/caddy/extra/*.caddy

@@ -39,13 +39,13 @@ TIMER_TYPES = ("count-down", "count-up", "clock", "none")
 END_ACTIONS = ("none", "stop", "load-next", "play-next")
 # "hcc" is the Standard view (the id stays so existing links and screens keep working).
 # There is no separate "stage" view any more: the stage screen is the Standard view (adam, 0.6.5).
-# BDNG is the client's Ontime view, shipped in docs/views/bdng.html and served as it is at
-# /room/<room>/external/bdng/ (view=bdng sends a screen there). It was an import for a while,
-# so an uploaded copy called "bdng" (view:bdng) still routes to it.
-BUILTIN_VIEWS = {"hcc": "Standard", "bdng": "BDNG sponsor clock", "minimal": "Minimal timer", "clock": "Clock",
+BUILTIN_VIEWS = {"hcc": "Standard", "minimal": "Minimal timer", "clock": "Clock",
                  "backstage": "Backstage (studio clock)", "preview": "Speaker preview (clock and help calls)", "overlay": "Overlay window"}
-LEGACY_VIEWS = {"stage": "hcc"}
-RESERVED_SLUGS = {"bdng"}
+# BDNG (a client's sponsor clock) was built in from 1.21.0 and imported before that; it was
+# taken out in 1.25.0 (adam). Screens and links still set to it (bdng, or view:bdng from an
+# old import) show the Standard view, and an old imported copy stays hidden and unserved.
+LEGACY_VIEWS = {"stage": "hcc", "bdng": "hcc"}
+RETIRED_SLUGS = {"bdng"}
 MAX_DURATION = 24 * 3600 * 1000
 
 # A laptop that lost the server keeps running the timer itself and sends what the tech did
@@ -762,7 +762,7 @@ def test_views() -> list[dict]:
 
 
 def list_views(c, tests: bool = False) -> list[dict]:
-    custom = [v for v in db.rows(c.execute("SELECT slug,name,created_at FROM timer_views ORDER BY name")) if v["slug"] not in RESERVED_SLUGS]
+    custom = [v for v in db.rows(c.execute("SELECT slug,name,created_at FROM timer_views ORDER BY name")) if v["slug"] not in RETIRED_SLUGS]
     designs = db.rows(c.execute("SELECT slug,name,created_at FROM timer_designs ORDER BY name"))
     return [{"id": k, "name": v, "builtin": True} for k, v in BUILTIN_VIEWS.items()] + \
            [{"id": f"built:{v['slug']}", "slug": v["slug"], "name": v["name"], "builtin": False, "design": True,
@@ -780,7 +780,7 @@ def view_known(c, view: str) -> bool:
     if view.startswith("built:"):
         return bool(c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (view[6:],)).fetchone())
     if view.startswith("view:"):
-        return view[5:] in RESERVED_SLUGS or bool(c.execute("SELECT 1 FROM timer_views WHERE slug=?", (view[5:],)).fetchone())
+        return view[5:] in RETIRED_SLUGS or bool(c.execute("SELECT 1 FROM timer_views WHERE slug=?", (view[5:],)).fetchone())
     return False
 
 
@@ -802,8 +802,8 @@ def _install_view(name: str, filename: str, data: bytes, p: Principal) -> dict:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
     if not SLUG.match(slug or ""):
         raise HTTPException(400, "Give the view a name with letters or numbers")
-    if slug in RESERVED_SLUGS:
-        raise HTTPException(400, f"{BUILTIN_VIEWS[slug]} is built in. Give your view another name.")
+    if slug in RETIRED_SLUGS:
+        raise HTTPException(400, "That name is taken. Give your view another name.")
     target = views_dir() / slug
     tmp = views_dir() / f".{slug}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
@@ -842,31 +842,6 @@ def _install_view(name: str, filename: str, data: bytes, p: Principal) -> dict:
     return {"id": f"view:{slug}", "slug": slug, "url": f"/room/<room>/external/{slug}/"}
 
 
-# Ready-to-import views shipped with AT-SUITE (docs/views/, copied next to the app in the image).
-SAMPLE_VIEWS = {"bdng": "BDNG"}
-
-
-def _sample_file(name: str) -> Path:
-    for d in (Path(__file__).resolve().parents[1] / "views-samples", Path(__file__).resolve().parents[3] / "docs" / "views"):
-        f = d / f"{name}.html"
-        if name in SAMPLE_VIEWS and f.is_file():
-            return f
-    raise HTTPException(404, "No such ready-made view")
-
-
-@router.get("/api/timers-views/samples/{name}.html")
-def sample_view(name: str):
-    """Download a ready-made view (e.g. BDNG) to import, or to keep."""
-    return FileResponse(_sample_file(name), media_type="text/html", filename=f"{name}.html")
-
-
-@router.post("/api/timers-views/samples/{name}/import")
-def import_sample_view(name: str, p: Principal = Depends(require_admin)):
-    """Ready-made views are built in now: there is nothing to import. Kept for older consoles."""
-    _sample_file(name)
-    return {"id": name, "slug": name, "builtin": True}
-
-
 @router.delete("/api/timers-views/{slug}")
 def delete_view(slug: str, p: Principal = Depends(require_admin)):
     if not SLUG.match(slug):
@@ -879,25 +854,29 @@ def delete_view(slug: str, p: Principal = Depends(require_admin)):
 
 
 # -------------------------------------------- branded and console-built views --
-# Standard (id hcc) shows a logo uploaded for it, or the site's logo; BDNG reads its
-# two logos and bottom text from here. Views made in the console's layout designer
+# Standard (id hcc) shows a logo uploaded for it, or the site's logo. Views made in the console's layout designer
 # (Timers → Layout designer) keep their look as JSON and are drawn by timer.html
 # with timerlayout.js. Any change is sent to every screen and app at once.
-LOGO_SLOTS = {"hcc": ("top",), "bdng": ("top", "bottom")}
+LOGO_SLOTS = {"hcc": ("top",)}
 DESIGN_SLOTS = ("logo", "bg")  # a designed view's logo and background picture
+# A designed view's Picture parts each show a picture uploaded for that view, kept as
+# built-<slug>-pic-<id>.<ext>. A part names its picture by the id, so a copied part
+# shares it and undo in the designer brings the old one back.
+PIC_ID = re.compile(r"^[0-9a-f]{10}$")
+MAX_PICTURES = 40
 LOGO_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp"}
-LOOK_DEFAULTS = {"hcc": {}, "bdng": {"bottom_text": "BDNG Official Timekeeping Sponsor"}}
+LOOK_DEFAULTS = {"hcc": {}}
 # The Ontime-style status bar along the bottom (time of day, state, cue, start
-# and end): on for the full-screen views, off for the minimal and overlay ones, and
-# for BDNG, which has its own layout. Uploaded views get it as a strip over their
-# bottom edge, off unless switched on.
-STATUS_BAR_DEFAULT = {"stage": True, "minimal": False, "clock": False, "backstage": True, "preview": False, "hcc": True, "overlay": False,
-                      "bdng": False}
+# and end): on for the full-screen views, off for the minimal and overlay ones.
+# Uploaded views get it as a strip over their bottom edge, off unless switched on.
+STATUS_BAR_DEFAULT = {"stage": True, "minimal": False, "clock": False, "backstage": True, "preview": False, "hcc": True, "overlay": False}
 
 
 def _look_key(view: str) -> str:
-    # BDNG was an uploaded view (view:bdng) before it was built in: both are the same view.
-    return view[5:] if view.startswith("view:") and view[5:] in RESERVED_SLUGS else view
+    # An old name for a view (stage, bdng, view:bdng) gets the look of the view it shows now.
+    if view.startswith("view:") and view[5:] in RETIRED_SLUGS:
+        view = view[5:]
+    return LEGACY_VIEWS.get(view, view)
 
 
 def _look_options(c, view: str) -> dict:
@@ -937,9 +916,20 @@ def _logo_url(key: str) -> str:
     return f"/api/timers-views/logo/{f.name}?v={int(f.stat().st_mtime)}" if f else ""
 
 
+def _pictures(slug: str) -> dict[str, Path]:
+    """A designed view's uploaded pictures, by id."""
+    pat = re.compile(rf"^built-{re.escape(slug)}-pic-([0-9a-f]{{10}})\.(png|jpg|svg|webp)$")
+    return {m.group(1): f for f in logos_dir().glob(f"built-{slug}-pic-*") if (m := pat.match(f.name))}
+
+
+def _picture_url(f: Path) -> str:
+    return f"/api/timers-views/logo/{f.name}?v={int(f.stat().st_mtime)}"
+
+
 def _design_out(r) -> dict:
     return {"id": f"built:{r['slug']}", "slug": r["slug"], "name": r["name"], "created_at": r["created_at"],
             "logos": {slot: _logo_url(f"built-{r['slug']}-{slot}") for slot in DESIGN_SLOTS},
+            "pictures": {pid: _picture_url(f) for pid, f in _pictures(r["slug"]).items()},
             "design": {**Design(name=r["name"]).model_dump(), **json.loads(r["config_json"] or "{}"), "name": r["name"]}}
 
 
@@ -961,20 +951,19 @@ def get_look(view: str):
             r = c.execute("SELECT * FROM timer_designs WHERE slug=?", (view[6:],)).fetchone()
             if r:
                 d = _design_out(r)
-                return {"view": view, "name": d["name"], "logos": d["logos"], "design": d["design"]}
+                return {"view": view, "name": d["name"], "logos": d["logos"], "pictures": d["pictures"], "design": d["design"]}
     raise HTTPException(404, "No such view")
 
 
 class LookIn(BaseModel):
-    bottom_text: str | None = Field(default=None, max_length=120)
     status_bar: bool | None = None
 
 
 @router.put("/api/timers-views/look/{view}")
 async def set_look(view: str, body: LookIn, p: Principal = Depends(require_admin)):
-    """A view's options: the status bar for the built-in and uploaded views, and
-    BDNG's bottom text."""
-    view = _look_key(view)
+    """A view's options: the status bar for the built-in and uploaded views."""
+    if _look_key(view) != view:  # an old name (stage, bdng) is set under the view it shows now
+        raise HTTPException(404, "No such view")
     with db.tx() as c:
         if not (view in BUILTIN_VIEWS or view in LOOK_DEFAULTS or (view.startswith("view:") and view_known(c, view))):
             raise HTTPException(404, "No such view")
@@ -987,21 +976,27 @@ async def set_look(view: str, body: LookIn, p: Principal = Depends(require_admin
     return {"ok": True}
 
 
-@router.post("/api/timers-views/look/{view}/logo/{slot}")
-async def upload_logo(view: str, slot: str, file: UploadFile, p: Principal = Depends(require_admin)):
-    """A logo or background picture for one view (PNG with a see-through background looks best for logos)."""
+async def _read_picture(file: UploadFile) -> tuple[str, bytes]:
+    """An uploaded picture's extension (.jpeg saved as .jpg) and bytes, checked."""
     ext = Path((file.filename or "").lower()).suffix
     if ext not in LOGO_TYPES:
         raise HTTPException(400, "Upload a PNG, JPG, SVG or WebP image")
     data = await file.read(5 * 1024 * 1024 + 1)
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(400, "Pictures can be up to 5 MB")
+    return (".jpg" if ext == ".jpeg" else ext), data
+
+
+@router.post("/api/timers-views/look/{view}/logo/{slot}")
+async def upload_logo(view: str, slot: str, file: UploadFile, p: Principal = Depends(require_admin)):
+    """A logo or background picture for one view (PNG with a see-through background looks best for logos)."""
+    ext, data = await _read_picture(file)
     with db.tx() as c:
         key = _logo_key(c, view, slot)
         db.audit(c, p.name, "timers.view_logo", key)
     for old in logos_dir().glob(f"{key}.*"):
         old.unlink()
-    (logos_dir() / f"{key}{'.jpg' if ext == '.jpeg' else ext}").write_bytes(data)
+    (logos_dir() / f"{key}{ext}").write_bytes(data)
     await announce_view(view)
     return {"url": _logo_url(key)}
 
@@ -1035,7 +1030,7 @@ class LayoutElement(BaseModel):
     """One part of a designed view, placed on the screen like a box on a slide.
     x, y, w and h are a share (%) of the screen's width and height."""
     id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,24}$")
-    type: Literal["timer", "title", "next", "clock", "message", "secondary", "progress", "logo", "text", "room", "status", "box"]
+    type: Literal["timer", "title", "next", "clock", "message", "secondary", "progress", "logo", "text", "room", "status", "box", "image"]
     x: float = Field(ge=0, le=100)
     y: float = Field(ge=0, le=100)
     w: float = Field(ge=1, le=100)
@@ -1050,6 +1045,8 @@ class LayoutElement(BaseModel):
     upper: bool = False
     text: str = Field(default="", max_length=200)  # a text box's words; a label in front of the others ("Next:")
     cover: bool = True  # the stage message fills the screen when it's up
+    src: str = Field(default="", pattern=r"^([0-9a-f]{10})?$")  # a Picture part's picture (uploaded for the view)
+    fit: Literal["contain", "cover", "stretch"] = "contain"  # how a logo or picture fills its box
     hidden: bool = False
 
 
@@ -1093,7 +1090,7 @@ class Design(BaseModel):
 def _design_slug(c, name: str) -> str:
     base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:36] or "view"
     slug, n = base, 2
-    while c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone() or (slug in RESERVED_SLUGS):
+    while c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone():
         slug, n = f"{base}-{n}", n + 1
     return slug
 
@@ -1104,16 +1101,36 @@ def list_designs():
         return [{**_design_out(r), "logo": _logo_url(f"built-{r['slug']}-logo")} for r in c.execute("SELECT * FROM timer_designs ORDER BY name")]
 
 
+def _design_files(slug: str) -> list[Path]:
+    """Every picture kept for a designed view: its logo, background and Picture parts' pictures."""
+    return [f for slot in DESIGN_SLOTS if (f := _logo_file(f"built-{slug}-{slot}"))] + list(_pictures(slug).values())
+
+
+def _prune_pictures(slug: str, body: Design) -> None:
+    """Drop pictures no part of the saved layout shows any more. One uploaded in the last
+    hour is kept: it may be on a part in a layout someone hasn't saved yet."""
+    used = {e.src for e in (body.layout.elements if body.layout else []) if e.type == "image"}
+    for pid, f in _pictures(slug).items():
+        if pid not in used and time.time() - f.stat().st_mtime > 3600:
+            f.unlink(missing_ok=True)
+
+
 @router.post("/api/timers-designs")
-async def add_design(body: Design, p: Principal = Depends(require_admin)):
-    """A timer view made in the console: a layout of parts, or (older) colours, sizes and which parts show."""
+async def add_design(body: Design, copy_from: str | None = None, p: Principal = Depends(require_admin)):
+    """A timer view made in the console: a layout of parts, or (older) colours, sizes and which parts show.
+    copy_from: the view this is a copy of (Save as new), whose pictures come too."""
     with db.tx() as c:
         if c.execute("SELECT COUNT(*) FROM timer_designs").fetchone()[0] >= 50:
             raise HTTPException(400, "Up to 50 designed views")
+        if copy_from and not c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (copy_from,)).fetchone():
+            raise HTTPException(404, "No such view to copy")
         slug = _design_slug(c, body.name)
         c.execute("INSERT INTO timer_designs(slug,name,config_json,created_at) VALUES(?,?,?,?)",
                   (slug, body.name.strip(), body.model_dump_json(), db.now_iso()))
         db.audit(c, p.name, "timers.design_add", slug)
+    if copy_from:
+        for f in _design_files(copy_from):
+            shutil.copyfile(f, f.with_name(f"built-{slug}-" + f.name[len(f"built-{copy_from}-"):]))
     return {"id": f"built:{slug}", "slug": slug}
 
 
@@ -1124,18 +1141,37 @@ async def edit_design(slug: str, body: Design, p: Principal = Depends(require_ad
                          (body.name.strip(), body.model_dump_json(), slug)).rowcount:
             raise HTTPException(404, "No such view")
         db.audit(c, p.name, "timers.design_edit", slug)
+    _prune_pictures(slug, body)
     await announce_view(f"built:{slug}")
     return {"ok": True}
 
 
+@router.post("/api/timers-designs/{slug}/pictures")
+async def add_design_picture(slug: str, file: UploadFile, p: Principal = Depends(require_admin)):
+    """A picture for one of a designed view's Picture parts: a sponsor's logo, a photo, a
+    show graphic. The part shows it once the layout is saved with the picture's id on it."""
+    ext, data = await _read_picture(file)
+    with db.tx() as c:
+        if not c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone():
+            raise HTTPException(404, "Save the view first")
+        if len(_pictures(slug)) >= MAX_PICTURES:
+            raise HTTPException(400, f"Up to {MAX_PICTURES} pictures in a view. Remove a Picture part and save, then try again.")
+        db.audit(c, p.name, "timers.design_picture", slug)
+    pid = os.urandom(5).hex()
+    f = logos_dir() / f"built-{slug}-pic-{pid}{ext}"
+    f.write_bytes(data)
+    return {"id": pid, "url": _picture_url(f)}
+
+
 @router.delete("/api/timers-designs/{slug}")
 async def delete_design(slug: str, p: Principal = Depends(require_admin)):
+    if not SLUG.match(slug):
+        raise HTTPException(404, "No such view")
     with db.tx() as c:
         c.execute("DELETE FROM timer_designs WHERE slug=?", (slug,))
         db.audit(c, p.name, "timers.design_delete", slug)
-    for slot in DESIGN_SLOTS:
-        for old in logos_dir().glob(f"built-{slug}-{slot}.*"):
-            old.unlink()
+    for f in _design_files(slug):
+        f.unlink(missing_ok=True)
     await announce_view(f"built:{slug}")
     return {"ok": True}
 
@@ -1157,6 +1193,8 @@ def view_slash(request: Request, slug: str, room_id: int | None = None):
 def serve_room_view(room_id: int, slug: str, path: str = ""):
     """A custom view for one room. The room is in the path, as each room had
     its own Ontime server, so a view's own ?room=... setting still works."""
+    if slug in RETIRED_SLUGS:  # a screen still set to BDNG shows the Standard view
+        return RedirectResponse(f"/timer/{room_id}", status_code=307)
     return serve_view(slug, path)
 
 
@@ -1166,19 +1204,14 @@ def serve_view(slug: str, path: str = ""):
     points their Ontime websocket at the room (from /room/<id>/..., or ?room=)."""
     if not SLUG.match(slug):
         raise HTTPException(404)
-    if slug in RESERVED_SLUGS:
-        # A built-in view shipped as one HTML file (BDNG): always the shipped one, so every
-        # server shows the same thing. Its logos come from Timers, not files next to it.
-        if path not in ("", "index.html"):
-            raise HTTPException(404)
-        f = _sample_file(slug)
-    else:
-        root = (views_dir() / slug).resolve()
-        f = (root / (path or "index.html")).resolve()
-        if f.is_dir():
-            f = f / "index.html"
-        if not str(f).startswith(str(root) + os.sep) or not f.is_file():
-            raise HTTPException(404)
+    if slug in RETIRED_SLUGS:
+        raise HTTPException(404)
+    root = (views_dir() / slug).resolve()
+    f = (root / (path or "index.html")).resolve()
+    if f.is_dir():
+        f = f / "index.html"
+    if not str(f).startswith(str(root) + os.sep) or not f.is_file():
+        raise HTTPException(404)
     if f.suffix.lower() in (".html", ".htm"):
         html = f.read_text(errors="replace")
         m = re.search(r"<head[^>]*>", html, re.I)

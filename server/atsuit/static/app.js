@@ -368,7 +368,7 @@
     el.innerHTML = `<h1>Timers</h1><div class="tabs sect">${Object.entries(TABS).map(([k, l]) => `<a class="btn${k === tab ? " on" : ""}" href="#/timers/${k}">${esc(l)}</a>`).join("")}</div><div id="tpage"></div>`;
     const page = el.querySelector("#tpage"), isAdmin = boot.me.role === "admin";
     const views = await api("/api/timers-views?screens=1");
-    const urlFor = (roomId, v) => v.startsWith("view:") ? `/room/${roomId}/external/${encodeURIComponent(v.slice(5))}/` : v === "bdng" ? `/room/${roomId}/external/bdng/` : `/timer/${roomId}?view=${encodeURIComponent(v)}`;
+    const urlFor = (roomId, v) => v.startsWith("view:") ? `/room/${roomId}/external/${encodeURIComponent(v.slice(5))}/` : `/timer/${roomId}?view=${encodeURIComponent(v)}`;
     const states = {};
     let pending = null;
     view = { onEvent: (e) => {
@@ -471,23 +471,16 @@
 
     async function renderViews() {
       const builtins = views.filter((v) => v.builtin && !v.test), custom = views.filter((v) => !v.builtin && !v.design);
-      const [designs, hcc, bdng] = await Promise.all([api("/api/timers-designs"), api("/api/timers-views/look/hcc"), api("/api/timers-views/look/bdng")]);
+      const [designs, hcc] = await Promise.all([api("/api/timers-designs"), api("/api/timers-views/look/hcc")]);
       const looks = Object.fromEntries(await Promise.all([...builtins, ...custom].map((v) => api(`/api/timers-views/look/${encodeURIComponent(v.id)}`).then((l) => [v.id, l]).catch(() => [v.id, null]))));
       const ABOUT = { hcc: "Logo top left, a big timer, the second line, the status bar and the progress bar. The view for the stage screens across the site.",
-        bdng: "The BDNG client's sponsor clock, exactly as it was built in Ontime: a logo at the top, the timer, a line of text and a logo at the bottom.",
         minimal: "Just the numbers.", clock: "The time of day.", backstage: "A studio clock with the running order.",
         preview: "For the speaker's own screen: the clock and help calls.", overlay: "See-through, for a small window on a laptop or a bar across a screen." };
-      // A logo slot: the picture if there is one, nothing if not.
-      const logoCell = (view, slot, url, label) => `<div class="row small" style="gap:.4rem;margin:.2rem 0"><span style="min-width:6.5rem">${label}</span>
-        ${url ? `<img src="${esc(url)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px">` : ""}
-        ${isAdmin ? `<input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-logo="${view}/${slot}" aria-label="${esc(label)}" style="width:auto">${url ? `<button class="small" data-unlogo="${view}/${slot}">Remove</button>` : ""}` : ""}</div>`;
       const sbar = (id) => `<label class="row small" style="margin:0;gap:.3rem;font-weight:400"><input type="checkbox" data-sbar="${esc(id)}" style="width:auto" ${looks[id]?.options?.status_bar ? "checked" : ""} ${isAdmin ? "" : "disabled"}>Status bar</label>`;
       const pv = (id) => `<button class="small" data-pv="${esc(id)}">Preview</button>`;
       // Standard shows the site's logo (Settings → General), or nothing when there isn't one.
       const siteLogo = hcc.logos.top || hcc.site_logo;
-      const extra = { hcc: siteLogo ? `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">Logo</span><img src="${esc(siteLogo)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px"></div>` : "",
-        bdng: `${logoCell("bdng", "top", bdng.logos.top, "Top logo")}${logoCell("bdng", "bottom", bdng.logos.bottom, "Bottom logo")}
-          <div class="row small" style="gap:.4rem;margin-top:.3rem"><span style="min-width:6.5rem">Bottom text</span><input data-btext aria-label="Bottom text" value="${esc(bdng.options.bottom_text || "")}" ${isAdmin ? "" : "disabled"} class="grow" style="max-width:22rem">${isAdmin ? '<button class="small" data-savetext>Save</button>' : ""}</div>` };
+      const extra = { hcc: siteLogo ? `<div class="row small" style="gap:.4rem"><span style="min-width:6.5rem">Logo</span><img src="${esc(siteLogo)}" alt="" style="height:28px;max-width:140px;object-fit:contain;background:#555;border-radius:4px"></div>` : "" };
       page.innerHTML = `
         <div class="panel" style="margin-bottom:1rem"><div class="row"><h2 style="margin:0">Preview</h2>
             <select data-pvview aria-label="View to preview" style="width:auto">${views.filter((v) => !v.test).map((v) => `<option value="${esc(v.id)}">${esc(v.name)}</option>`).join("")}</select>
@@ -497,7 +490,7 @@
         <h2>Built in</h2>
         <div class="panel"><table>${builtins.map((v) => `<tr><td style="width:15rem"><b>${esc(v.name)}</b><div class="small muted">${esc(ABOUT[v.id] || "")}</div></td>
           <td>${extra[v.id] || ""}</td><td style="width:7rem">${v.id === "clock" || v.id === "overlay" ? "" : sbar(v.id)}</td><td style="width:6rem">${pv(v.id)}</td></tr>`).join("")}</table>
-          <p class="small muted" style="margin:.6rem 0 0">They all turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to turn its status bar off or on there. <a href="/api/timers-views/samples/bdng.html" download>Download bdng.html</a></p></div>
+          <p class="small muted" style="margin:.6rem 0 0">They all turn red at danger, flash with Blink, show the stage message over the timer and go black with Blackout. Add <code>?status=0</code> or <code>?status=1</code> to a screen's address to turn its status bar off or on there.</p></div>
         <div class="row" style="justify-content:space-between;margin-top:1.4rem"><h2 style="margin:0">Your layouts</h2>${isAdmin ? '<a class="btn small primary" href="#/timers/designer" data-newlayout>New layout</a>' : ""}</div>
         <div class="panel" style="margin-top:.6rem"><table>${designs.map((d) => `<tr><td><b>${esc(d.name)}</b>${d.design.layout ? "" : ' <span class="pill">older view</span>'}</td>
           <td style="width:16rem;text-align:right">${pv(d.id)} ${isAdmin ? `<button class="small" data-edit="${esc(d.slug)}">Edit</button> <button class="small danger" data-deldesign="${esc(d.slug)}">Remove</button>` : ""}</td></tr>`).join("") ||
@@ -527,12 +520,7 @@
       page.querySelectorAll("[data-delview]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/${b.dataset.delview}`)).then(reload));
       const f = page.querySelector("#upView");
       if (f) f.onsubmit = (e) => { e.preventDefault(); guard(() => upload(`/api/timers-views?name=${encodeURIComponent(f.name.value)}`, f.file.files[0])).then(() => { toast("View added", "good"); reload(); }); };
-      const refresh = () => { renderViews(); };
-      page.querySelectorAll("[data-logo]").forEach((i) => i.onchange = () => i.files[0] && guard(() => upload(`/api/timers-views/look/${i.dataset.logo.split("/")[0]}/logo/${i.dataset.logo.split("/")[1]}`, i.files[0])).then(() => { toast("Logo saved", "good"); refresh(); }));
-      page.querySelectorAll("[data-unlogo]").forEach((b) => b.onclick = () => guard(() => del(`/api/timers-views/look/${b.dataset.unlogo.split("/")[0]}/logo/${b.dataset.unlogo.split("/")[1]}`)).then(refresh));
       page.querySelectorAll("[data-sbar]").forEach((i) => i.onchange = () => guard(() => put(`/api/timers-views/look/${encodeURIComponent(i.dataset.sbar)}`, { status_bar: i.checked })).then((r) => r && toast("Saved", "good")));
-      const st = page.querySelector("[data-savetext]");
-      if (st) st.onclick = () => guard(() => put("/api/timers-views/look/bdng", { bottom_text: page.querySelector("[data-btext]").value })).then(() => toast("Saved", "good"));
     }
   }
 
@@ -949,8 +937,8 @@ Keywords: lectern, gooseneck, mic dead
     if (open) edit(open);
   }
 
-  // Where Report a bug sends people, for now.
-  const BUG_EMAIL = "adam.tomlinson@outlook.com";
+  // Where to email when something is urgent or the bug report can't be saved.
+  const BUG_EMAIL = "support@atsuite.tech";
 
 
   async function admInfo(a) {
@@ -960,7 +948,7 @@ Keywords: lectern, gooseneck, mic dead
     const pill = (ok, yes, no) => `<span class="pill ${ok ? "good" : "warn"}">${ok ? yes : no}</span>`;
     a.innerHTML = `<div class="row" style="margin-bottom:1rem"><a class="btn primary" href="/api/admin/info?download=1">Download diagnostics</a><button id="copyInfo">Copy for a support ticket</button><button id="refresh">Refresh</button>
         <span class="muted small">No passwords, keys or tokens are included.</span></div>
-      <div class="panel row" style="margin-bottom:1rem"><span class="grow"><b>Report a bug</b><br><span class="small muted">Say what went wrong, with a screenshot if you like. It's saved in <a href="#/bugs">Bug reports</a> with this version and server filled in. Nothing is emailed.</span></span>
+      <div class="panel row" style="margin-bottom:1rem"><span class="grow"><b>Report a bug</b><br><span class="small muted">Say what went wrong, with a screenshot if you like. It's saved in <a href="#/bugs">Bug reports</a> with this version and server filled in. Nothing is emailed: for anything urgent, email <a href="mailto:${BUG_EMAIL}">${BUG_EMAIL}</a>.</span></span>
         <button class="primary" id="bugOpen">Report a bug</button></div>
       <div class="grid">
       <div class="panel"><h2>This app</h2>${kv([["Product", esc(i.product)], ["Organisation", esc(i.organisation) || '<span class="muted">not set</span>'], ["Version", `<b>${esc(i.version)}</b>`],

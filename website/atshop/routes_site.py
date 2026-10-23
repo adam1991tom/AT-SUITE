@@ -174,13 +174,14 @@ async def _send_link(request: Request, new: bool):
                                      "errors": ["Please add your name."]}, status=400)
     # Same answer whether or not the address has an account, so the form can't be used to find customers.
     if not auth.limited(sh.db, f"link:{email}", 5, 3600) and not auth.limited(sh.db, f"linkip:{ip(request)}", 20, 3600):
+        account = sh.s.email_aliases.get(email, email)  # the link goes to the address typed
         with sh.db.tx() as c:
-            exists = c.execute("SELECT 1 FROM accounts WHERE email=?", (email,)).fetchone()
+            exists = c.execute("SELECT 1 FROM accounts WHERE email=?", (account,)).fetchone()
             payload = {} if exists else {"name": (data.get("name") or "").strip(),
                                          "organisation": (data.get("organisation") or "").strip(),
                                          "phone": (data.get("phone") or "").strip(), "marketing": bool(data.get("marketing"))}
             if exists or new:
-                link = auth.make_link(c, sh.s, email, payload, ip(request), nxt)
+                link = auth.make_link(c, sh.s, account, payload, ip(request), nxt)
                 notify.login_link(c, sh.s, email, link, new=not exists)
     from . import mailer
     mailer.flush(sh.db, sh.s)
