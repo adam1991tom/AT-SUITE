@@ -19,7 +19,7 @@ Your account → **Plan**. More laptops, a switch to yearly, or adding hosting s
 
 ## Cancel
 
-Your account → **Billing** → **Cancel subscription**. Your plan runs to the end of the period you've paid for, then AT SUITE gives you 14 days of grace before it locks. You can resume before the end from the same page. See [billing, cancellation and refunds](/legal/billing).
+Your account → **Billing** → **Cancel subscription**. Your plan runs to the end of the period you've paid for, then AT SUITE gives you 14 days of grace before it locks. You can resume before the end from the same page. We don't refund part periods. See [billing, cancellation and refunds](/legal/billing).
 
 ## Signing in
 
