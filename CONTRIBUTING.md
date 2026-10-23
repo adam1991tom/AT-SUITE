@@ -30,7 +30,10 @@ Every release:
    `python website/tools/kb_screenshots.py` (it starts a demo server with a
    made-up venue; `KB_CHROMIUM=/path/to/chromium` if Playwright has no browser,
    and a name prefix like `console-` to retake only some). Add a shot for a
-   new screen to the script.
+   new screen to the script. If the stage timer's look changed,
+   `python website/tools/site_screenshots.py` retakes the timer stages on the
+   website's Features page too. Pictures of a licence key always show the
+   dummy key `XXXX-DEMO-XXXX-XXXX-XXXX-DEMO`, never a signed one.
 4. Set `version` in `index.toml` to the new `VERSION`.
 
 CI (`server/tests/test_knowledge_base.py`) fails while `index.toml` is

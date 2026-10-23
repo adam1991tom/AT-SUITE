@@ -261,6 +261,40 @@ section.kb-sec { padding: 22px 24px; }
 .inline-form { display: inline; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* features page: jump links, the timer stages slider (site.js), the caption screen demo (site.js), coming soon */
+.jump ul { list-style: none; padding: 0; margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.jump a { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--surface); color: var(--text); text-decoration: none; font-size: .92rem; }
+.jump a:hover { border-color: var(--orange); color: var(--text); }
+.slider figure { margin: 0; }
+.slider figcaption { margin-top: 12px; color: var(--muted); min-height: 3.2em; }
+.slider figcaption b { color: var(--text); }
+.slider[data-ready] .slides { display: grid; }
+.slider[data-ready] .slide { grid-area: 1 / 1; opacity: 0; visibility: hidden; transition: opacity .45s ease, visibility .45s; }
+.slider[data-ready] .slide.on { opacity: 1; visibility: visible; }
+.slider:not([data-ready]) .slide + .slide { margin-top: 24px; }
+.slider-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.stages { display: flex; flex-wrap: wrap; gap: 6px; }
+.stage-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 600 .9rem/1 system-ui, sans-serif; cursor: pointer; }
+.stage-btn:hover { color: var(--text); border-color: var(--muted); }
+.stage-btn[aria-pressed="true"] { color: var(--text); border-color: var(--orange); box-shadow: inset 0 -3px 0 var(--orange); }
+.stage-btn .dot { width: 10px; height: 10px; border-radius: 50%; background: #fff; flex: none; }
+.stage-btn.warn .dot { background: var(--warn); }
+.stage-btn.bad .dot { background: var(--bad); }
+.stage-btn.msg .dot { background: var(--orange); }
+.stage-btn.clock .dot { background: var(--muted); }
+.capscreen { position: relative; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 30px 80px rgb(0 0 0 / .45); overflow: hidden; container-type: inline-size; }
+.caplines { position: absolute; inset: auto 6% 8% 6%; display: flex; flex-direction: column; justify-content: flex-end;
+  font: 700 clamp(1rem, 4cqw, 2.4rem)/1.25 "Saira", system-ui, sans-serif; color: #fff; text-align: center; }
+.capline { margin-top: .45em; transition: opacity 1.2s ease; overflow-wrap: anywhere; }
+.capline.gone { opacity: 0; }
+.capline .w { animation: capword .25s ease-out both; }
+@keyframes capword { from { opacity: 0; } to { opacity: 1; } }
+.capdemo-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-top: 12px; }
+.soon .card { position: relative; }
+
 /* footer */
 footer.foot { border-top: 1px solid var(--line); padding: 48px 0 32px; color: var(--muted); font-size: .95rem; }
 .foot .cols { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 32px; }
