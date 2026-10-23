@@ -5,6 +5,15 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.25.0
+
+The BDNG sponsor clock is taken out (adam).
+
+**Timer views**
+- The **BDNG sponsor clock** is no longer a built-in view: it's gone from Timers → Views (with its top logo, bottom logo and bottom text), from every screen's view list and from the layout designer's **Start from…** list (**BDNG style**). The shipped `docs/views/bdng.html` and the **Download bdng.html** link are gone too.
+- Screens and links still set to it (`view=bdng`, or `view:bdng` from when it was imported) show the Standard view; `/room/<room>/external/bdng/` sends them to `/timer/<room>`. A copy imported before 1.21.0 stays hidden and isn't served. Layouts already made from BDNG style are kept.
+- The view-look API drops `bottom_text`, and `/api/timers-views/samples/...` is removed.
+
 ## 1.24.0
 
 A full knowledge base: the website's help centre and the manual inside AT SUITE are now one set of pages, and the AI helper answers "how do I..." questions from it.

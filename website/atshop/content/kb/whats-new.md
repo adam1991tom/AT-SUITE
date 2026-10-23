@@ -1,11 +1,15 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.0: the BDNG sponsor clock is gone
+
+- The **BDNG sponsor clock** is no longer a built-in timer view, and **BDNG style** is no longer a ready-made layout in the layout designer. A screen or link still set to it shows the [Standard view](/docs/timer-views) instead. Layouts you already made from BDNG style are yours and stay.
 
 ## 1.24.0: the knowledge base and the manual
 
@@ -28,7 +32,7 @@ The latest changes, newest first. Your server updates itself (see [Updates](/doc
 ## 1.21.0: the layout designer
 
 - Make your own timer views by placing the timer, title, clock, message, logo and more on a 16:9 screen. See [The layout designer](/docs/layout-designer).
-- **BDNG sponsor clock** is built in. The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
+- The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
 
 ## 1.20.9: Messenger-style chat
 

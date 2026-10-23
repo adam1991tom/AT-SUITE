@@ -217,12 +217,10 @@ the timer is sent as Ontime's secondary message (`message.secondary`,
 `static/viewbar.js` is served with the shim and draws the AT-SUITE status bar
 over an imported view when it is switched on for that view.
 
-The client's BDNG view ships this way: `docs/views/bdng.html` is the original
-Ontime view (HTML, CSS, config and JS inlined, no logos) plus a few lines that
-read its logos and bottom text from `/api/timers-views/look/bdng`. It is a
-built-in view (`bdng`): `/room/<room>/external/bdng/` always serves the shipped
-file, `view=bdng` redirects there, and `view:bdng` (from when it was imported)
-still routes to it. No upload can take the name.
+The BDNG sponsor clock (a client's Ontime view) was built in from 1.21.0 and
+taken out in 1.25.0. Screens and links still set to `bdng` or `view:bdng` show
+the Standard view (`/room/<room>/external/bdng/` redirects to `/timer/<room>`),
+and a copy imported before 1.21.0 stays hidden. No upload can take the name.
 
 Views made in the console's layout designer (`built:<slug>`) keep a layout in
 `timer_designs.config_json`: a list of parts (timer, title, next, clock,

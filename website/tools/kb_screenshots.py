@@ -505,7 +505,7 @@ def screens(demo: Demo):
     mh = demo.rooms["Main Hall"]
     return [("screen-standard", f"/timer/{mh}", 1920, 1080), ("screen-backstage", f"/timer/{mh}?view=backstage", 1920, 1080),
             ("screen-preview", f"/timer/{mh}?view=preview", 1920, 1080), ("screen-clock", f"/timer/{mh}?view=clock", 1920, 1080),
-            ("screen-minimal", f"/timer/{mh}?view=minimal", 1920, 1080), ("screen-bdng", f"/timer/{mh}?view=bdng", 1920, 1080),
+            ("screen-minimal", f"/timer/{mh}?view=minimal", 1920, 1080),
             ("screen-captions", f"/captions/{mh}", 1920, 1080), ("screen-pairing", "/screen", 1920, 1080),
             ("screen-testpattern", "/screentest", 1920, 1080), ("guide-tech-card", "/guide/tech", 1100, 1400),
             ("guide-help", "/guide/help", W, H), ("guide-manual", "/guide/manual#pair-a-screen", W, H)]

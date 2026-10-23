@@ -164,13 +164,11 @@
 <script src="/static/timerlayout.js"></script>
 <script>
 (async () => {
-  // /timer/<room>?view=hcc (Standard, the default)|bdng|minimal|clock|overlay, or built:<name> from the layout designer.
-  // The old Stage view is the Standard view now. Backstage is backstage.html.
+  // /timer/<room>?view=hcc (Standard, the default)|minimal|clock|overlay, or built:<name> from the layout designer.
+  // The old Stage view and the BDNG view (taken out in 1.25.0) are the Standard view now. Backstage is backstage.html.
   const roomId = location.pathname.split("/")[2];
   let view = new URLSearchParams(location.search).get("view") || "hcc";
-  if (view === "stage") view = "hcc";
-  // BDNG is the client's own Ontime view, built in and served as it was made.
-  if (view === "bdng") { location.replace(`/room/${roomId}/external/bdng/${location.search.replace(/([?&])view=bdng&?/, "$1").replace(/[?&]$/, "")}`); return; }
+  if (view === "stage" || view === "bdng") view = "hcc";
   const KINDS = ["stage", "minimal", "clock", "backstage", "hcc", "overlay"];
   const kind = view.startsWith("built:") ? "design" : KINDS.includes(view) ? view : "hcc";
   const $ = (id) => document.getElementById(id);
