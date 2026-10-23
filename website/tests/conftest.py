@@ -1,4 +1,4 @@
-"""Test set-up: a throwaway signing key (never the real one), a fake Paddle and a fake hosting server."""
+"""Test set-up: a throwaway signing key (never the real one), a fake Stripe and a fake hosting server."""
 from __future__ import annotations
 
 import json
@@ -18,11 +18,13 @@ from fastapi.testclient import TestClient
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from atshop import config, paddle  # noqa: E402
+from urllib.parse import parse_qsl  # noqa: E402
+
+from atshop import config, stripe  # noqa: E402
 from atshop.app import create_app  # noqa: E402
 from atshop.licensing import b64  # noqa: E402
 
-WEBHOOK_SECRET = "pdl_ntfset_test_" + "x" * 32
+WEBHOOK_SECRET = "whsec_test_" + "x" * 32
 ADMIN = "boss@example.com"
 
 
@@ -38,77 +40,98 @@ def vendor(tmp_path):
     return {"file": f, "pub": pub}
 
 
-class FakePaddle:
-    """Enough of Paddle Billing's API for the shop, kept in memory."""
+class FakeStripe:
+    """Enough of Stripe's API for the shop, kept in memory. Bodies are form-encoded, as Stripe's are."""
 
-    def __init__(self):
+    def __init__(self, key: str = "sk_test_fake"):
+        self.key = key
         self.calls: list[tuple[str, str, dict]] = []
         self.customers: dict[str, str] = {}
-        self.transactions: dict[str, dict] = {}
+        self.sessions: dict[str, dict] = {}
         self.products: dict[str, dict] = {}
         self.prices: dict[str, dict] = {}
-        self.patches: list[dict] = []
+        self.subscriptions: dict[str, list[str]] = {}  # sub id → price ids on it
+        self.updates: list[dict] = []
+        self.portal: list[dict] = []
+        self.portal_configs: list[str] = []
+        self.webhooks: list[dict] = []
         self.fail_next: tuple[int, str] | None = None
-        self.ips: list[str] | None = ["34.237.3.244/32", "52.11.166.252/32"]  # None: /ips is down
+        self.ips: list[str] | None = ["3.18.12.63", "54.187.174.169"]  # None: the list is down
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content) if request.content else {}
         path, m = request.url.path, request.method
+        if request.url.host == "stripe.com":
+            self.calls.append((m, path, {}))
+            assert "authorization" not in request.headers  # no key sent with the public list
+            if self.ips is None:
+                return httpx.Response(502, text="bad gateway")
+            return httpx.Response(200, json={"WEBHOOKS": self.ips})
+        body = dict(parse_qsl(request.content.decode())) if request.content else dict(request.url.params)
         self.calls.append((m, path, body))
-        assert request.headers["authorization"] == "Bearer test_api_key"
-        assert request.headers["paddle-version"] == "1"
+        assert request.headers["authorization"] == f"Bearer {self.key}"
+        assert request.headers["stripe-version"] == stripe.API_VERSION
         if self.fail_next:
             status, code = self.fail_next
             self.fail_next = None
-            return httpx.Response(status, json={"error": {"code": code, "detail": "nope"}})
-        if m == "POST" and path == "/customers":
-            if body["email"] in self.customers:
-                return httpx.Response(409, json={"error": {"code": "customer_already_exists", "detail": "exists"}})
-            cid = "ctm_" + secrets.token_hex(8)
-            self.customers[body["email"]] = cid
-            return httpx.Response(201, json={"data": {"id": cid}})
-        if m == "GET" and path == "/customers":
-            e = request.url.params["email"]
+            return httpx.Response(status, json={"error": {"code": code, "message": "nope"}})
+        if m == "GET" and path == "/v1/customers":
+            e = body["email"]
             return httpx.Response(200, json={"data": [{"id": self.customers[e]}] if e in self.customers else []})
-        if m == "POST" and path == "/transactions":
-            tid = "txn_" + secrets.token_hex(8)
-            self.transactions[tid] = body
-            return httpx.Response(201, json={"data": {"id": tid, "status": "ready"}})
-        if m == "GET" and path == "/transactions":
+        if m == "POST" and path == "/v1/customers":
+            cid = "cus_" + secrets.token_hex(7)
+            self.customers[body["email"]] = cid
+            return httpx.Response(200, json={"id": cid})
+        if m == "POST" and path == "/v1/checkout/sessions":
+            sid = "cs_test_" + secrets.token_hex(8)
+            self.sessions[sid] = {**body, "idempotency_key": request.headers.get("idempotency-key")}
+            return httpx.Response(200, json={"id": sid, "url": f"https://checkout.stripe.com/c/pay/{sid}"})
+        if m == "GET" and path == "/v1/invoices":
             return httpx.Response(200, json={"data": []})
-        if m == "GET" and re.fullmatch(r"/transactions/txn_\w+/invoice", path):
-            return httpx.Response(200, json={"data": {"url": "https://sandbox-invoices.paddle.com/inv.pdf"}})
-        if m == "PATCH" and re.fullmatch(r"/subscriptions/sub_\w+", path):
-            self.patches.append({"id": path.rsplit("/", 1)[1], **body})
-            return httpx.Response(200, json={"data": {"id": path.rsplit("/", 1)[1]}})
-        if m == "POST" and re.fullmatch(r"/customers/ctm_\w+/portal-sessions", path):
-            return httpx.Response(201, json={"data": {"urls": {
-                "general": {"overview": "https://sandbox-customer-portal.paddle.com/overview"},
-                "subscriptions": [{"id": s, "cancel_subscription": f"https://sandbox-customer-portal.paddle.com/cancel/{s}",
-                                   "update_subscription_payment_method": f"https://sandbox-customer-portal.paddle.com/card/{s}"}
-                                  for s in body["subscription_ids"]]}}})
-        if m == "POST" and path == "/products":
-            pid = "pro_" + secrets.token_hex(8)
+        if m == "GET" and re.fullmatch(r"/v1/invoices/in_\w+", path):
+            iid = path.rsplit("/", 1)[1]
+            return httpx.Response(200, json={"id": iid, "hosted_invoice_url": f"https://invoice.stripe.com/i/{iid}"})
+        if m == "GET" and re.fullmatch(r"/v1/subscriptions/sub_\w+", path):
+            sid = path.rsplit("/", 1)[1]
+            return httpx.Response(200, json={"id": sid, "items": {"data": [
+                {"id": f"si_{n}", "price": {"id": p}} for n, p in enumerate(self.subscriptions.get(sid, []))]}})
+        if m == "POST" and re.fullmatch(r"/v1/subscriptions/sub_\w+", path):
+            self.updates.append({"id": path.rsplit("/", 1)[1], **body})
+            return httpx.Response(200, json={"id": path.rsplit("/", 1)[1]})
+        if m == "POST" and path == "/v1/billing_portal/sessions":
+            self.portal.append(body)
+            return httpx.Response(200, json={"url": "https://billing.stripe.com/p/session/test_abc"})
+        if m == "GET" and path == "/v1/billing_portal/configurations":
+            return httpx.Response(200, json={"data": [{"id": c} for c in self.portal_configs]})
+        if m == "POST" and path == "/v1/billing_portal/configurations":
+            self.portal_configs.append("bpc_" + secrets.token_hex(6))
+            return httpx.Response(200, json={"id": self.portal_configs[-1]})
+        if m == "GET" and path == "/v1/webhook_endpoints":
+            return httpx.Response(200, json={"data": self.webhooks, "has_more": False})
+        if m == "POST" and path == "/v1/webhook_endpoints":
+            self.webhooks.append({"id": "we_" + secrets.token_hex(6), "url": body["url"], "body": body})
+            return httpx.Response(200, json={**self.webhooks[-1], "secret": "whsec_new"})
+        if m == "POST" and path == "/v1/products":
+            pid = "prod_" + secrets.token_hex(7)
             self.products[pid] = body
-            return httpx.Response(201, json={"data": {"id": pid}})
-        if m == "POST" and path == "/prices":
-            pid = "pri_" + secrets.token_hex(8)
-            self.prices[pid] = body
-            return httpx.Response(201, json={"data": {"id": pid}})
-        if m == "GET" and path == "/prices":
-            return httpx.Response(200, json={"data": [
-                {"id": pid, "product_id": b["product_id"], "description": b["description"], "status": "active",
-                 "unit_price": b["unit_price"], "custom_data": b.get("custom_data")}
-                for pid, b in self.prices.items() if b.get("status", "active") == "active"],
-                "meta": {"pagination": {"has_more": False, "next": None}}})
-        if m == "GET" and path == "/ips":
-            if self.ips is None:
-                return httpx.Response(502, text="bad gateway")
-            return httpx.Response(200, json={"data": {"ipv4_cidrs": self.ips}})
-        if m == "PATCH" and re.fullmatch(r"/prices/pri_\w+", path):
-            self.prices[path.rsplit("/", 1)[1]]["status"] = body["status"]
-            return httpx.Response(200, json={"data": {}})
-        return httpx.Response(404, json={"error": {"code": "not_found", "detail": f"{m} {path}"}})
+            return httpx.Response(200, json={"id": pid})
+        if m == "POST" and path == "/v1/prices":
+            pid = "price_" + secrets.token_hex(8)
+            self.prices[pid] = {**body, "active": "true"}
+            return httpx.Response(200, json={"id": pid})
+        if m == "GET" and path == "/v1/prices":
+            rows = [{"id": pid, "product": b["product"], "nickname": b.get("nickname"), "active": True,
+                     "unit_amount": int(b["unit_amount"]), "currency": b["currency"],
+                     "recurring": {"interval": b["recurring[interval]"]} if "recurring[interval]" in b else None,
+                     "metadata": {k[9:-1]: v for k, v in b.items() if k.startswith("metadata[")}}
+                    for pid, b in self.prices.items() if b.get("active") == "true"]
+            after = body.get("starting_after")
+            if after:
+                rows = rows[[r["id"] for r in rows].index(after) + 1:]
+            return httpx.Response(200, json={"data": rows[:3], "has_more": len(rows) > 3})  # small pages, to test paging
+        if m == "POST" and re.fullmatch(r"/v1/prices/price_\w+", path):
+            self.prices[path.rsplit("/", 1)[1]]["active"] = body["active"]
+            return httpx.Response(200, json={})
+        return httpx.Response(404, json={"error": {"code": "resource_missing", "message": f"{m} {path}"}})
 
 
 class FakeHosting:
@@ -130,22 +153,21 @@ class FakeHosting:
 def make_settings(tmp_path, vendor, **over) -> config.Settings:
     s = config.Settings(
         site_url="http://testserver", data_dir=tmp_path / "data", secret="s" * 40, dev=False,
-        paddle_env="sandbox", paddle_api_key="test_api_key", paddle_client_token="test_client_token",
-        paddle_webhook_secret=WEBHOOK_SECRET, signing_key_file=str(vendor["file"]),
+        stripe_secret_key="sk_test_fake", stripe_webhook_secret=WEBHOOK_SECRET, signing_key_file=str(vendor["file"]),
         admin_emails={ADMIN}, hosting_domain="venues.example",
-        paddle_webhook_ip_check=False)  # TestClient isn't one of Paddle's addresses; test_webhooks turns it on
+        stripe_webhook_ip_check=False)  # TestClient isn't one of Stripe's addresses; test_webhooks turns it on
     for k, v in over.items():
         setattr(s, k, v)
     return s
 
 
 def seed_prices(s: config.Settings) -> dict:
-    """Paddle price ids for every catalogue item, as tools/paddle_setup.py would save them."""
+    """Stripe price ids for every catalogue item, as tools/stripe_setup.py would save them."""
     from atshop import catalogue
     cat = catalogue.load(s.catalogue_file, s.prices_file)
     ids = {}
     for kind, key, cycle, _, amount in cat.items():
-        pid = f"pri_{kind}_{key}_{cycle or 'once'}"
+        pid = f"price_{kind}_{key}_{cycle or 'once'}"
         cat.prices[pid] = {"kind": kind, "key": key, "cycle": cycle, "amount": amount * 100, "currency": "GBP",
                            "active": True}
         ids[(kind, key, cycle)] = pid
@@ -155,13 +177,13 @@ def seed_prices(s: config.Settings) -> dict:
 
 class Harness:
     def __init__(self, tmp_path, vendor, **over):
-        self.paddle = FakePaddle()
+        self.stripe = FakeStripe()
         self.hosting = FakeHosting()
         self.health = httpx.MockTransport(lambda r: httpx.Response(200, json={"ok": True, "version": "1.8.0"}))
         self.s = make_settings(tmp_path, vendor, **over)
         self.s.data_dir.mkdir(parents=True, exist_ok=True)
         self.price = seed_prices(self.s)
-        self.app = create_app(self.s, paddle_transport=httpx.MockTransport(self.paddle),
+        self.app = create_app(self.s, stripe_transport=httpx.MockTransport(self.stripe),
                               hosting_runner=self.hosting, health_transport=self.health, background=False)
         self.shop = self.app.state.shop
         self.vendor = vendor
@@ -196,18 +218,22 @@ class Harness:
         assert m, f"no csrf on {page}"
         return m.group(1)
 
-    # -- Paddle webhooks, signed with the test secret --
-    def event(self, etype: str, data: dict, *, event_id: str | None = None, occurred_at: str | None = None) -> dict:
+    # -- Stripe webhooks, signed with the test secret --
+    def event(self, etype: str, obj: dict, *, event_id: str | None = None, created: int | None = None) -> dict:
         self.n += 1
-        return {"event_id": event_id or f"evt_{self.n:04d}_{secrets.token_hex(4)}", "event_type": etype,
-                "occurred_at": occurred_at or f"2026-10-15T12:{self.n // 60:02d}:{self.n % 60:02d}.000000Z",
-                "notification_id": f"ntf_{self.n}", "data": data}
+        return {"id": event_id or f"evt_{self.n:04d}{secrets.token_hex(4)}", "object": "event", "type": etype,
+                "created": created or T0 + self.n, "livemode": False, "api_version": stripe.API_VERSION,
+                "data": {"object": obj}}
 
     def send(self, event: dict, *, secret: str = WEBHOOK_SECRET, ts: int | None = None, client=None):
         raw = json.dumps(event).encode()
         c = client or self.client()
-        return c.post("/webhooks/paddle", content=raw, headers={
-            "Paddle-Signature": paddle.sign(raw, secret, ts or int(time.time())), "Content-Type": "application/json"})
+        return c.post("/webhooks/stripe", content=raw, headers={
+            "Stripe-Signature": stripe.sign(raw, secret, ts or int(time.time())), "Content-Type": "application/json"})
+
+    def session_of(self, order) -> dict:
+        """What the shop asked Stripe Checkout for, for this order."""
+        return self.stripe.sessions[order["stripe_session_id"]]
 
 
 @pytest.fixture
@@ -215,21 +241,57 @@ def h(tmp_path, vendor) -> Harness:
     return Harness(tmp_path, vendor)
 
 
+T0 = 1792065600  # 2026-10-15T12:00:00Z
+YEAR = 1823601600  # 2027-10-15T12:00:00Z
+
+
+def ts(iso: str) -> int:
+    from datetime import datetime
+    return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+
+
 def sub_data(sub_id, customer, prices, *, status="active", start="2026-10-15T12:00:00Z", end="2027-10-15T12:00:00Z",
-             account_id=None, scheduled_change=None):
-    return {"id": sub_id, "status": status, "customer_id": customer,
-            "items": [{"status": "active", "price": {"id": p}, "quantity": 1} for p in prices],
-            "current_billing_period": {"starts_at": start, "ends_at": end}, "next_billed_at": end,
-            "scheduled_change": scheduled_change,
-            "custom_data": {"account_id": str(account_id)} if account_id else None}
-
-
-def txn_data(txn_id, customer, prices, *, sub_id=None, start="2026-10-15T12:00:00Z", end="2027-10-15T12:00:00Z",
-             custom_data=None, origin="web", total="229000"):
-    d = {"id": txn_id, "status": "completed", "customer_id": customer, "subscription_id": sub_id, "origin": origin,
-         "currency_code": "GBP", "billed_at": start,
-         "items": [{"price": {"id": p}, "quantity": 1} for p in prices],
-         "details": {"totals": {"grand_total": total}}, "custom_data": custom_data or {}}
-    if sub_id:
-        d["billing_period"] = {"starts_at": start, "ends_at": end}
+             account_id=None, cancel_at_period_end=False, metadata=None, basil=True):
+    """A Stripe subscription. basil=True puts the period on the items, as API 2025-03-31.basil onwards does."""
+    period = {"current_period_start": ts(start), "current_period_end": ts(end)}
+    d = {"id": sub_id, "object": "subscription", "status": status, "customer": customer,
+         "items": {"object": "list", "data": [{"id": f"si_{n}", "price": {"id": p}, "quantity": 1,
+                                               **(period if basil else {})} for n, p in enumerate(prices)]},
+         "cancel_at_period_end": cancel_at_period_end, "cancel_at": ts(end) if cancel_at_period_end else None,
+         "metadata": metadata or ({"account_id": str(account_id)} if account_id else {})}
+    if not basil:
+        d.update(period)
     return d
+
+
+def invoice_data(inv_id, customer, prices, *, sub_id=None, start="2026-10-15T12:00:00Z", end="2027-10-15T12:00:00Z",
+                 metadata=None, billing_reason="subscription_create", total=229000, basil=True, credit=None):
+    """A paid Stripe invoice. basil=True uses the newer shape (parent, line pricing); otherwise the older one.
+    credit: a price refunded for unused time (a negative line), as on a plan change."""
+    def line(p, amount):
+        ln = {"id": f"il_{p}", "amount": amount, "description": f"1 × {p}",
+              "period": {"start": ts(start), "end": ts(end)}}
+        if basil:
+            ln["pricing"] = {"type": "price_details", "price_details": {"price": p, "product": "prod_x"}}
+        else:
+            ln["price"] = {"id": p}
+        return ln
+    lines = ([line(credit, -1000)] if credit else []) + [line(p, total // max(len(prices), 1)) for p in prices]
+    d = {"id": inv_id, "object": "invoice", "status": "paid", "customer": customer, "currency": "gbp", "total": total,
+         "billing_reason": billing_reason if sub_id else "manual", "created": ts(start),
+         "status_transitions": {"paid_at": ts(start)}, "lines": {"object": "list", "data": lines},
+         "metadata": {} if sub_id else (metadata or {})}
+    if sub_id:
+        if basil:
+            d["parent"] = {"type": "subscription_details",
+                           "subscription_details": {"subscription": sub_id, "metadata": metadata or {}}}
+        else:
+            d["subscription"] = sub_id
+            d["subscription_details"] = {"metadata": metadata or {}}
+    return d
+
+
+def session_data(session_id, customer, *, mode="subscription", metadata=None, payment_status="paid", invoice=None):
+    return {"id": session_id, "object": "checkout.session", "mode": mode, "customer": customer,
+            "payment_status": payment_status, "status": "complete", "metadata": metadata or {}, "invoice": invoice,
+            "subscription": None}

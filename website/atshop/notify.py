@@ -68,7 +68,7 @@ def key_email(ctx, acc, lic: dict, subject: str, reason: str) -> None:
 def payment_failed(ctx, acc, ref: str) -> None:
     sub = ctx.c.execute("SELECT period_start FROM subscriptions WHERE id=?", (ref,)).fetchone()
     once(ctx, acc, "payment_failed", f"{ref}:{sub['period_start'] if sub else ''}", "AT SUITE: your payment didn't go through",
-         f"{_hello(acc)}We couldn't take your last AT SUITE payment. Paddle, our reseller, will try again over the next "
+         f"{_hello(acc)}We couldn't take your last AT SUITE payment. We'll try your card again over the next "
          f"few days.\n\nPlease check your card at {ctx.s.site_url}/account/billing (Update payment method).\n\n"
          f"Your AT SUITE keeps working meanwhile: your current key has a few spare days, and after it ends there "
          f"are 14 days of grace before anything locks, and it never locks during a show.\n{_sign_off(ctx)}")

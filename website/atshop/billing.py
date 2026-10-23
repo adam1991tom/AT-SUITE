@@ -1,14 +1,18 @@
-"""What Paddle's webhooks mean for accounts, subscriptions, licence keys and hosting.
+"""What Stripe's webhooks mean for accounts, subscriptions, licence keys and hosting.
 
 Rules:
-- An event is applied once: its event_id is stored with its effects in one transaction, so a
-  retried or duplicated delivery does nothing the second time.
+- An event is applied once: its id is stored with its effects in one transaction, so a retried or
+  duplicated delivery does nothing the second time.
 - Subscription events can arrive out of order; one older than the last one applied is skipped.
-- What a customer bought comes from the Paddle price ids, mapped by the catalogue on the server.
+- What a customer bought comes from the Stripe price ids, mapped by the catalogue on the server.
   A price we don't recognise issues nothing and flags the subscription for the admin.
-- A licence key is issued for each paid period (transaction.completed) and when the plan changes.
-  It runs to the end of the period plus the spare days, as tools/licence.py does, and the app's own
-  warnings, 14-day grace and show-safe lock take it from there. Keys are never cut short early.
+- A licence key is issued for each paid period (invoice.paid) and when the plan changes. An event
+  pass is issued when its checkout is paid. A key runs to the end of the period plus the spare days,
+  as tools/licence.py does, and the app's own warnings, 14-day grace and show-safe lock take it from
+  there. Keys are never cut short early.
+- Webhook bodies follow the API version of the endpoint, so both the older shapes and the newer
+  ones (2025-03-31.basil onwards: periods on subscription items, invoice parent and line pricing)
+  are read.
 """
 from __future__ import annotations
 
@@ -20,13 +24,17 @@ from . import hosting as hostingmod
 from . import mailer, notify
 from .db import audit, now
 from .licensing import days_expiry, period_expiry
+from .stripe import ref
 
 log = logging.getLogger("atshop.billing")
 
-HANDLED = {
-    "subscription.created", "subscription.updated", "subscription.activated", "subscription.canceled",
-    "subscription.past_due", "subscription.paused", "subscription.resumed", "subscription.trialing",
-    "transaction.completed", "transaction.payment_failed", "transaction.past_due",
+SUBSCRIPTION_EVENTS = {
+    "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
+    "customer.subscription.paused", "customer.subscription.resumed",
+}
+CHECKOUT_PAID = {"checkout.session.completed", "checkout.session.async_payment_succeeded"}
+HANDLED = SUBSCRIPTION_EVENTS | CHECKOUT_PAID | {
+    "checkout.session.async_payment_failed", "checkout.session.expired", "invoice.paid", "invoice.payment_failed",
 }
 
 
@@ -39,10 +47,11 @@ class Ctx:
 
 # --------------------------------------------------------------- entry point --
 def handle(db, settings, cat, signer, event: dict) -> tuple[str, str]:
-    """Apply one verified webhook event. Returns (status, note). Raises to make Paddle retry."""
-    eid, etype = event.get("event_id") or "", event.get("event_type") or ""
-    if not eid or not etype or not isinstance(event.get("data"), dict):
-        return "ignored", "not a Paddle event"
+    """Apply one verified webhook event. Returns (status, note). Raises to make Stripe retry."""
+    eid, etype = event.get("id") or "", event.get("type") or ""
+    obj = (event.get("data") or {}).get("object") if isinstance(event.get("data"), dict) else None
+    if not eid or not etype or not isinstance(obj, dict):
+        return "ignored", "not a Stripe event"
     with db.tx() as c:
         seen = c.execute("SELECT status FROM webhook_events WHERE event_id=?", (eid,)).fetchone()
         if seen and seen["status"] != "failed":
@@ -51,52 +60,77 @@ def handle(db, settings, cat, signer, event: dict) -> tuple[str, str]:
         status, note = "ignored", "not an event the shop uses"
         if etype in HANDLED:
             status, note = "processed", ""
-            if etype.startswith("subscription."):
+            if etype in SUBSCRIPTION_EVENTS:
                 note = on_subscription(ctx, event)
-            elif etype == "transaction.completed":
-                note = on_transaction_completed(ctx, event)
+            elif etype in CHECKOUT_PAID:
+                note = on_checkout_paid(ctx, event)
+            elif etype == "checkout.session.expired":
+                note = on_checkout_expired(ctx, event)
+            elif etype == "invoice.paid":
+                note = on_invoice_paid(ctx, event)
             else:
                 note = on_payment_failed(ctx, event)
         c.execute("INSERT OR REPLACE INTO webhook_events (event_id, event_type, occurred_at, received_at, status, note, payload)"
                   " VALUES (?,?,?,?,?,?,?)",
-                  (eid, etype, event.get("occurred_at"), now(), status, note or "", json.dumps(event)))
+                  (eid, etype, iso(event.get("created")), now(), status, note or "", json.dumps(event)))
     return status, note
 
 
 # ------------------------------------------------------------------- helpers --
-def _account(ctx, data: dict):
+def iso(ts) -> str | None:
+    """A Stripe unix time as an ISO time (UTC), the way periods and event times are stored."""
+    if ts in (None, ""):
+        return None
+    return datetime.fromtimestamp(int(ts), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _account(ctx, customer_id: str | None, metadata: dict | None, sub_id: str | None = None):
     c = ctx.c
-    cd = data.get("custom_data") or {}
+    md = metadata or {}
     acc = None
-    if str(cd.get("account_id", "")).isdigit():
-        acc = c.execute("SELECT * FROM accounts WHERE id=?", (int(cd["account_id"]),)).fetchone()
-        # Only trust the account id if the Paddle customer is that account's (or the account has none yet).
-        if acc and acc["paddle_customer_id"] and data.get("customer_id") and acc["paddle_customer_id"] != data["customer_id"]:
+    if str(md.get("account_id", "")).isdigit():
+        acc = c.execute("SELECT * FROM accounts WHERE id=?", (int(md["account_id"]),)).fetchone()
+        # Only trust the account id if the Stripe customer is that account's (or the account has none yet).
+        if acc and acc["stripe_customer_id"] and customer_id and acc["stripe_customer_id"] != customer_id:
             acc = None
-    if acc is None and data.get("customer_id"):
-        acc = c.execute("SELECT * FROM accounts WHERE paddle_customer_id=?", (data["customer_id"],)).fetchone()
-    if acc is None and data.get("subscription_id"):
-        sub = c.execute("SELECT account_id FROM subscriptions WHERE id=?", (data["subscription_id"],)).fetchone()
+    if acc is None and customer_id:
+        acc = c.execute("SELECT * FROM accounts WHERE stripe_customer_id=?", (customer_id,)).fetchone()
+    if acc is None and sub_id:
+        sub = c.execute("SELECT account_id FROM subscriptions WHERE id=?", (sub_id,)).fetchone()
         if sub and sub["account_id"]:
             acc = c.execute("SELECT * FROM accounts WHERE id=?", (sub["account_id"],)).fetchone()
-    if acc is not None and not acc["paddle_customer_id"] and data.get("customer_id"):
-        c.execute("UPDATE accounts SET paddle_customer_id=? WHERE id=?", (data["customer_id"], acc["id"]))
+    if acc is not None and not acc["stripe_customer_id"] and customer_id:
+        c.execute("UPDATE accounts SET stripe_customer_id=? WHERE id=?", (customer_id, acc["id"]))
     return acc
 
 
-def _price_ids(items: list[dict]) -> list[str]:
-    out = []
-    for it in items or []:
-        if it.get("status") in ("inactive",):
-            continue
-        pid = (it.get("price") or {}).get("id") or it.get("price_id")
-        if pid:
-            out.append(pid)
-    return out
+def sub_prices(sub: dict) -> list[str]:
+    return [p for p in (ref(it.get("price")) for it in (sub.get("items") or {}).get("data") or []) if p]
+
+
+def sub_period(sub: dict) -> tuple[str | None, str | None]:
+    """The subscription's current period. Since basil it's on each item rather than the subscription."""
+    items = (sub.get("items") or {}).get("data") or []
+    start = sub.get("current_period_start") or min((i["current_period_start"] for i in items
+                                                     if i.get("current_period_start")), default=None)
+    end = sub.get("current_period_end") or max((i["current_period_end"] for i in items
+                                                 if i.get("current_period_end")), default=None)
+    return iso(start), iso(end)
+
+
+def line_price(line: dict) -> str | None:
+    pricing = line.get("pricing") or {}
+    return ((pricing.get("price_details") or {}).get("price") or ref(line.get("price")) or ref(line.get("plan")))
+
+
+def invoice_subscription(inv: dict) -> tuple[str | None, dict]:
+    """(subscription id, the subscription's metadata as it was when invoiced)."""
+    details = (inv.get("parent") or {}).get("subscription_details") or inv.get("subscription_details") or {}
+    return ref(details.get("subscription")) or ref(inv.get("subscription")), details.get("metadata") or {}
 
 
 def classify(cat, price_ids: list[str]) -> dict:
-    """What a set of Paddle prices is: {"plan", "cycle", "hosting", "event", "unknown": [...]}."""
+    """What a set of Stripe prices is: {"plan", "cycle", "hosting", "event", "unknown": [...]}."""
     out = {"plan": None, "cycle": None, "hosting": False, "event": False, "unknown": []}
     for pid in price_ids:
         p = cat.lookup(pid)
@@ -167,59 +201,64 @@ def _push_key_to_hosting(ctx, sub_id: str, serial: str) -> None:
 
 # --------------------------------------------------------------- subscription --
 def on_subscription(ctx, event: dict) -> str:
-    c, d = ctx.c, event["data"]
+    c, d = ctx.c, event["data"]["object"]
     sub_id = d.get("id")
     if not sub_id:
         return "no subscription id"
-    occurred = event.get("occurred_at") or ""
+    occurred = iso(event.get("created")) or ""
     row = c.execute("SELECT * FROM subscriptions WHERE id=?", (sub_id,)).fetchone()
     if row and occurred and row["event_at"] and occurred < row["event_at"]:
         return f"older than the last update applied ({row['event_at']})"
-    acc = _account(ctx, {**d, "subscription_id": sub_id})
-    kind = classify(ctx.cat, _price_ids(d.get("items")))
-    period = d.get("current_billing_period") or {}
-    problem = f"Unknown Paddle price(s): {', '.join(kind['unknown'])}" if kind["unknown"] else None
+    customer = ref(d.get("customer"))
+    acc = _account(ctx, customer, d.get("metadata"), sub_id)
+    prices = sub_prices(d)
+    kind = classify(ctx.cat, prices)
+    start, end = sub_period(d)
+    problem = f"Unknown Stripe price(s): {', '.join(kind['unknown'])}" if kind["unknown"] else None
     if not kind["plan"]:
         problem = problem or "No AT SUITE plan in this subscription"
-    sched = d.get("scheduled_change")
-    values = (acc["id"] if acc else None, d.get("customer_id"), d.get("status") or "active", kind["plan"],
-              kind["cycle"], int(kind["hosting"]), json.dumps(_price_ids(d.get("items"))), period.get("starts_at"),
-              period.get("ends_at"), d.get("next_billed_at"), json.dumps(sched) if sched else None, problem,
+    status = d.get("status") or "active"
+    # Cancelled from the portal: it runs to the end of the period, then Stripe ends it.
+    sched = None
+    if d.get("cancel_at_period_end") or d.get("cancel_at"):
+        sched = {"action": "cancel", "effective_at": iso(d.get("cancel_at")) or end}
+    next_bill = end if status in ("active", "trialing", "past_due") and not sched else None
+    values = (acc["id"] if acc else None, customer, status, kind["plan"], kind["cycle"], int(kind["hosting"]),
+              json.dumps(prices), start, end, next_bill, json.dumps(sched) if sched else None, problem,
               occurred or (row["event_at"] if row else ""), now())
     if row:
-        c.execute("UPDATE subscriptions SET account_id=COALESCE(?, account_id), paddle_customer_id=?, status=?, plan=?, cycle=?,"
+        c.execute("UPDATE subscriptions SET account_id=COALESCE(?, account_id), stripe_customer_id=?, status=?, plan=?, cycle=?,"
                   " hosting=?, items=?, period_start=?, period_end=?, next_billed_at=?, scheduled_change=?, problem=?,"
                   " event_at=?, updated_at=? WHERE id=?", (*values, sub_id))
     else:
-        c.execute("INSERT INTO subscriptions (account_id, paddle_customer_id, status, plan, cycle, hosting, items, period_start,"
+        c.execute("INSERT INTO subscriptions (account_id, stripe_customer_id, status, plan, cycle, hosting, items, period_start,"
                   " period_end, next_billed_at, scheduled_change, problem, event_at, updated_at, id, created_at)"
                   " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (*values, sub_id, now()))
-    if problem:
+    if problem and status not in ("incomplete", "incomplete_expired"):
         notify.admins(ctx, f"Subscription needs a look: {sub_id}", f"{problem}\n\nAccount: {acc['email'] if acc else 'unknown'}")
-        audit(c, "paddle", "subscription.problem", sub_id, {"problem": problem})
+        audit(c, "stripe", "subscription.problem", sub_id, {"problem": problem})
     if acc is None:
         return "subscription saved; no account matched yet"
     notes = []
-    status = d.get("status")
     was = row["status"] if row else None
     # Plan changed while active: a new key for the rest of this period, with the new laptop limit.
-    if status in ("active", "trialing") and kind["plan"] and period.get("ends_at"):
+    if status in ("active", "trialing") and kind["plan"] and end:
         plan = ctx.cat.plans[kind["plan"]]
         cur = latest_licence(c, sub_id)
         if cur and (cur["max_nodes"] != plan.laptops or cur["edition"] != plan.licence_plan):
             lic = issue(ctx, acc, source="subscription", edition=plan.licence_plan, max_nodes=plan.laptops,
-                        expires=max(period_expiry(period["ends_at"], ctx.cat.spare_days), cur["expires"]),
+                        expires=max(period_expiry(end, ctx.cat.spare_days), cur["expires"]),
                         sub_id=sub_id, note=f"plan changed to {plan.name}")
             _push_key_to_hosting(ctx, sub_id, lic["serial"])
             notify.key_email(ctx, acc, lic, f"Your AT SUITE plan is now {plan.name}", reason="plan_change")
             notes.append("plan change: new key")
     # Payment trouble, cancellation and endings: tell the customer once each.
-    if status == "past_due" and was != "past_due":
+    if status in ("past_due", "unpaid") and was not in ("past_due", "unpaid"):
         notify.payment_failed(ctx, acc, sub_id)
-        notes.append("past due")
-    if sched and sched.get("action") == "cancel" and not (row and row["scheduled_change"]):
+        notes.append(status.replace("_", " "))
+    if sched and not (row and row["scheduled_change"]):
         notify.once(ctx, acc, "cancel_scheduled", sub_id, "Your AT SUITE subscription will end",
-                    notify.cancel_scheduled_body(ctx, acc, sub_id, sched.get("effective_at")))
+                    notify.cancel_scheduled_body(ctx, acc, sub_id, sched["effective_at"]))
         notes.append("cancel scheduled")
     if status == "canceled" and was != "canceled":
         lic = latest_licence(c, sub_id)
@@ -231,77 +270,118 @@ def on_subscription(ctx, event: dict) -> str:
                           f"{acc['email']}'s subscription {sub_id} ended. The venue keeps working until its key's grace "
                           f"runs out. Suspend it from Admin → Hosting when you're ready; nothing is removed automatically.")
         notes.append("canceled")
-    audit(c, "paddle", f"subscription.{status}", sub_id, {"plan": kind["plan"], "cycle": kind["cycle"],
+    audit(c, "stripe", f"subscription.{status}", sub_id, {"plan": kind["plan"], "cycle": kind["cycle"],
                                                           "hosting": kind["hosting"]})
     return "; ".join(notes) or "saved"
 
 
-# ---------------------------------------------------------------- transaction --
-def on_transaction_completed(ctx, event: dict) -> str:
-    c, d = ctx.c, event["data"]
-    txn_id = d.get("id")
-    acc = _account(ctx, d)
-    totals = (d.get("details") or {}).get("totals") or {}
-    period = d.get("billing_period") or {}
+# ------------------------------------------------------------------- checkout --
+def _order(c, metadata: dict | None, session_id: str | None = None):
+    md = metadata or {}
+    o = None
+    if md.get("order_ref"):
+        o = c.execute("SELECT * FROM orders WHERE ref=?", (str(md["order_ref"]),)).fetchone()
+    if o is None and session_id:
+        o = c.execute("SELECT * FROM orders WHERE stripe_session_id=?", (session_id,)).fetchone()
+    return o
+
+
+def on_checkout_paid(ctx, event: dict) -> str:
+    """A finished Checkout. Subscriptions get their key from the invoice; an event pass is issued here."""
+    c, d = ctx.c, event["data"]["object"]
+    order = _order(c, d.get("metadata"), d.get("id"))
+    acc = _account(ctx, ref(d.get("customer")), d.get("metadata"))
+    if d.get("payment_status") not in ("paid", "no_payment_required"):
+        return "waiting for the payment to clear"
+    if order is None:
+        return "no order matched"
+    if acc is None or acc["id"] != order["account_id"]:
+        notify.admins(ctx, f"Checkout doesn't match its order: {d.get('id')}",
+                      f"Order {order['ref']} was paid by Stripe customer {ref(d.get('customer'))}, which isn't the "
+                      f"order's account. Nothing was issued; check it in Stripe.")
+        return "customer doesn't match the order; admin told"
+    was_paid = order["status"] == "paid"
+    c.execute("UPDATE orders SET status='paid' WHERE id=?", (order["id"],))
+    if order["kind"] != "event":
+        return "order paid; the key comes with the invoice"
+    if was_paid:
+        return "event pass already issued"
+    start = date.today()
+    if order["event_start"]:
+        try:
+            start = max(date.fromisoformat(order["event_start"]), date.today())
+        except ValueError:
+            pass
+    ev = ctx.cat.event
+    lic = issue(ctx, acc, source="event", edition=ev["licence_plan"], max_nodes=int(ev["laptops"]),
+                expires=days_expiry(start, int(ev["days"])), txn_id=ref(d.get("invoice")) or d.get("id"),
+                note=f"event from {start}")
+    notify.key_email(ctx, acc, lic, "Your AT SUITE event pass", reason="event")
+    return "event pass issued"
+
+
+def on_checkout_expired(ctx, event: dict) -> str:
+    d = event["data"]["object"]
+    order = _order(ctx.c, d.get("metadata"), d.get("id"))
+    if order and order["status"] == "open":
+        ctx.c.execute("UPDATE orders SET status='abandoned' WHERE id=?", (order["id"],))
+        return "order abandoned"
+    return "nothing open"
+
+
+# -------------------------------------------------------------------- invoice --
+def on_invoice_paid(ctx, event: dict) -> str:
+    c, d = ctx.c, event["data"]["object"]
+    inv_id = d.get("id")
+    sub_id, sub_md = invoice_subscription(d)
+    md = {**(d.get("metadata") or {}), **sub_md}
+    customer = ref(d.get("customer"))
+    acc = _account(ctx, customer, md, sub_id)
+    # Credits for unused time on an old plan are left out, so a plan change reads as the new plan.
+    lines = [ln for ln in (d.get("lines") or {}).get("data") or [] if line_price(ln) and (ln.get("amount") or 0) >= 0]
+    prices = list(dict.fromkeys(line_price(ln) for ln in lines))
+    periods = [ln.get("period") or {} for ln in lines]
+    start = iso(min((p["start"] for p in periods if p.get("start")), default=None))
+    end = iso(max((p["end"] for p in periods if p.get("end")), default=None))
+    paid_at = (d.get("status_transitions") or {}).get("paid_at") or d.get("created")
     c.execute("INSERT OR REPLACE INTO transactions (id, account_id, subscription_id, status, origin, total, currency,"
               " period_start, period_end, billed_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-              (txn_id, acc["id"] if acc else None, d.get("subscription_id"), d.get("status") or "completed",
-               d.get("origin"), totals.get("grand_total") or totals.get("total"), d.get("currency_code"),
-               period.get("starts_at"), period.get("ends_at"), d.get("billed_at"), now()))
-    cd = d.get("custom_data") or {}
-    order = None
-    if cd.get("order_ref"):
-        order = c.execute("SELECT * FROM orders WHERE ref=?", (str(cd["order_ref"]),)).fetchone()
-    if order is None and txn_id:
-        order = c.execute("SELECT * FROM orders WHERE paddle_transaction_id=?", (txn_id,)).fetchone()
-    if order:
+              (inv_id, acc["id"] if acc else None, sub_id, d.get("status") or "paid", d.get("billing_reason"),
+               str(d.get("total") if d.get("total") is not None else d.get("amount_paid", "")),
+               (d.get("currency") or "").upper(), start if sub_id else None, end if sub_id else None, iso(paid_at), now()))
+    order = _order(c, md)
+    if order and sub_id:
         c.execute("UPDATE orders SET status='paid' WHERE id=?", (order["id"],))
     if acc is None:
-        notify.admins(ctx, f"Payment with no account: {txn_id}",
-                      f"Paddle customer {d.get('customer_id')} paid ({txn_id}) but no account matches. "
+        notify.admins(ctx, f"Payment with no account: {inv_id}",
+                      f"Stripe customer {customer} paid ({inv_id}) but no account matches. "
                       f"Issue their key from Admin → Licences once you know who it is.")
         return "no account matched; admin told"
-    kind = classify(ctx.cat, _price_ids(d.get("items")))
-    sub_id = d.get("subscription_id")
+    if not sub_id:
+        return "one-off invoice recorded"  # an event pass: issued when its checkout was paid
+    kind = classify(ctx.cat, prices)
     if kind["unknown"]:
-        notify.admins(ctx, f"Payment for an unknown price: {txn_id}",
+        notify.admins(ctx, f"Payment for an unknown price: {inv_id}",
                       f"{acc['email']} paid for {', '.join(kind['unknown'])}, which isn't in the catalogue. No key was issued.")
-    if sub_id:
-        return _subscription_payment(ctx, acc, d, kind, order)
-    if kind["event"]:
-        start = date.today()
-        if order and order["event_start"]:
-            try:
-                start = max(date.fromisoformat(order["event_start"]), date.today())
-            except ValueError:
-                pass
-        ev = ctx.cat.event
-        lic = issue(ctx, acc, source="event", edition=ev["licence_plan"], max_nodes=int(ev["laptops"]),
-                    expires=days_expiry(start, int(ev["days"])), txn_id=txn_id, note=f"event from {start}")
-        notify.key_email(ctx, acc, lic, "Your AT SUITE event pass", reason="event")
-        return "event pass issued"
-    return "nothing to issue"
+    return _subscription_payment(ctx, acc, inv_id, sub_id, customer, prices, kind, order, start, end)
 
 
-def _subscription_payment(ctx, acc, d, kind, order) -> str:
-    c, txn_id, sub_id = ctx.c, d.get("id"), d["subscription_id"]
-    if d.get("origin") == "subscription_payment_method_change":
-        return "card change, nothing to issue"
+def _subscription_payment(ctx, acc, txn_id, sub_id, customer, prices, kind, order, start, end) -> str:
+    c = ctx.c
     sub = c.execute("SELECT * FROM subscriptions WHERE id=?", (sub_id,)).fetchone()
-    plan_key = kind["plan"] or (sub["plan"] if sub else None)
-    period = d.get("billing_period") or {}
-    if not plan_key or not period.get("ends_at"):
+    plan_key = None if kind["unknown"] and not kind["plan"] else (kind["plan"] or (sub["plan"] if sub else None))
+    if not plan_key or not end:
         notify.admins(ctx, f"Couldn't issue a key for {txn_id}",
                       f"{acc['email']} paid ({txn_id}, subscription {sub_id}) but the plan or period is missing.")
         return "no plan or period; admin told"
     if sub is None:
         # The subscription's own event hasn't arrived yet; start a record so the key and hosting have a home.
-        c.execute("INSERT INTO subscriptions (id, account_id, paddle_customer_id, status, plan, cycle, hosting, items,"
+        c.execute("INSERT INTO subscriptions (id, account_id, stripe_customer_id, status, plan, cycle, hosting, items,"
                   " period_start, period_end, event_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                  (sub_id, acc["id"], d.get("customer_id"), "active", plan_key, kind["cycle"], int(kind["hosting"]),
-                   json.dumps(_price_ids(d.get("items"))), period.get("starts_at"), period.get("ends_at"), "", now(), now()))
+                  (sub_id, acc["id"], customer, "active", plan_key, kind["cycle"], int(kind["hosting"]),
+                   json.dumps(prices), start, end, "", now(), now()))
     plan = ctx.cat.plans[plan_key]
-    expires = period_expiry(period["ends_at"], ctx.cat.spare_days)
+    expires = period_expiry(end, ctx.cat.spare_days)
     cur = latest_licence(c, sub_id)
     first = cur is None and c.execute("SELECT 1 FROM licences WHERE subscription_id=?", (sub_id,)).fetchone() is None
     out = []
@@ -340,12 +420,16 @@ def _subscription_payment(ctx, acc, d, kind, order) -> str:
 
 
 def on_payment_failed(ctx, event: dict) -> str:
-    d = event["data"]
-    acc = _account(ctx, d)
+    d = event["data"]["object"]
+    if d.get("object") == "checkout.session":
+        sub_id, md = None, d.get("metadata") or {}
+    else:
+        sub_id, sub_md = invoice_subscription(d)
+        md = {**(d.get("metadata") or {}), **sub_md}
+    acc = _account(ctx, ref(d.get("customer")), md, sub_id)
     if not acc:
         return "no account matched"
-    ref = d.get("subscription_id") or d.get("id")
-    notify.payment_failed(ctx, acc, ref)
+    notify.payment_failed(ctx, acc, sub_id or d.get("id"))
     return "customer told"
 
 

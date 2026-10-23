@@ -41,7 +41,7 @@ Last updated: [date]
 
 ## 5. Paying
 
-5.1 Our reseller [Paddle.com Market Limited] sells AT SUITE to you and handles payment, invoices and tax. Paddle's buyer terms also apply to your purchase.
+5.1 We sell AT SUITE to you directly. Card payments are processed for us by Stripe Payments UK Limited. We send your invoices, and we are responsible for any VAT on them.
 
 5.2 Prices are shown without VAT unless we say otherwise. Monthly and yearly plans renew automatically at the end of each period until cancelled.
 

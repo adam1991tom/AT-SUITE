@@ -11,7 +11,7 @@
     <input id="event_start" name="event_start" type="date" required min="{{ today }}" max="{{ latest }}" value="{{ today }}" aria-describedby="start-hint">
     <span class="hint" id="start-hint">The key runs for {{ cat.event.days }} days from this day.</span></div>
   <div><button class="btn primary" type="submit" {% if not billing_ready %}disabled{% endif %}>Continue to payment</button></div>
-  <p class="small muted">{{ cat.vat_note }} Payment is taken by Paddle.com, our reseller.</p>
+  <p class="small muted">{{ cat.vat_note }} Payment is taken securely by Stripe.</p>
 </form>
 </div></div>
 {% endblock %}

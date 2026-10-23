@@ -21,7 +21,7 @@ Live audio is turned into captions on the technician's laptop and is never sent 
 | What | Where it comes from | Why we use it | Lawful basis |
 |---|---|---|---|
 | Name, work email, phone, company and role of customer contacts and venue admins | You, when you buy, sign up or contact us | To set up and run your account, send licence keys and service notices | Contract, or legitimate interests where you act for your employer |
-| Order, plan, licence and billing records (not card numbers) | Paddle, our reseller, and our licence system | To provide what you bought, keep accounts and meet tax law | Contract and legal obligation |
+| Order, plan, licence and billing records (not card numbers) | You, Stripe (our payment processor) and our licence system | To provide what you bought, keep accounts and meet tax law | Contract and legal obligation |
 | Support messages and bug reports, including any screenshots you send | You | To help you and fix problems | Legitimate interests |
 | Technical logs from the hosted service: IP address, times, errors and sign-in events | The hosted server and Cloudflare | To keep the service secure, stop attacks and fix faults | Legitimate interests |
 | Website use (only basic first-party statistics, if we use them) | Your browser | To see which pages are useful | Legitimate interests; you can opt out [link] |
@@ -31,7 +31,7 @@ We don't sell personal data, and we don't use it for advertising profiles.
 
 ## Who we share it with
 
-- **Paddle** (Paddle.com Market Limited) sells AT SUITE as our reseller and takes payments. Paddle is a separate controller for payment data, see [Paddle's privacy notice](https://www.paddle.com/legal/privacy).
+- **Stripe** (Stripe Payments UK Limited) takes card payments and sends invoices for us. We never see your full card number. Stripe is also a separate controller for some payment data, for example to prevent fraud and meet its own legal duties, and may process it outside the UK; see [Stripe's privacy policy](https://stripe.com/gb/privacy).
 - **Hetzner Online GmbH** hosts our servers and backups in [Germany / Finland].
 - **Cloudflare, Inc.** protects and delivers our website and hosted service.
 - **[Email provider]** for our email.
@@ -62,7 +62,7 @@ If you're unhappy with how we've used your data, tell us first at [support@atsui
 
 ## Cookies
 
-Our website and AT SUITE only use cookies needed to make them work, such as keeping you signed in. [If you add first-party statistics, say so here with an opt-out.] We don't use advertising or cross-site tracking cookies. Paddle's checkout window sets its own cookies to take a payment; see Paddle's notice.
+Our website and AT SUITE only use cookies needed to make them work, such as keeping you signed in. [If you add first-party statistics, say so here with an opt-out.] We don't use advertising or cross-site tracking cookies. Stripe's checkout and billing pages set their own cookies to take a payment and prevent fraud; see Stripe's privacy policy.
 
 ## Security
 

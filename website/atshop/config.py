@@ -32,14 +32,15 @@ class Settings:
     data_dir: Path = Path("./data")
     secret: str = ""
     dev: bool = False
-    # Paddle Billing. "sandbox" until adam says otherwise; "production" also needs allow_live.
-    paddle_env: str = "sandbox"
-    paddle_api_key: str = ""
-    paddle_client_token: str = ""
-    paddle_webhook_secret: str = ""
-    paddle_api_url: str = ""
-    # Only accept webhooks from the addresses Paddle publishes at <api>/ips (as well as checking the signature).
-    paddle_webhook_ip_check: bool = True
+    # Stripe. A test key (sk_test_/rk_test_) until adam says otherwise; a live key also needs allow_live.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_api_url: str = ""
+    # Stripe Tax works out and adds VAT at checkout. Only switch it on once registered for VAT.
+    stripe_tax: bool = False
+    # Only accept webhooks from the addresses Stripe publishes (as well as checking the signature).
+    stripe_webhook_ip_check: bool = True
+    stripe_webhook_ips_url: str = "https://stripe.com/files/ips/ips_webhooks.json"
     allow_live: bool = False
     # The vendor private key that signs AT SUITE licence keys (a file, mode 600, never in git).
     signing_key_file: str = ""
@@ -68,34 +69,31 @@ class Settings:
         return self.site_url.startswith("https://")
 
     @property
-    def paddle_base(self) -> str:
-        if self.paddle_api_url:
-            return self.paddle_api_url.rstrip("/")
-        return "https://api.paddle.com" if self.paddle_env == "production" else "https://sandbox-api.paddle.com"
+    def stripe_base(self) -> str:
+        return (self.stripe_api_url or "https://api.stripe.com").rstrip("/")
+
+    @property
+    def stripe_mode(self) -> str:
+        """test or live, from the key itself: Stripe keys say which mode they belong to."""
+        return "live" if self.stripe_secret_key.startswith(("sk_live_", "rk_live_")) else "test"
 
     @property
     def billing_ready(self) -> bool:
-        return bool(self.paddle_api_key and self.paddle_client_token)
+        return bool(self.stripe_secret_key)
 
     @property
     def prices_file(self) -> Path:
-        return self.data_dir / f"paddle-prices.{self.paddle_env}.json"
+        return self.data_dir / f"stripe-prices.{self.stripe_mode}.json"
 
     def check(self) -> None:
-        if self.paddle_env not in ("sandbox", "production"):
-            raise ConfigError("PADDLE_ENV must be sandbox or production")
-        if self.paddle_env == "production" and not self.allow_live:
-            raise ConfigError("PADDLE_ENV=production takes real money. Set SHOP_ALLOW_LIVE=yes only once "
-                              "live billing has been approved.")
-        if self.paddle_env == "production" and self.paddle_client_token and not self.paddle_client_token.startswith("live_"):
-            raise ConfigError("PADDLE_ENV=production needs a live client-side token (starts live_)")
-        if self.paddle_env == "sandbox" and self.paddle_client_token.startswith("live_"):
-            raise ConfigError("PADDLE_CLIENT_TOKEN is a live token but PADDLE_ENV=sandbox")
-        # Paddle API keys say which account they belong to: pdl_live_apikey_... or pdl_sdbx_apikey_...
-        if self.paddle_env == "production" and self.paddle_api_key.startswith("pdl_sdbx_"):
-            raise ConfigError("PADDLE_API_KEY is a sandbox key but PADDLE_ENV=production")
-        if self.paddle_env == "sandbox" and self.paddle_api_key.startswith("pdl_live_"):
-            raise ConfigError("PADDLE_API_KEY is a live key but PADDLE_ENV=sandbox")
+        if self.stripe_secret_key and not self.stripe_secret_key.startswith(("sk_test_", "sk_live_", "rk_test_", "rk_live_")):
+            raise ConfigError("STRIPE_SECRET_KEY should start sk_test_ or rk_test_ (or sk_live_/rk_live_ once live). "
+                              "The publishable key (pk_...) isn't needed.")
+        if self.stripe_mode == "live" and not self.allow_live:
+            raise ConfigError("STRIPE_SECRET_KEY is a live key, which takes real money. Set SHOP_ALLOW_LIVE=yes only "
+                              "once live billing has been approved.")
+        if self.stripe_webhook_secret and not self.stripe_webhook_secret.startswith("whsec_"):
+            raise ConfigError("STRIPE_WEBHOOK_SECRET is the endpoint's signing secret, which starts whsec_")
         if not self.dev and len(self.secret) < 32:
             raise ConfigError("SHOP_SECRET must be at least 32 random characters (python -c \"import secrets; "
                               "print(secrets.token_urlsafe(48))\")")
@@ -112,12 +110,11 @@ def load() -> Settings:
         data_dir=Path(e("SHOP_DATA", "./data")),
         secret=_secret("SHOP_SECRET"),
         dev=_bool(e("SHOP_DEV")),
-        paddle_env=e("PADDLE_ENV", "sandbox").strip().lower(),
-        paddle_api_key=_secret("PADDLE_API_KEY"),
-        paddle_client_token=e("PADDLE_CLIENT_TOKEN", "").strip(),
-        paddle_webhook_secret=_secret("PADDLE_WEBHOOK_SECRET"),
-        paddle_api_url=e("PADDLE_API_URL", ""),
-        paddle_webhook_ip_check=_bool(e("PADDLE_WEBHOOK_IP_CHECK"), True),
+        stripe_secret_key=_secret("STRIPE_SECRET_KEY"),
+        stripe_webhook_secret=_secret("STRIPE_WEBHOOK_SECRET"),
+        stripe_api_url=e("STRIPE_API_URL", ""),
+        stripe_tax=_bool(e("STRIPE_TAX")),
+        stripe_webhook_ip_check=_bool(e("STRIPE_WEBHOOK_IP_CHECK"), True),
         allow_live=_bool(e("SHOP_ALLOW_LIVE")),
         signing_key_file=e("LICENCE_SIGNING_KEY_FILE", ""),
         admin_emails={a.strip().lower() for a in e("ADMIN_EMAILS", "").split(",") if a.strip()},

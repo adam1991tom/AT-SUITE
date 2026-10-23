@@ -1,4 +1,4 @@
-"""Machine endpoints: Paddle's webhook, licence renewal for AT SUITE servers, health."""
+"""Machine endpoints: Stripe's webhook, licence renewal for AT SUITE servers, health."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from . import auth, billing, mailer
 from .app import VERSION
-from .paddle import verify_signature
+from .stripe import verify_signature
 from .web import ip, shop
 
 router = APIRouter()
@@ -18,35 +18,38 @@ log = logging.getLogger("atshop.api")
 MAX_BODY = 512 * 1024
 
 
-@router.post("/webhooks/paddle")
-async def paddle_webhook(request: Request):
-    """Every Paddle event comes here. Only signed, recent events are read; each is applied once."""
+@router.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Every Stripe event comes here. Only signed, recent events are read; each is applied once."""
     sh = shop(request)
-    if sh.s.paddle_webhook_ip_check:
-        allowed = await run_in_threadpool(sh.paddle.is_webhook_ip, ip(request))
-        if allowed is None:  # Paddle's address list couldn't be read: Paddle retries a 503 later
-            log.warning("Paddle webhook held: couldn't read Paddle's address list")
+    if sh.s.stripe_webhook_ip_check:
+        allowed = await run_in_threadpool(sh.stripe.is_webhook_ip, ip(request))
+        if allowed is None:  # Stripe's address list couldn't be read: Stripe retries a 503 later
+            log.warning("Stripe webhook held: couldn't read Stripe's address list")
             return JSONResponse({"error": "try again"}, 503)
         if not allowed:
-            log.warning("Paddle webhook from %s, which isn't one of Paddle's addresses", ip(request))
+            log.warning("Stripe webhook from %s, which isn't one of Stripe's addresses", ip(request))
             return JSONResponse({"error": "forbidden"}, 403)
     raw = await request.body()
     if len(raw) > MAX_BODY:
         return JSONResponse({"error": "too large"}, 413)
-    if not verify_signature(raw, request.headers.get("paddle-signature", ""), sh.s.paddle_webhook_secret):
-        log.warning("Paddle webhook with a bad or old signature from %s", ip(request))
-        return JSONResponse({"error": "bad signature"}, 401)
+    if not verify_signature(raw, request.headers.get("stripe-signature", ""), sh.s.stripe_webhook_secret):
+        log.warning("Stripe webhook with a bad or old signature from %s", ip(request))
+        return JSONResponse({"error": "bad signature"}, 400)
     try:
         event = json.loads(raw)
     except ValueError:
         return JSONResponse({"error": "not json"}, 400)
+    if bool(event.get("livemode")) != (sh.s.stripe_mode == "live"):
+        log.warning("Stripe event %s is from the other mode (live/test) than this shop's key; ignored", event.get("id"))
+        return JSONResponse({"error": "event from the other Stripe mode"}, 400)
     try:
         status, note = billing.handle(sh.db, sh.s, sh.cat, sh.signer, event)
-    except Exception as e:  # noqa: BLE001 - record it, then let Paddle retry
-        log.exception("webhook %s failed", event.get("event_id"))
+    except Exception as e:  # noqa: BLE001 - record it, then let Stripe retry
+        log.exception("webhook %s failed", event.get("id"))
         sh.db.run("INSERT OR REPLACE INTO webhook_events (event_id, event_type, occurred_at, received_at, status, note,"
                   " payload) VALUES (?,?,?,strftime('%s','now'),'failed',?,?)",
-                  event.get("event_id") or "?", event.get("event_type") or "?", event.get("occurred_at"),
+                  event.get("id") or "?", event.get("type") or "?", billing.iso(event.get("created")),
                   f"{type(e).__name__}: {e}"[:500], raw.decode(errors="replace"))
         return JSONResponse({"error": "not processed; will retry"}, 500)
     try:
@@ -102,5 +105,5 @@ async def licence_refresh(request: Request):
 def health(request: Request):
     sh = shop(request)
     sh.db.one("SELECT 1")
-    return {"ok": True, "version": VERSION, "billing": sh.s.paddle_env if sh.s.billing_ready else "off",
+    return {"ok": True, "version": VERSION, "billing": sh.s.stripe_mode if sh.s.billing_ready else "off",
             "signing": sh.signer.ready}

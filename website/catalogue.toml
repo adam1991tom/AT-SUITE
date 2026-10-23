@@ -1,11 +1,11 @@
 # What AT SUITE sells, and for how much. The website, checkout and licence keys all read this file,
 # so a price change is made here and nowhere else.
 #
-# After changing a price, run `python tools/paddle_setup.py` to create the matching prices in Paddle.
-# Customers already subscribed keep the price they signed up at (Paddle keeps their old price);
+# After changing a price, run `python tools/stripe_setup.py --apply` to create the matching prices in Stripe.
+# Customers already subscribed keep the price they signed up at (Stripe keeps their old price);
 # their keys keep coming because old prices stay mapped to their plan.
 #
-# Prices are whole pounds, before VAT. Paddle (the reseller) adds VAT at checkout where it applies.
+# Prices are whole pounds, before VAT. Once registered for VAT, STRIPE_TAX=yes adds it at checkout.
 # `licence_plan` is the plan name in tools/licence.py; `laptops` must match that plan's node limit.
 
 currency = "GBP"

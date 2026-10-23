@@ -1,17 +1,17 @@
 ---
 summary: Update your card, get invoices, change plan, cancel, and sign in to your account on the AT SUITE website.
 audience: account owners
-keywords: billing, invoice, receipt, vat, card, payment, paddle, change plan, upgrade, downgrade, cancel, subscription, account, refund
+keywords: billing, invoice, receipt, vat, card, payment, stripe, change plan, upgrade, downgrade, cancel, subscription, account, refund
 ---
 # Billing and your account
 
 ## Update your card
 
-[Your account](/account) → **Billing** → **Update payment method**. This opens Paddle's secure page.
+[Your account](/account) → **Billing** → **Update payment method**. This opens Stripe's secure page.
 
 ## Invoices
 
-Your account → **Billing** lists every payment with a link to its PDF invoice. Invoices come from Paddle, our reseller, and include VAT where it applies. To add a VAT number or company address, use **Billing overview**.
+Your account → **Billing** lists every payment with a link to its invoice, which you can download as a PDF. To add a VAT number or company address, use **Billing overview**.
 
 ## Change plan or add hosting
 

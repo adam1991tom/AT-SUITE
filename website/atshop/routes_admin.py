@@ -426,7 +426,7 @@ async def ticket_answer(request: Request, tid: int):
 def events(request: Request):
     need_admin(request)
     sh = shop(request)
-    return render(request, "admin/events.html", {"title": "Paddle events", "rows": sh.db.all(
+    return render(request, "admin/events.html", {"title": "Stripe events", "rows": sh.db.all(
         "SELECT event_id, event_type, occurred_at, received_at, status, note FROM webhook_events ORDER BY received_at DESC LIMIT 300")})
 
 
