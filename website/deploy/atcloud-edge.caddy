@@ -1,0 +1,22 @@
+# The shop behind an atcloud front door, on the same server as the hosted venues.
+# Replace atsuite.co.uk with the shop's domain, then (docs/HOSTING.md, "Other sites on the same server"):
+#   cp website/deploy/atcloud-edge.caddy /srv/atcloud/extra/shop.caddy
+#   Cloudflare origin certificate for the domain → /srv/atcloud/certs/atsuite.co.uk.pem and .key
+#   ATCLOUD_EDGE_NETWORKS=atsuite-shop in /srv/atcloud/atcloud.env, then `atcloud edge`
+# Only Cloudflare may connect, as for the venues; it sends www to the bare domain.
+
+atsuite.co.uk, www.atsuite.co.uk {
+	tls /certs/atsuite.co.uk.pem /certs/atsuite.co.uk.key
+	import cloudflare_only
+	@www host www.atsuite.co.uk
+	handle @www {
+		redir https://atsuite.co.uk{uri} permanent
+	}
+	handle {
+		encode gzip
+		header -Server
+		reverse_proxy shop:8090 {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+}

@@ -94,6 +94,40 @@ Start a second server, or a dedicated one for a big client, when it fills up.
 7. **Windows tech app**: `atcloud app --release v1.11.0` puts that release's app where every
    venue's laptops update from.
 
+### On a Hostinger VPS (or another provider's Ubuntu image)
+
+The same steps work on a Hostinger KVM VPS with Ubuntu 24.04. Differences from Hetzner:
+
+- Docker is already installed, and Hostinger's `/etc/docker/daemon.json` has its own address pools.
+  bootstrap.sh puts the kit's pool (`10.200.0.0/14`, one `/24` per venue) in front of them and keeps theirs.
+- If the server already has an SSH key for root, bootstrap.sh turns password sign-in off. Hostinger's
+  browser **Web console** signs in with the root password, so add your own key first (hPanel → VPS →
+  SSH keys) and check you can sign in with it, or put password sign-in back with
+  `rm /etc/ssh/sshd_config.d/10-atcloud.conf && systemctl reload ssh`.
+- Hostinger's panel firewall can be left empty: the server's own firewall lets in SSH only, and the
+  front door turns away anything that doesn't come through Cloudflare.
+- Domains bought from Hostinger start on its parking nameservers. In Cloudflare, **Add a domain**
+  (Free plan), then in hPanel → Domains → the domain → **DNS / Nameservers → Change nameservers**,
+  put in the two Cloudflare gives you. It's live when Cloudflare says "Active".
+
+## Other sites on the same server
+
+The front door can also serve other sites on their own domains, for example the website and shop
+(`website/`) at `atsuite.co.uk` while venues are at `<venue>.atsuite.tech`. Each one is a Caddy file in
+`/srv/atcloud/extra/`, and only Cloudflare may connect to it, as for the venues.
+
+1. Run the site in Docker on a network of its own. The shop's `website/docker-compose.yml` calls it
+   `atsuite-shop`, and the shop answers there as `shop:8090`.
+2. Copy its Caddy file: `cp website/deploy/atcloud-edge.caddy /srv/atcloud/extra/shop.caddy` (edit the domain).
+3. Make a Cloudflare origin certificate for that domain (in that domain's Cloudflare zone) and save it as
+   `/srv/atcloud/certs/<domain>.pem` and `.key` (`chmod 600` the key).
+4. Add `ATCLOUD_EDGE_NETWORKS=atsuite-shop` to `/srv/atcloud/atcloud.env` (several are separated by spaces),
+   then `atcloud edge`.
+
+The shop holds the key that signs licences. The venues can't reach it (each venue is on its own network,
+read-only and not root), so sharing a server is fine while you start out; once you sell in volume, a small
+server of its own is the safer home for that key.
+
 ## Every day
 
 ```bash
