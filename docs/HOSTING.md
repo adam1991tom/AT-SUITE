@@ -92,7 +92,8 @@ Start a second server, or a dedicated one for a big client, when it fills up.
    `docker login ghcr.io` with a token that can read packages. Set the version new venues get in
    `/srv/atcloud/atcloud.env` (`ATCLOUD_VERSION=1.11.0`).
 7. **Windows tech app**: `atcloud app --release v1.11.0` puts that release's app where every
-   venue's laptops update from.
+   venue's laptops update from. After that, `atcloud update` brings each release's app with it
+   (checked against its latest.yml), so nobody uploads it by hand.
 
 ### On a Hostinger VPS (or another provider's Ubuntu image)
 
@@ -139,8 +140,9 @@ atcloud licence grandhall new-key.txt   # renewals and plan changes
 atcloud suspend grandhall          # unpaid: their address says paused, data kept
 atcloud resume grandhall
 atcloud update --all --version 1.11.1   # copy first, health check, rolled back if not healthy;
-                                        # a venue with a show on is skipped (run again later)
-atcloud app --release v1.11.1      # the matching Windows app for the laptops
+                                        # a venue with a show on is skipped (run again later).
+                                        # The release's Windows app comes too, for each venue updated
+atcloud app --release v1.11.1      # the Windows app on its own (every venue), if it needs doing again
 atcloud backup                     # a backup now (it also runs every night)
 atcloud snapshots grandhall
 atcloud restore grandhall --yes    # put the last backup back (or --snapshot ID)

@@ -19,6 +19,7 @@ sends each address to its venue; Cloudflare sits in front of it.
                                             move venues to a version: copy first, health check,
                                             back to the old version if it isn't healthy. Never
                                             while a show is on, unless --force
+                                            The Windows tech app of that release comes too
   atcloud app [--release v1.11.0 | --dir DIR]
                                             the Windows tech app laptops update from, for every venue
   atcloud models                            fetch the speech model laptops caption with, once for all
@@ -38,6 +39,8 @@ Settings live in $ATCLOUD_ROOT/atcloud.env (default /srv/atcloud). Only Python 3
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import re
@@ -46,6 +49,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,7 +63,9 @@ AI_IMAGE = "ollama/ollama:0.5.7"
 RESTIC_IMAGE = "restic/restic:0.17.3"
 HELPER_IMAGE = "alpine:3.20"
 SPEECH_MODEL = "sherpa-onnx-streaming-zipformer-en-2023-06-21"
-RELEASES = "https://github.com/adam1991tom/AT-SUITE-releases/releases/download"
+# Where releases are, asked in turn: the releases-only repository (and its old name), then the
+# source repository, which has them until the releases-only one does (as the venues' updater).
+RELEASE_REPOS = ("adam1991tom/AT-SUITE-releases", "adam1991tom/AT-SUIT-releases", "adam1991tom/AT-SUITE")
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
 RESERVED = {"www", "admin", "api", "app", "mail", "smtp", "status", "help", "kb", "docs", "cloud", "edge", "portal",
             "billing", "shop", "support", "dashboard", "login", "account", "accounts", "static", "cdn", "ns1", "ns2"}
@@ -511,6 +517,12 @@ def cmd_update(a) -> None:
     img = image(c, version)
     if not a.no_pull:
         docker("pull", "-q", img)
+    if version != "latest":  # laptops get the release's app with the server, never by hand
+        try:
+            if fetch_app(f"v{version}"):
+                say(f"Windows tech app {version} fetched; each venue publishes it once it's on {version}.")
+        except Fail as exc:
+            say(f"Couldn't fetch the Windows tech app for {version} ({exc}); laptops stay on the one they have. `atcloud app` tries again.")
     failed = []
     for t in pick(a):
         slug, old = t["slug"], t["version"]
@@ -547,10 +559,68 @@ def cmd_update(a) -> None:
         raise Fail(f"Not updated: {', '.join(failed)}")
 
 
-def cmd_app(a) -> None:
-    c = conf()
+def release_file(tag: str, name: str, timeout: int = 60):
+    """A file of a release, from the first repository that has that release."""
+    for repo in RELEASE_REPOS:
+        req = urllib.request.Request(f"https://github.com/{repo}/releases/download/{tag}/{name}", headers={"User-Agent": "atcloud"})
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 404:
+                raise Fail(f"GitHub answered {exc.code} for {name} of {tag}")
+    raise Fail(f"No release {tag} with {name}")
+
+
+def yml_field(yml: bytes, key: str) -> str:
+    m = re.search(rb"^" + key.encode() + rb":\s*['\"]?([^'\"\n]+?)['\"]?\s*$", yml, re.M)
+    return m.group(1).decode() if m else ""
+
+
+def fetch_app(tag: str) -> bool:
+    """The Windows tech app of a release into the folder venues publish from. False when that
+    version is there already."""
     dest = ROOT / "app"
     dest.mkdir(exist_ok=True)
+    with release_file(tag, "latest.yml") as r:
+        yml = r.read()
+    exe = yml_field(yml, "path")
+    if not exe:
+        raise Fail("The release's latest.yml names no installer")
+    have = dest / "latest.yml"
+    if have.is_file() and have.read_bytes() == yml and (dest / exe).is_file():
+        return False
+    stage = ROOT / "app.new"
+    shutil.rmtree(stage, ignore_errors=True)
+    stage.mkdir()
+    for n in (exe, f"{exe}.blockmap"):
+        say(f"Downloading {n}…")
+        with release_file(tag, n, timeout=600) as r, (stage / n).open("wb") as out:
+            shutil.copyfileobj(r, out)
+    want = yml_field(yml, "sha512")
+    h = hashlib.sha512()
+    with (stage / exe).open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    if want and base64.b64encode(h.digest()).decode() != want:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise Fail(f"{exe} doesn't match its latest.yml (a broken download?)")
+    (stage / "latest.yml").write_bytes(yml)
+    swap_app(stage)
+    return True
+
+
+def swap_app(stage: Path) -> None:
+    dest = ROOT / "app"
+    for f in dest.iterdir():  # swap in place: venues mount this folder
+        f.unlink()
+    for f in sorted(stage.iterdir(), key=lambda f: f.name == "latest.yml"):
+        f.replace(dest / f.name)
+    stage.rmdir()
+
+
+def cmd_app(a) -> None:
+    c = conf()
+    (ROOT / "app").mkdir(exist_ok=True)
     if a.dir:
         src = Path(a.dir)
         names_ = [f.name for f in src.iterdir() if f.name == "latest.yml" or f.suffix in (".exe", ".blockmap")]
@@ -561,29 +631,12 @@ def cmd_app(a) -> None:
         stage.mkdir()
         for n in names_:
             shutil.copyfile(src / n, stage / n)
+        swap_app(stage)
     else:
         tag = a.release or f"v{c['ATCLOUD_VERSION']}"
         if tag == "vlatest":
             raise Fail("Say which release: atcloud app --release v1.11.0")
-        stage = ROOT / "app.new"
-        shutil.rmtree(stage, ignore_errors=True)
-        stage.mkdir()
-        with urllib.request.urlopen(f"{RELEASES}/{tag}/latest.yml", timeout=60) as r:
-            yml = r.read()
-        m = re.search(rb"^path:\s*['\"]?([^'\"\n]+?)['\"]?\s*$", yml, re.M)
-        if not m:
-            raise Fail("The release's latest.yml names no installer")
-        exe = m.group(1).decode()
-        for n in (exe, f"{exe}.blockmap"):
-            say(f"Downloading {n}…")
-            with urllib.request.urlopen(f"{RELEASES}/{tag}/{n}", timeout=600) as r, (stage / n).open("wb") as out:
-                shutil.copyfileobj(r, out)
-        (stage / "latest.yml").write_bytes(yml)
-    for f in dest.iterdir():  # swap in place: venues mount this folder
-        f.unlink()
-    for f in sorted(stage.iterdir(), key=lambda f: f.name == "latest.yml"):
-        f.replace(dest / f.name)
-    stage.rmdir()
+        fetch_app(tag)
     for t in tenants():
         if t["status"] == "active" and state(t["slug"]) == "running":
             ok = subprocess.run(["docker", "exec", names(t["slug"])["container"], "python", "-m", "atsuit.hosted", "app", "/srv/app"],
