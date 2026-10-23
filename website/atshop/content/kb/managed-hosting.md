@@ -26,7 +26,7 @@ Everything in this help centre applies to a hosted server. The laptops make the 
 
 ## Your data
 
-Your server is sealed off from every other venue's, with its own data, accounts and network. Live audio never reaches it: captions are made on the laptops. See the [Data Processing Agreement](/legal/dpa) and [Privacy and data](/docs/privacy).
+Your server runs on our servers in the UK (Hostinger, Manchester), and all its data and backups stay in the UK. Several venues share one machine, but yours is sealed off from every other venue's, with its own data, accounts and network: venues share only its processing power and memory, and none can see another's data. Live audio never reaches it: captions are made on the laptops. See the [Data Processing Agreement](/legal/dpa) and [Privacy and data](/docs/privacy).
 
 ## Moving to your own server
 
