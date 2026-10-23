@@ -167,7 +167,7 @@ internet: it never checks in, so it can't be revoked early or renew itself.
 
 ## What's done and what isn't
 
-Done and tested (`pytest`, 60 tests, a fake Stripe and a throwaway key):
+Done and tested (`pytest`, 59 tests, a fake Stripe and a throwaway key):
 
 - signed webhooks (bad, missing or old signatures refused), duplicates applied once, out-of-order
   subscription events skipped, a failed event recorded and retried
