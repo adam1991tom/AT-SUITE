@@ -40,7 +40,9 @@ python3 - <<'EOF'
 import json, pathlib
 p = pathlib.Path("/etc/docker/daemon.json")
 d = json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}
-d.setdefault("default-address-pools", [{"base": "10.200.0.0/14", "size": 24}])
+pools = d.setdefault("default-address-pools", [])
+if not any(x.get("base") == "10.200.0.0/14" for x in pools):
+    pools.insert(0, {"base": "10.200.0.0/14", "size": 24})  # first, ahead of any the host image set up
 d.setdefault("log-driver", "json-file")
 d.setdefault("log-opts", {"max-size": "10m", "max-file": "3"})
 d["live-restore"] = True  # venues keep running while Docker itself updates

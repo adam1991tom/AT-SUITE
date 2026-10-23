@@ -74,6 +74,7 @@ DEFAULTS = {
     "ATCLOUD_TRUSTED_PROXIES": "private_ranges",
     "ATCLOUD_AI": "0",
     "ATCLOUD_AI_MODEL": "llama3.2:3b",
+    "ATCLOUD_EDGE_NETWORKS": "",  # other sites' docker networks the front door joins (extra/*.caddy)
     "RESTIC_REPOSITORY": "",
     "RESTIC_KEEP": "--keep-daily 7 --keep-weekly 4",
 }
@@ -286,7 +287,7 @@ def join(container: str, network: str) -> None:
 
 # --------------------------------------------------------------- commands --
 def cmd_init(a) -> None:
-    for d in ("tenants", "tenants/removed", "sites", "certs", "kb", "app", "models", "backups"):
+    for d in ("tenants", "tenants/removed", "sites", "extra", "certs", "kb", "app", "models", "backups"):
         (ROOT / d).mkdir(parents=True, exist_ok=True)
     c = conf()
     changes = {k: v for k, v in DEFAULTS.items() if k not in c or not (ROOT / "atcloud.env").is_file()}
@@ -323,7 +324,9 @@ def cmd_init(a) -> None:
 def cloudflare_ranges() -> list[str]:
     out = []
     for v in ("v4", "v6"):
-        with urllib.request.urlopen(f"https://www.cloudflare.com/ips-{v}", timeout=20) as r:
+        # Cloudflare answers 403 to Python's default User-Agent
+        req = urllib.request.Request(f"https://www.cloudflare.com/ips-{v}", headers={"User-Agent": "atcloud"})
+        with urllib.request.urlopen(req, timeout=20) as r:
             out += [ln.strip() for ln in r.read().decode().split() if ln.strip()]
     if not out:
         raise Fail("Couldn't get Cloudflare's addresses")
@@ -335,6 +338,7 @@ def cmd_edge(a=None) -> None:
     need_init(c)
     if exists("container", EDGE):
         docker("rm", "-f", EDGE)
+    (ROOT / "extra").mkdir(exist_ok=True)  # servers set up before extra/ existed
     if not exists("volume", "atcloud-edge-data"):
         docker("volume", "create", "atcloud-edge-data")
     docker("run", "-d", "--name", EDGE, "--restart", "unless-stopped",
@@ -344,9 +348,14 @@ def cmd_edge(a=None) -> None:
            "--security-opt", "no-new-privileges:true", "--log-opt", "max-size=10m", "--log-opt", "max-file=3",
            "-e", f"ATCLOUD_DOMAIN={c['ATCLOUD_DOMAIN']}", "-e", f"ATCLOUD_TRUSTED_PROXIES={c['ATCLOUD_TRUSTED_PROXIES']}",
            "-v", f"{KIT / 'Caddyfile'}:/etc/caddy/Caddyfile:ro", "-v", f"{ROOT / 'sites'}:/etc/caddy/sites:ro",
+           "-v", f"{ROOT / 'extra'}:/etc/caddy/extra:ro",
            "-v", f"{ROOT / 'certs'}:/certs:ro", "-v", "atcloud-edge-data:/data", EDGE_IMAGE)
     for t in tenants():
         join(EDGE, names(t["slug"])["network"])
+    for n in c["ATCLOUD_EDGE_NETWORKS"].split():
+        if not exists("network", n):
+            say(f"Network {n} (ATCLOUD_EDGE_NETWORKS) isn't there yet; run `atcloud edge` again once its site is up.")
+        join(EDGE, n)
     for _ in range(30):
         # 127.0.0.1, not localhost: Caddy's admin listens on IPv4 only, and wget may try ::1 first
         probe = subprocess.run(["docker", "exec", EDGE, "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"],

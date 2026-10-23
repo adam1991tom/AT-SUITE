@@ -25,7 +25,8 @@ rls() { docker run --rm -e RESTIC_PASSWORD_FILE=/p -v "$ATCLOUD_ROOT/restic-pass
 cleanup() {
   for v in alpha beta; do docker rm -f "atsuit-$v" >/dev/null 2>&1 || true; docker network rm "atsuit-$v-net" >/dev/null 2>&1 || true
     docker volume rm "atsuit-$v-data" >/dev/null 2>&1 || true; done
-  docker rm -f atcloud-edge >/dev/null 2>&1 || true
+  docker rm -f atcloud-edge atcloud-e2e-web >/dev/null 2>&1 || true
+  docker network rm atcloud-e2e-extra >/dev/null 2>&1 || true
   docker volume rm atcloud-edge-data atcloud-restic-cache >/dev/null 2>&1 || true
   docker image rm "$REPO_IMG:e2e-next" "$REPO_IMG:e2e-broken" >/dev/null 2>&1 || true
   if [ -z "${KEEP:-}" ] && [ -d "$ATCLOUD_ROOT" ]; then  # restic writes the test repository as root
@@ -47,6 +48,20 @@ sed -i 's/^ATCLOUD_TRUSTED_PROXIES=.*/ATCLOUD_TRUSTED_PROXIES=173.245.48.0\/20/'
 is "$(code nobody / || true)" 000 "only the trusted proxy (Cloudflare) may connect"
 sed -i 's/^ATCLOUD_TRUSTED_PROXIES=.*/ATCLOUD_TRUSTED_PROXIES=private_ranges/' "$ATCLOUD_ROOT/atcloud.env"
 "$AT" edge >/dev/null; sleep 1
+
+echo "1b. Another site behind the front door (extra/, like the shop)"
+docker network create atcloud-e2e-extra >/dev/null
+docker run -d --name atcloud-e2e-web --network atcloud-e2e-extra --network-alias web caddy:2.8-alpine \
+  caddy respond --listen :8080 extra-site-ok >/dev/null
+printf '%s {\n\ttls /certs/origin.pem /certs/origin.key\n\timport cloudflare_only\n\treverse_proxy web:8080\n}\n' "$D" \
+  > "$ATCLOUD_ROOT/extra/web.caddy"
+echo "ATCLOUD_EDGE_NETWORKS=atcloud-e2e-extra" >> "$ATCLOUD_ROOT/atcloud.env"
+"$AT" edge >/dev/null
+# Caddy rereads the container's DNS settings every few seconds after the edge joins a network
+for _ in $(seq 20); do r=$(curl -sk --noproxy '*' --resolve "$D:$PORT:127.0.0.1" "https://$D:$PORT/" || true)
+  [ "$r" = extra-site-ok ] && break; sleep 1; done
+is "$r" extra-site-ok "the bare domain reaches its own site"
+is "$(code nobody /)" 404 "venue addresses still go to venues"
 
 echo "2. Two venues"
 M="$ATCLOUD_ROOT/models/sherpa-onnx-streaming-zipformer-en-2023-06-21"

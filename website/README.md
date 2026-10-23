@@ -109,8 +109,10 @@ Everything below uses Paddle's **sandbox** (test cards, no real money) until liv
     - Payouts → Payout settings: bank details.
     - Paddle Retain gets the signed-in customer's Paddle id (`pwCustomer`) when checkout opens.
 
-The shop should run on its own small server, not on a venue server or the hosting server: it holds the
-key that makes licences, so it is kept away from anything customers run.
+The shop holds the key that makes licences, so keep it away from anything customers run. Its own small
+server is safest. Starting out, it can share the hosting server behind the atcloud front door, where the
+venues can't reach it: see "Other sites on the same server" in docs/HOSTING.md and
+[deploy/atcloud-edge.caddy](deploy/atcloud-edge.caddy). Never put it on a venue's own server.
 
 ## Managed hosting
 
