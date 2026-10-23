@@ -5,6 +5,10 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## Unreleased
+
+- Automatic updates no longer stop with "update.sh stopped at line 56" on a server with a lot of backups (about 120 or more in `backups/`). Finding the newest backup could fail by chance, so the update gave up before installing anything and tried again ten minutes later, leaving another backup behind each time.
+
 ## 1.24.0
 
 A full knowledge base: the website's help centre and the manual inside AT SUITE are now one set of pages, and the AI helper answers "how do I..." questions from it.
