@@ -6,7 +6,7 @@
 #
 # It installs Docker, security updates, a firewall (SSH in; the venues' https is guarded by
 # the front door, which only lets Cloudflare in), a swap file, the atcloud tool and the
-# nightly backup timer, then runs `atcloud init`. Safe to run again.
+# nightly backup and hourly autoupdate timers, then runs `atcloud init`. Safe to run again.
 set -euo pipefail
 
 DOMAIN=""
@@ -75,9 +75,9 @@ mkdir -p /opt/atcloud
 cp -r "$KIT"/. /opt/atcloud/
 chmod +x /opt/atcloud/atcloud
 ln -sf /opt/atcloud/atcloud /usr/local/bin/atcloud
-cp /opt/atcloud/systemd/atcloud-backup.service /opt/atcloud/systemd/atcloud-backup.timer /etc/systemd/system/
+cp /opt/atcloud/systemd/atcloud-*.service /opt/atcloud/systemd/atcloud-*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now atcloud-backup.timer >/dev/null
+systemctl enable --now atcloud-backup.timer atcloud-autoupdate.timer >/dev/null
 
 atcloud init --domain "$DOMAIN" --cloudflare
 

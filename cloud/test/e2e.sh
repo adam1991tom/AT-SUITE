@@ -146,6 +146,7 @@ is "$(docker inspect -f '{{.Config.Image}}' atsuit-alpha)" "$REPO_IMG:e2e-next" 
 is "$(code alpha /api/bootstrap -H "Authorization: Bearer $TOKEN")" 200 "with alpha's data"
 "$AT" check >/dev/null || die "atcloud check"
 ok "atcloud check: all healthy"
+is "$("$AT" autoupdate)" "" "autoupdate does nothing until ATCLOUD_AUTOUPDATE=yes"
 
 echo "8. The Windows tech app"
 mkdir -p "$ATCLOUD_ROOT/rel"
