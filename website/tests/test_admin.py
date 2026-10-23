@@ -47,6 +47,20 @@ def test_admin_needs_the_second_factor_every_session(h):
     assert stored == secret
 
 
+def test_an_admins_other_address_signs_in_to_the_same_account(tmp_path, vendor):
+    h = Harness(tmp_path, vendor, email_aliases={"me@other.example": ADMIN})
+    c, _ = admin_client(h)
+    first = h.shop.db.one("SELECT id FROM accounts WHERE email=?", ADMIN)["id"]
+    c2 = h.client()
+    assert c2.post("/login", data={"email": "Me@Other.example"}).status_code == 200
+    link = h.last_link("me@other.example")  # the link goes to the address typed
+    token = re.search(r"token=([\w-]+)", link).group(1)
+    assert c2.post("/login/confirm", data={"token": token, "next": "/account"}).status_code == 303
+    assert c2.get("/admin").headers["location"] == "/admin/2fa"  # an admin, still with the second factor
+    assert h.shop.db.one("SELECT COUNT(*) n FROM accounts")["n"] == 1
+    assert h.shop.db.one("SELECT id FROM accounts WHERE email=?", ADMIN)["id"] == first
+
+
 def test_totp_matches_rfc6238():
     # RFC 6238 test vector (SHA-1, 8 digits at T=59 → 94287082); our 6-digit code is its last 6 digits.
     secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"  # base32 of "12345678901234567890"
