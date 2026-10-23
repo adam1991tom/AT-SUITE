@@ -316,6 +316,57 @@ for _name, _hash, _who in CONSOLE:
     shot(_name)(lambda demo, n=_name, h=_hash, w=_who: console(demo, h, n, w, wait=1500))
 
 
+def demo_pictures(folder: Path) -> dict[str, Path]:
+    """Made-up pictures for the layout designer: a client's logo, a background and a sponsor's logo."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    def words(img, text, size, fill, xy=None):
+        d = ImageDraw.Draw(img)
+        font = ImageFont.load_default(size=size)  # Pillow 10.1 or newer
+        box = d.textbbox((0, 0), text, font=font)
+        x, y = xy or ((img.width - box[2]) // 2, (img.height - box[3]) // 2)
+        d.text((x, y), text, font=font, fill=fill)
+    logo = Image.new("RGBA", (600, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(logo).ellipse((10, 30, 150, 170), fill=(56, 189, 248, 255))
+    words(logo, "RIVERSIDE", 72, (255, 255, 255, 255), (175, 55))
+    bg = Image.new("RGB", (1920, 1080))
+    for y in range(1080):  # deep blue at the top to near black
+        ImageDraw.Draw(bg).line([(0, y), (1920, y)], fill=(8, 22 + int(40 * (1 - y / 1080)), 48 + int(70 * (1 - y / 1080))))
+    sponsor = Image.new("RGBA", (680, 240), (0, 0, 0, 0))
+    words(sponsor, "Sponsored by", 40, (203, 213, 225, 255), (30, 20))
+    words(sponsor, "NORTHLIGHT", 92, (250, 204, 21, 255), (24, 80))
+    out = {}
+    for name, img in (("logo", logo), ("background", bg), ("sponsor", sponsor)):
+        out[name] = folder / f"{name}.png"
+        img.save(out[name])
+    return out
+
+
+@shot("timers-designer-pictures")
+async def _designer_pictures(demo: Demo):
+    """A new layout getting its logo, a background picture and a sponsor's Picture part."""
+    pics = demo_pictures(demo.data)
+    page = await page_as(demo, ADMIN[0])
+    await page.goto(f"{demo.url}/#/timers/designer")
+    await page.locator("[data-d=name]").fill("Client blue")
+    await page.locator("[data-up=logo]").set_input_files(str(pics["logo"]))  # saves the new layout, then uploads
+    await page.locator(".ld-thumb").first.wait_for()
+    await page.locator("[data-up=bg]").set_input_files(str(pics["background"]))
+    await page.wait_for_timeout(800)
+    async with page.expect_file_chooser() as fc:
+        await page.click("[data-add=image]")
+    await (await fc.value).set_files(str(pics["sponsor"]))
+    await page.locator(".ld-right .ld-thumb").first.wait_for()
+    for k, v in (("w", 20), ("h", 14), ("x", 77), ("y", 3)):
+        await page.locator(f"[data-props] [data-k={k}]").fill(str(v))
+    await page.click("[data-save]")
+    await page.wait_for_timeout(1200)
+    await page.locator("[data-layers] [data-pick-el^=image]").first.click()
+    await page.evaluate("document.getElementById('toasts')?.replaceChildren()")
+    await save(page, "timers-designer-pictures")
+    await page.context.close()
+
+
 @shot("workspace-start")
 async def _start(demo: Demo):
     page = await page_as(demo, node="STUDIO-2")

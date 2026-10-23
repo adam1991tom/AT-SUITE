@@ -2,7 +2,9 @@
 // placing its parts on a 16:9 screen, like stagetimer.io's customiser. Drag a part to
 // move it, drag its handles to resize it, or use the arrow keys (Shift for bigger steps,
 // Alt to resize). Saved layouts are kept on the server and every screen, workspace and
-// laptop app showing the view redraws as soon as it is saved.
+// laptop app showing the view redraws as soon as it is saved. Pictures (the view's logo,
+// its background and any number of Picture parts) are uploaded to the server for the
+// view; adding one to a layout that hasn't been saved yet saves it first.
 const LayoutDesigner = (() => {
   const { esc, api, post, put, del, upload, guard, toast } = AT;
   const TL = TimerLayout;
@@ -49,7 +51,7 @@ const LayoutDesigner = (() => {
 
   function mount(el, { boot, slug = null, onSaved = () => {} }) {
     const isAdmin = boot.me.role === "admin";
-    let doc, saved, editing = slug, logos = {}, sel = null, sample = "running", past = [], future = [], lay = null;
+    let doc, saved, editing = slug, logos = {}, pictures = {}, sel = null, sample = "running", past = [], future = [], lay = null;
 
     el.innerHTML = `<div class="ld">
       <div class="ld-bar row">
@@ -75,8 +77,9 @@ const LayoutDesigner = (() => {
           <ol class="ld-layers" data-layers></ol>
         </aside>
         <div class="ld-centre">
-          <div class="ld-canvas" data-canvas><div class="ld-draw" data-draw></div><div class="ld-over" data-over></div></div>
+          <div class="ld-canvas" data-canvas aria-describedby="ld-drop-tip"><div class="ld-draw" data-draw></div><div class="ld-over" data-over></div></div>
           <p class="small muted" style="margin:.5rem 0 0">Drag a part to move it and its corners to resize it. With a part picked: arrow keys move it (Shift for bigger steps), Alt and the arrows resize it, Delete removes it, Ctrl+D copies it. Parts snap to the middle and to each other; hold Ctrl while dragging to place freely.</p>
+          ${isAdmin ? '<p class="small muted" id="ld-drop-tip" style="margin:.3rem 0 0">Drop a picture file on the screen to add it as a Picture part.</p>' : ""}
         </div>
         <aside class="ld-right panel" data-props></aside>
       </div></div>`;
@@ -107,11 +110,11 @@ const LayoutDesigner = (() => {
       if (d) {
         const des = d.design;
         doc = { name: des.name, background: des.background, text: des.text, layout: des.layout ? { ...LAYOUT, ...des.layout } : fromLegacy(des), _legacy: des };
-        logos = d.logos || {};
+        logos = d.logos || {}; pictures = d.pictures || {};
       } else {
         const t = TL.TEMPLATES.standard;
         doc = { name: "", background: t.background, text: t.text, layout: { ...LAYOUT, ...copy(t.layout) } };
-        logos = {};
+        logos = {}; pictures = {};
       }
       saved = snap(); past = []; future = []; sel = null;
       $("[data-pick]").innerHTML = `<option value="">New layout</option>` + designs.map((x) => `<option value="${esc(x.slug)}" ${x.slug === editing ? "selected" : ""}>${esc(x.name)}${x.design.layout ? "" : " (older view)"}</option>`).join("");
@@ -121,8 +124,9 @@ const LayoutDesigner = (() => {
       render();
     }
 
+    const lookOf = () => ({ layout: doc.layout, background: doc.background, text: doc.text, logos, pictures });
     function render() {
-      const look = { layout: doc.layout, background: doc.background, text: doc.text, logos };
+      const look = lookOf();
       if (!lay) lay = TL.mount($("[data-draw]"), look, { edit: true });
       else lay.set(look);
       lay.update(frame(sample));
@@ -199,8 +203,7 @@ const LayoutDesigner = (() => {
           if (handle.includes("s")) b = snapEdge(clamp(b + dy, t + 1, 100), ys, (v) => (gy = v));
           e.x = r1(l); e.y = r1(t); e.w = r1(Math.max(1, r - l)); e.h = r1(Math.max(1, b - t));
         }
-        const look = { layout: doc.layout, background: doc.background, text: doc.text, logos };
-        lay.set(look); lay.update(frame(sample));
+        lay.set(lookOf()); lay.update(frame(sample));
         const box = over.querySelector(`[data-hit="${CSS.escape(id)}"]`);
         Object.assign(box.style, { left: e.x + "%", top: e.y + "%", width: e.w + "%", height: e.h + "%" });
         guides(gx, gy);
@@ -267,13 +270,51 @@ const LayoutDesigner = (() => {
       ? `<div class="ld-f"><span>${label}</span><span class="row" style="gap:.3rem;flex-wrap:nowrap"><input type="checkbox" data-own="${k}" ${v ? "checked" : ""} aria-label="Own ${label.toLowerCase()}"><input type="color" data-k="${k}" value="${v || "#ffffff"}" ${v ? "" : "disabled"} aria-label="${label}"></span></div>`
       : `<label class="ld-f"><span>${label}</span><input type="color" data-k="${k}" value="${v}"></label>`;
 
+    // A picture's row: a small preview, a button that opens the file picker, and Remove.
+    const ACCEPT = ".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp";
+    const fileRow = (label, url, input, removeAttr) => `<div class="ld-f"><span>${label}</span><span class="row" style="gap:.3rem">
+        ${url ? `<img src="${esc(url)}" alt="" class="ld-thumb">` : ""}
+        <label class="btn small ld-file">${url ? "Replace…" : "Upload…"}${input}</label>
+        ${url ? `<button class="small" ${removeAttr} aria-label="Remove the ${label.toLowerCase()}">Remove</button>` : ""}</span></div>`;
+    const SLOT_NAMES = { logo: "Logo", bg: "Background picture" };
+    const slotRow = (slot) => fileRow(SLOT_NAMES[slot], logos[slot],
+      `<input type="file" class="sr-only" accept="${ACCEPT}" data-up="${slot}" aria-label="Upload a ${SLOT_NAMES[slot].toLowerCase()}">`, `data-unpic="${slot}"`);
+    const picRow = (e) => fileRow("Picture", e.src && pictures[e.src],
+      `<input type="file" class="sr-only" accept="${ACCEPT}" data-pic="${esc(e.id)}" aria-label="Upload a picture for this part">`, "data-nopic");
+    const fitPick = (v, k, opts, view) => `<label class="ld-f"><span>Fit the picture</span><select ${view ? "data-l" : "data-k"}="${k}">${opts.map(([o, n]) => `<option value="${o}" ${(v || opts[0][0]) === o ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;
+
+    // Pictures belong to a saved view, so a new layout is saved before its first picture goes up.
+    async function ensureSaved() {
+      if (editing) return true;
+      const keep = sel;
+      await save(false);
+      if (keep && find(keep)) sel = keep;
+      return !!editing;
+    }
+    // Upload a picture and show it on a Picture part (a new one at x, y when no part is given).
+    async function addPicture(file, id, at) {
+      if (!(await ensureSaved())) return;
+      const r = await guard(() => upload(`/api/timers-designs/${editing}/pictures`, file)).catch(() => null);
+      if (!r) return;
+      pictures = { ...pictures, [r.id]: r.url };
+      const e = id && find(id);
+      if (e) change(() => { e.src = r.id; });
+      else {
+        const n = { ...TL.element("image", newId("image")), src: r.id };
+        if (at) { n.x = r1(clamp(at.x - n.w / 2, 0, 100 - n.w)); n.y = r1(clamp(at.y - n.h / 2, 0, 100 - n.h)); }
+        change(() => doc.layout.elements.push(n)); sel = n.id;
+      }
+      render();
+      toast("Picture added. Press Save to put it on the screens.", "good");
+    }
+
     function drawProps(onlyNumbers) {
       const box = $("[data-props]"), e = sel && find(sel);
       if (onlyNumbers && e) { for (const k of ["x", "y", "w", "h"]) { const i = box.querySelector(`[data-k="${k}"]`); if (i) i.value = e[k]; } return; }
       if (onlyNumbers) return;
       const dis = isAdmin ? "" : " disabled";
       if (e) {
-        const T = TL.TYPES[e.type], texty = !["progress", "logo", "box", "status"].includes(e.type);
+        const T = TL.TYPES[e.type], texty = !["progress", "logo", "image", "box", "status"].includes(e.type), pic = ["logo", "image"].includes(e.type);
         box.innerHTML = `<fieldset${dis}><legend class="sr-only">${esc(T.label)}</legend>
           <div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(T.label)}</h2><button class="small" data-desel>View settings</button></div>
           <h3 style="margin-top:.8rem">Place</h3>
@@ -286,12 +327,15 @@ const LayoutDesigner = (() => {
             <label class="ld-f"><span>Text size</span><input type="range" data-k="size" min="10" max="100" value="${e.size}" aria-valuetext="${e.size}% of the box"></label>
             <div class="row" style="gap:1rem">${chk("bold", e.bold !== false, "Bold")}${chk("upper", e.upper, "Capitals")}</div>` : ""}
           ${e.type === "message" ? chk("cover", e.cover !== false, "Fill the whole screen when a message is up") : ""}
+          ${pic ? `<h3 style="margin-top:.8rem">Picture</h3>
+            ${e.type === "logo" ? slotRow("logo") : picRow(e)}
+            ${e.type === "logo" ? '<p class="small muted" style="margin:.2rem 0">Every Logo part in this view shows this logo. For other pictures, add a Picture part.</p>' : ""}
+            ${fitPick(e.fit, "fit", [["contain", "Show it all"], ["cover", "Fill the box"], ["stretch", "Stretch"]])}` : ""}
           <h3 style="margin-top:.8rem">Colour</h3>
-          ${e.type === "box" ? "" : colour("color", e.color, e.type === "progress" ? "Bar colour" : "Text colour", true)}
+          ${e.type === "box" || pic ? "" : colour("color", e.color, e.type === "progress" ? "Bar colour" : "Text colour", true)}
           ${colour("bg", e.bg, "Background", true)}
           ${e.bg ? `<label class="ld-f"><span>See-through</span><input type="range" data-k="bg_opacity" min="0" max="100" value="${e.bg_opacity}" aria-valuetext="${e.bg_opacity}% solid"></label>` : ""}
           <label class="ld-f"><span>Round corners</span><input type="range" data-k="radius" min="0" max="50" value="${e.radius}"></label>
-          ${e.type === "logo" ? `<p class="small muted">The logo is the one under View settings → Pictures.</p>` : ""}
           <div class="row" style="gap:.3rem;margin-top:1rem"><button class="small" data-dup>Copy</button><button class="small" data-hide>${e.hidden ? "Show" : "Hide"}</button><span class="grow"></span><button class="small danger" data-rm>Remove</button></div>
           </fieldset>`;
       } else {
@@ -307,12 +351,9 @@ const LayoutDesigner = (() => {
           <div class="ld-grid">${colour("warn", L.warn, "Warning")}${colour("danger", L.danger, "Danger")}${colour("over", L.over, "Overtime")}</div>
           ${chk("flash_over", L.flash_over !== false, "Flash a red border round the screen in overtime")}
           <h3 style="margin-top:.8rem">Pictures</h3>
-          ${editing ? ["logo", "bg"].map((slot) => `<div class="ld-f"><span>${slot === "logo" ? "Logo" : "Background picture"}</span><span class="row" style="gap:.3rem">
-              ${logos[slot] ? `<img src="${esc(logos[slot])}" alt="" class="ld-thumb">` : ""}
-              <input type="file" accept=".png,.jpg,.jpeg,.svg,.webp" data-up="${slot}" aria-label="Upload a ${slot === "logo" ? "logo" : "background picture"}" style="width:auto;max-width:12rem">
-              ${logos[slot] ? `<button class="small" data-unpic="${slot}">Remove</button>` : ""}</span></div>`).join("") +
-            (logos.bg ? `<label class="ld-f"><span>Fit the picture</span><select data-l="bg_fit">${[["cover", "Fill the screen"], ["contain", "Show it all"], ["stretch", "Stretch"]].map(([k, n]) => `<option value="${k}" ${L.bg_fit === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>` : "")
-            : '<p class="small muted">Save the view first, then add a logo and a background picture.</p>'}
+          ${slotRow("logo")}${slotRow("bg")}
+          ${logos.bg ? fitPick(L.bg_fit, "bg_fit", [["cover", "Fill the screen"], ["contain", "Show it all"], ["stretch", "Stretch"]], true) : ""}
+          <p class="small muted" style="margin:.3rem 0 0">PNG, JPG, SVG or WebP, up to 5 MB. A PNG with a see-through background looks best for a logo. For more pictures (sponsors, photos), add a <b>Picture</b> part.${editing ? "" : " Adding a picture saves the view first."}</p>
           ${editing ? '<div class="row" style="margin-top:1rem"><span class="grow"></span><button class="small danger" data-delview>Remove this view</button></div>' : ""}
           </fieldset>`;
       }
@@ -349,10 +390,12 @@ const LayoutDesigner = (() => {
         change(() => { e[k] = t.checked ? (k === "bg" ? "#1e293b" : "#ffcc00") : ""; });
       }
       if (t.dataset.up && t.files[0]) {
-        guard(() => upload(`/api/timers-views/look/built:${editing}/logo/${t.dataset.up}`, t.files[0])).then(async (r) => {
-          logos = { ...logos, [t.dataset.up]: r.url }; toast("Picture saved", "good"); render();
-        });
+        const slot = t.dataset.up, file = t.files[0];
+        ensureSaved().then((ok) => ok && guard(() => upload(`/api/timers-views/look/built:${editing}/logo/${slot}`, file)).then((r) => {
+          logos = { ...logos, [slot]: r.url }; toast(slot === "bg" ? "Background picture saved. Screens showing the view have it now." : "Logo saved. Screens showing the view have it now.", "good"); render();
+        })).catch(() => render());
       }
+      if (t.dataset.pic && t.files[0]) addPicture(t.files[0], t.dataset.pic);
     });
     // After the panel redraws, put the cursor back where the admin was typing.
     function refocus(t) {
@@ -377,6 +420,7 @@ const LayoutDesigner = (() => {
       if (b.dataset.dup !== undefined && e) duplicate(e.id);
       if (b.dataset.hide !== undefined && e) change(() => { e.hidden = !e.hidden; });
       if (b.dataset.rm !== undefined && e) remove(e.id);
+      if (b.dataset.nopic !== undefined && e) change(() => { e.src = ""; });
       if (b.dataset.unpic) guard(() => del(`/api/timers-views/look/built:${editing}/logo/${b.dataset.unpic}`)).then(() => { logos = { ...logos, [b.dataset.unpic]: "" }; render(); });
       if (b.dataset.delview !== undefined && confirm(`Remove ${doc.name}? Screens showing it go back to the Standard view.`))
         guard(() => del(`/api/timers-designs/${editing}`)).then(() => { toast("View removed", "good"); onSaved(null); open(null); });
@@ -392,7 +436,22 @@ const LayoutDesigner = (() => {
     el.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
       const n = TL.element(b.dataset.add, newId(b.dataset.add));
       change(() => doc.layout.elements.push(n)); sel = n.id; render();
+      if (n.type === "image") props.querySelector(`[data-pic="${CSS.escape(n.id)}"]`)?.click();
     });
+    // Drop picture files on the screen: each becomes a Picture part where it was dropped.
+    if (isAdmin) {
+      const files = (ev) => [...(ev.dataTransfer?.files || [])].filter((f) => /\.(png|jpe?g|svg|webp)$/i.test(f.name));
+      canvas.addEventListener("dragover", (ev) => { if ([...(ev.dataTransfer?.types || [])].includes("Files")) { ev.preventDefault(); canvas.classList.add("drop"); } });
+      canvas.addEventListener("dragleave", (ev) => { if (!canvas.contains(ev.relatedTarget)) canvas.classList.remove("drop"); });
+      canvas.addEventListener("drop", async (ev) => {
+        ev.preventDefault(); canvas.classList.remove("drop");
+        const list = files(ev);
+        if (!list.length) return toast("Drop a PNG, JPG, SVG or WebP picture", "bad");
+        const rect = canvas.getBoundingClientRect();
+        const at = { x: (ev.clientX - rect.left) / rect.width * 100, y: (ev.clientY - rect.top) / rect.height * 100 };
+        for (const [i, f] of list.slice(0, 10).entries()) await addPicture(f, null, { x: at.x + i * 3, y: at.y + i * 3 });
+      });
+    }
     el.querySelectorAll("[data-sample]").forEach((b) => b.onclick = () => { sample = b.dataset.sample; render(); });
     $("[data-undo]").onclick = undo; $("[data-redo]").onclick = redo;
     $("[data-tpl]").onchange = (ev) => {
@@ -411,7 +470,8 @@ const LayoutDesigner = (() => {
       const { _legacy, ...body } = copy(doc);
       const keep = _legacy ? Object.fromEntries(Object.entries(_legacy).filter(([k]) => k.startsWith("show_") || k.endsWith("_size"))) : {};
       const out = { ...keep, ...body, name: doc.name.trim() + (asNew && editing ? " copy" : "") };
-      const r = await guard(() => editing && !asNew ? put(`/api/timers-designs/${editing}`, out) : post("/api/timers-designs", out));
+      const r = await guard(() => editing && !asNew ? put(`/api/timers-designs/${editing}`, out)
+        : post(`/api/timers-designs${asNew && editing ? `?copy_from=${encodeURIComponent(editing)}` : ""}`, out)).catch(() => null);
       if (!r) return;
       toast(editing && !asNew ? "Saved. Screens showing it have updated." : "View saved. Pick it for a screen under Screens.", "good");
       const s = r.slug || editing;

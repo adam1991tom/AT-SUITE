@@ -197,7 +197,7 @@
       document.documentElement.classList.toggle("clear", !!design.layout.transparent);
       document.body.classList.toggle("clear", !!design.layout.transparent);
       document.documentElement.style.setProperty("--tbg", design.background);
-      lay = TimerLayout.mount($("layout"), { layout: design.layout, background: design.background, text: design.text, logos: look.logos });
+      lay = TimerLayout.mount($("layout"), { layout: design.layout, background: design.background, text: design.text, logos: look.logos, pictures: look.pictures || {} });
       statusOn = false;
       document.title = look.name;
     } else if (look && look.design) {

@@ -859,6 +859,11 @@ def delete_view(slug: str, p: Principal = Depends(require_admin)):
 # with timerlayout.js. Any change is sent to every screen and app at once.
 LOGO_SLOTS = {"hcc": ("top",)}
 DESIGN_SLOTS = ("logo", "bg")  # a designed view's logo and background picture
+# A designed view's Picture parts each show a picture uploaded for that view, kept as
+# built-<slug>-pic-<id>.<ext>. A part names its picture by the id, so a copied part
+# shares it and undo in the designer brings the old one back.
+PIC_ID = re.compile(r"^[0-9a-f]{10}$")
+MAX_PICTURES = 40
 LOGO_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp"}
 LOOK_DEFAULTS = {"hcc": {}}
 # The Ontime-style status bar along the bottom (time of day, state, cue, start
@@ -911,9 +916,20 @@ def _logo_url(key: str) -> str:
     return f"/api/timers-views/logo/{f.name}?v={int(f.stat().st_mtime)}" if f else ""
 
 
+def _pictures(slug: str) -> dict[str, Path]:
+    """A designed view's uploaded pictures, by id."""
+    pat = re.compile(rf"^built-{re.escape(slug)}-pic-([0-9a-f]{{10}})\.(png|jpg|svg|webp)$")
+    return {m.group(1): f for f in logos_dir().glob(f"built-{slug}-pic-*") if (m := pat.match(f.name))}
+
+
+def _picture_url(f: Path) -> str:
+    return f"/api/timers-views/logo/{f.name}?v={int(f.stat().st_mtime)}"
+
+
 def _design_out(r) -> dict:
     return {"id": f"built:{r['slug']}", "slug": r["slug"], "name": r["name"], "created_at": r["created_at"],
             "logos": {slot: _logo_url(f"built-{r['slug']}-{slot}") for slot in DESIGN_SLOTS},
+            "pictures": {pid: _picture_url(f) for pid, f in _pictures(r["slug"]).items()},
             "design": {**Design(name=r["name"]).model_dump(), **json.loads(r["config_json"] or "{}"), "name": r["name"]}}
 
 
@@ -935,7 +951,7 @@ def get_look(view: str):
             r = c.execute("SELECT * FROM timer_designs WHERE slug=?", (view[6:],)).fetchone()
             if r:
                 d = _design_out(r)
-                return {"view": view, "name": d["name"], "logos": d["logos"], "design": d["design"]}
+                return {"view": view, "name": d["name"], "logos": d["logos"], "pictures": d["pictures"], "design": d["design"]}
     raise HTTPException(404, "No such view")
 
 
@@ -960,21 +976,27 @@ async def set_look(view: str, body: LookIn, p: Principal = Depends(require_admin
     return {"ok": True}
 
 
-@router.post("/api/timers-views/look/{view}/logo/{slot}")
-async def upload_logo(view: str, slot: str, file: UploadFile, p: Principal = Depends(require_admin)):
-    """A logo or background picture for one view (PNG with a see-through background looks best for logos)."""
+async def _read_picture(file: UploadFile) -> tuple[str, bytes]:
+    """An uploaded picture's extension (.jpeg saved as .jpg) and bytes, checked."""
     ext = Path((file.filename or "").lower()).suffix
     if ext not in LOGO_TYPES:
         raise HTTPException(400, "Upload a PNG, JPG, SVG or WebP image")
     data = await file.read(5 * 1024 * 1024 + 1)
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(400, "Pictures can be up to 5 MB")
+    return (".jpg" if ext == ".jpeg" else ext), data
+
+
+@router.post("/api/timers-views/look/{view}/logo/{slot}")
+async def upload_logo(view: str, slot: str, file: UploadFile, p: Principal = Depends(require_admin)):
+    """A logo or background picture for one view (PNG with a see-through background looks best for logos)."""
+    ext, data = await _read_picture(file)
     with db.tx() as c:
         key = _logo_key(c, view, slot)
         db.audit(c, p.name, "timers.view_logo", key)
     for old in logos_dir().glob(f"{key}.*"):
         old.unlink()
-    (logos_dir() / f"{key}{'.jpg' if ext == '.jpeg' else ext}").write_bytes(data)
+    (logos_dir() / f"{key}{ext}").write_bytes(data)
     await announce_view(view)
     return {"url": _logo_url(key)}
 
@@ -1008,7 +1030,7 @@ class LayoutElement(BaseModel):
     """One part of a designed view, placed on the screen like a box on a slide.
     x, y, w and h are a share (%) of the screen's width and height."""
     id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,24}$")
-    type: Literal["timer", "title", "next", "clock", "message", "secondary", "progress", "logo", "text", "room", "status", "box"]
+    type: Literal["timer", "title", "next", "clock", "message", "secondary", "progress", "logo", "text", "room", "status", "box", "image"]
     x: float = Field(ge=0, le=100)
     y: float = Field(ge=0, le=100)
     w: float = Field(ge=1, le=100)
@@ -1023,6 +1045,8 @@ class LayoutElement(BaseModel):
     upper: bool = False
     text: str = Field(default="", max_length=200)  # a text box's words; a label in front of the others ("Next:")
     cover: bool = True  # the stage message fills the screen when it's up
+    src: str = Field(default="", pattern=r"^([0-9a-f]{10})?$")  # a Picture part's picture (uploaded for the view)
+    fit: Literal["contain", "cover", "stretch"] = "contain"  # how a logo or picture fills its box
     hidden: bool = False
 
 
@@ -1077,16 +1101,36 @@ def list_designs():
         return [{**_design_out(r), "logo": _logo_url(f"built-{r['slug']}-logo")} for r in c.execute("SELECT * FROM timer_designs ORDER BY name")]
 
 
+def _design_files(slug: str) -> list[Path]:
+    """Every picture kept for a designed view: its logo, background and Picture parts' pictures."""
+    return [f for slot in DESIGN_SLOTS if (f := _logo_file(f"built-{slug}-{slot}"))] + list(_pictures(slug).values())
+
+
+def _prune_pictures(slug: str, body: Design) -> None:
+    """Drop pictures no part of the saved layout shows any more. One uploaded in the last
+    hour is kept: it may be on a part in a layout someone hasn't saved yet."""
+    used = {e.src for e in (body.layout.elements if body.layout else []) if e.type == "image"}
+    for pid, f in _pictures(slug).items():
+        if pid not in used and time.time() - f.stat().st_mtime > 3600:
+            f.unlink(missing_ok=True)
+
+
 @router.post("/api/timers-designs")
-async def add_design(body: Design, p: Principal = Depends(require_admin)):
-    """A timer view made in the console: a layout of parts, or (older) colours, sizes and which parts show."""
+async def add_design(body: Design, copy_from: str | None = None, p: Principal = Depends(require_admin)):
+    """A timer view made in the console: a layout of parts, or (older) colours, sizes and which parts show.
+    copy_from: the view this is a copy of (Save as new), whose pictures come too."""
     with db.tx() as c:
         if c.execute("SELECT COUNT(*) FROM timer_designs").fetchone()[0] >= 50:
             raise HTTPException(400, "Up to 50 designed views")
+        if copy_from and not c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (copy_from,)).fetchone():
+            raise HTTPException(404, "No such view to copy")
         slug = _design_slug(c, body.name)
         c.execute("INSERT INTO timer_designs(slug,name,config_json,created_at) VALUES(?,?,?,?)",
                   (slug, body.name.strip(), body.model_dump_json(), db.now_iso()))
         db.audit(c, p.name, "timers.design_add", slug)
+    if copy_from:
+        for f in _design_files(copy_from):
+            shutil.copyfile(f, f.with_name(f"built-{slug}-" + f.name[len(f"built-{copy_from}-"):]))
     return {"id": f"built:{slug}", "slug": slug}
 
 
@@ -1097,18 +1141,37 @@ async def edit_design(slug: str, body: Design, p: Principal = Depends(require_ad
                          (body.name.strip(), body.model_dump_json(), slug)).rowcount:
             raise HTTPException(404, "No such view")
         db.audit(c, p.name, "timers.design_edit", slug)
+    _prune_pictures(slug, body)
     await announce_view(f"built:{slug}")
     return {"ok": True}
 
 
+@router.post("/api/timers-designs/{slug}/pictures")
+async def add_design_picture(slug: str, file: UploadFile, p: Principal = Depends(require_admin)):
+    """A picture for one of a designed view's Picture parts: a sponsor's logo, a photo, a
+    show graphic. The part shows it once the layout is saved with the picture's id on it."""
+    ext, data = await _read_picture(file)
+    with db.tx() as c:
+        if not c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone():
+            raise HTTPException(404, "Save the view first")
+        if len(_pictures(slug)) >= MAX_PICTURES:
+            raise HTTPException(400, f"Up to {MAX_PICTURES} pictures in a view. Remove a Picture part and save, then try again.")
+        db.audit(c, p.name, "timers.design_picture", slug)
+    pid = os.urandom(5).hex()
+    f = logos_dir() / f"built-{slug}-pic-{pid}{ext}"
+    f.write_bytes(data)
+    return {"id": pid, "url": _picture_url(f)}
+
+
 @router.delete("/api/timers-designs/{slug}")
 async def delete_design(slug: str, p: Principal = Depends(require_admin)):
+    if not SLUG.match(slug):
+        raise HTTPException(404, "No such view")
     with db.tx() as c:
         c.execute("DELETE FROM timer_designs WHERE slug=?", (slug,))
         db.audit(c, p.name, "timers.design_delete", slug)
-    for slot in DESIGN_SLOTS:
-        for old in logos_dir().glob(f"built-{slug}-{slot}.*"):
-            old.unlink()
+    for f in _design_files(slug):
+        f.unlink(missing_ok=True)
     await announce_view(f"built:{slug}")
     return {"ok": True}
 
