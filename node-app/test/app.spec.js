@@ -504,7 +504,6 @@ test("the backup PC: pop-ups are silent, on top and never take focus", async () 
 
   await benSays("Speaker for HD is in the lobby");
   await expect.poll(async () => (await popupWindows(app)).length, { timeout: 10000 }).toBe(1);
-  await expect(page.locator("#bellCount")).toHaveText("1"); // and in the window's notifications
   await new Promise((r) => setTimeout(r, 800));
   const [p] = await popupWindows(app);
   expect(p.url).toContain("Speaker for HD is in the lobby");
@@ -514,6 +513,11 @@ test("the backup PC: pop-ups are silent, on top and never take focus", async () 
   expect(p.focused).toBe(false);
   const after = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.id ?? null);
   expect(after).toBe(before); // the pop-up did not take focus from the slides
+  // It's in the window's notifications too. (The red count can already be cleared: with the chat
+  // window open on screen, the workspace marks chat notifications read within a second.)
+  await page.evaluate(() => document.getElementById("bellBtn").click()); // a DOM click, so the window doesn't take focus
+  await expect(page.locator("#bellBox")).toContainText("Speaker for HD is in the lobby");
+  await page.evaluate(() => document.getElementById("bellBtn").click());
   if (process.env.ATSUIT_SHOTS) {
     const shot = await app.evaluate(async ({ BrowserWindow }) =>
       (await BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("popup.html")).webContents.capturePage()).toPNG().toString("base64"));
