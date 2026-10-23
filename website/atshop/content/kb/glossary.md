@@ -67,6 +67,6 @@ keywords: glossary, words, terms, meaning, definitions, jargon
 
 **Tech guide**: the AI helper's built-in show-day fault finding (sound, video, lighting, networks and more). Admins can change it.
 
-**Timer view**: how a stage screen shows the timer: Standard, Minimal, Clock, Backstage, BDNG, or one you made.
+**Timer view**: how a stage screen shows the timer: Standard, Minimal, Clock, Backstage, Speaker preview, or one you made.
 
 **Vocabulary**: names and words added to a room so captions spell them right.
