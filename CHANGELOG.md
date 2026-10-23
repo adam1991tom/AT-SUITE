@@ -5,6 +5,23 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.25.1
+
+The real AT SUITE email addresses on atsuite.tech in the website, the app and the docs (adam).
+
+**Website**
+- Emails the shop sends (sign-in links, licence keys, receipts, notices) come from `AT SUITE <noreply@atsuite.tech>`, with replies going to `support@atsuite.tech`. These are now the defaults for `MAIL_FROM` and `SUPPORT_EMAIL`; `SALES_EMAIL` defaults to `hello@atsuite.tech`.
+- The contact page lists **General enquiries and quotes** (hello@atsuite.tech) and **Support** (support@atsuite.tech).
+- The terms and privacy policy name support@atsuite.tech where they had `[support email]` and `[privacy email]`.
+- `.env.example`: `ADMIN_EMAILS=adam.tomlinson@atsuite.tech`, and the new mail defaults.
+
+**App**
+- **Settings → About → Report a bug** says where to email when something is urgent: support@atsuite.tech. Reports are still saved on your server and nothing is emailed.
+
+**Docs and Companion**
+- SECURITY.md's contact and the Companion module's maintainer address are support@atsuite.tech.
+- Knowledge base: Report a bug and Troubleshooting give the support address, and What's new has 1.25.1.
+
 ## 1.25.0
 
 Logos and pictures in the layout designer, the BDNG sponsor clock taken out (adam), and automatic updates no longer stop at line 56.

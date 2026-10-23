@@ -937,8 +937,8 @@ Keywords: lectern, gooseneck, mic dead
     if (open) edit(open);
   }
 
-  // Where Report a bug sends people, for now.
-  const BUG_EMAIL = "adam.tomlinson@outlook.com";
+  // Where to email when something is urgent or the bug report can't be saved.
+  const BUG_EMAIL = "support@atsuite.tech";
 
 
   async function admInfo(a) {
@@ -948,7 +948,7 @@ Keywords: lectern, gooseneck, mic dead
     const pill = (ok, yes, no) => `<span class="pill ${ok ? "good" : "warn"}">${ok ? yes : no}</span>`;
     a.innerHTML = `<div class="row" style="margin-bottom:1rem"><a class="btn primary" href="/api/admin/info?download=1">Download diagnostics</a><button id="copyInfo">Copy for a support ticket</button><button id="refresh">Refresh</button>
         <span class="muted small">No passwords, keys or tokens are included.</span></div>
-      <div class="panel row" style="margin-bottom:1rem"><span class="grow"><b>Report a bug</b><br><span class="small muted">Say what went wrong, with a screenshot if you like. It's saved in <a href="#/bugs">Bug reports</a> with this version and server filled in. Nothing is emailed.</span></span>
+      <div class="panel row" style="margin-bottom:1rem"><span class="grow"><b>Report a bug</b><br><span class="small muted">Say what went wrong, with a screenshot if you like. It's saved in <a href="#/bugs">Bug reports</a> with this version and server filled in. Nothing is emailed: for anything urgent, email <a href="mailto:${BUG_EMAIL}">${BUG_EMAIL}</a>.</span></span>
         <button class="primary" id="bugOpen">Report a bug</button></div>
       <div class="grid">
       <div class="panel"><h2>This app</h2>${kv([["Product", esc(i.product)], ["Organisation", esc(i.organisation) || '<span class="muted">not set</span>'], ["Version", `<b>${esc(i.version)}</b>`],

@@ -6,7 +6,7 @@ Last updated: [date]
 
 ## 1. Who we are and who these terms are for
 
-1.1 AT SUITE is provided by [COMPANY NAME] Ltd, a company registered in England and Wales under number [NUMBER], whose registered office is at [ADDRESS] ("we", "us"). You can contact us at [support email].
+1.1 AT SUITE is provided by [COMPANY NAME] Ltd, a company registered in England and Wales under number [NUMBER], whose registered office is at [ADDRESS] ("we", "us"). You can contact us at [support@atsuite.tech](mailto:support@atsuite.tech).
 
 1.2 These terms apply between us and the business, venue or person who buys an AT SUITE subscription, licence or event pass ("you"). By ordering, you confirm that you are buying for the purposes of your trade, business or profession and not as a consumer.
 
@@ -65,7 +65,7 @@ Last updated: [date]
 
 7.3 Timers and captions run on the laptops and keep running if the internet or the hosted service drops. Chat, help requests and sync resume when the connection returns.
 
-7.4 Support is by [email / in-app help] during [hours, days]. [Show-day support: describe if offered.]
+7.4 Support is by email to [support@atsuite.tech](mailto:support@atsuite.tech) and in-app help during [hours, days]. [Show-day support: describe if offered.]
 
 7.5 AT SUITE depends on your venue's network, internet connection and laptops, which we don't control. For show-critical functions you should keep a fallback, as you would for any show equipment.
 

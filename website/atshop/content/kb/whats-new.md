@@ -1,11 +1,16 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.1: our real email addresses
+
+- AT SUITE now uses its own addresses on atsuite.tech: **support@atsuite.tech** for help and bugs, **hello@atsuite.tech** for general enquiries and quotes. Emails from the website (sign-in links, licence keys, receipts) come from **noreply@atsuite.tech**; replying to one reaches support.
+- **Settings → About** shows where to email when a bug is urgent. See [Report a bug](/docs/bug-reports).
 
 ## 1.25.0: logos and pictures in the layout designer, BDNG is gone
 
