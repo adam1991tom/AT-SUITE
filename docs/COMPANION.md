@@ -130,8 +130,8 @@ press.
 ### Second line under the timer
 
 A smaller second line under the main timer on the stage views (Standard,
-stage, minimal, overlay): either a second countdown or a short text. Imported
-Ontime views such as BDNG show it too (as Ontime's secondary message or aux
+stage, minimal, overlay): either a second countdown or a short text. Uploaded
+Ontime views show it too (as Ontime's secondary message or aux
 timer 1). Hidden, it changes nothing on screen.
 
 | Button | POST | Body |
@@ -189,14 +189,14 @@ Overlay laptops are numbered in Laptops & screens → Overlay laptops (`targets/
 | Button | Method and path | Body |
 |---|---|---|
 | Screen 12 to the Standard view of room 3 | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "hcc"}` |
-| Screen 12 to the BDNG view | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "bdng"}` |
+| Screen 12 to the Clock view | `PUT /api/fleet/nodes/12/screen` | `{"room_id": 3, "view": "clock"}` |
 | Identify screen 12 | `POST /api/fleet/nodes/12/command` | `{"kind": "identify"}` |
 
-Views: `stage`, `minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (shown as "Standard"), `bdng` (BDNG sponsor clock), `overlay`,
+Views: `stage`, `minimal`, `clock`, `backstage`, `preview` (speaker preview), `hcc` (shown as "Standard"), `overlay`,
 `captions` (audience screen), `captions:overlay`, `captions:bar` (subtitle bar), `screentest:<pattern>` for a display test pattern (`colorbars`, `grayramp`,
 `rgbramp`, `checker`, `crosshatch`, `sharpness`, `motion`, `overscan`, `ledmap`, `black`,
 `white`, `red`, `green`, `blue`, `gray`), `built:<name>` for views made in Timers → Layout designer, `view:<name>`
-for uploaded ones (`view:bdng`, from when BDNG was imported, still shows BDNG), or `url:https://...` for any web page.
+for uploaded ones, or `url:https://...` for any web page.
 
 ### Reading values back into Companion
 

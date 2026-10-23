@@ -39,13 +39,13 @@ TIMER_TYPES = ("count-down", "count-up", "clock", "none")
 END_ACTIONS = ("none", "stop", "load-next", "play-next")
 # "hcc" is the Standard view (the id stays so existing links and screens keep working).
 # There is no separate "stage" view any more: the stage screen is the Standard view (adam, 0.6.5).
-# BDNG is the client's Ontime view, shipped in docs/views/bdng.html and served as it is at
-# /room/<room>/external/bdng/ (view=bdng sends a screen there). It was an import for a while,
-# so an uploaded copy called "bdng" (view:bdng) still routes to it.
-BUILTIN_VIEWS = {"hcc": "Standard", "bdng": "BDNG sponsor clock", "minimal": "Minimal timer", "clock": "Clock",
+BUILTIN_VIEWS = {"hcc": "Standard", "minimal": "Minimal timer", "clock": "Clock",
                  "backstage": "Backstage (studio clock)", "preview": "Speaker preview (clock and help calls)", "overlay": "Overlay window"}
-LEGACY_VIEWS = {"stage": "hcc"}
-RESERVED_SLUGS = {"bdng"}
+# BDNG (a client's sponsor clock) was built in from 1.21.0 and imported before that; it was
+# taken out in 1.25.0 (adam). Screens and links still set to it (bdng, or view:bdng from an
+# old import) show the Standard view, and an old imported copy stays hidden and unserved.
+LEGACY_VIEWS = {"stage": "hcc", "bdng": "hcc"}
+RETIRED_SLUGS = {"bdng"}
 MAX_DURATION = 24 * 3600 * 1000
 
 # A laptop that lost the server keeps running the timer itself and sends what the tech did
@@ -762,7 +762,7 @@ def test_views() -> list[dict]:
 
 
 def list_views(c, tests: bool = False) -> list[dict]:
-    custom = [v for v in db.rows(c.execute("SELECT slug,name,created_at FROM timer_views ORDER BY name")) if v["slug"] not in RESERVED_SLUGS]
+    custom = [v for v in db.rows(c.execute("SELECT slug,name,created_at FROM timer_views ORDER BY name")) if v["slug"] not in RETIRED_SLUGS]
     designs = db.rows(c.execute("SELECT slug,name,created_at FROM timer_designs ORDER BY name"))
     return [{"id": k, "name": v, "builtin": True} for k, v in BUILTIN_VIEWS.items()] + \
            [{"id": f"built:{v['slug']}", "slug": v["slug"], "name": v["name"], "builtin": False, "design": True,
@@ -780,7 +780,7 @@ def view_known(c, view: str) -> bool:
     if view.startswith("built:"):
         return bool(c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (view[6:],)).fetchone())
     if view.startswith("view:"):
-        return view[5:] in RESERVED_SLUGS or bool(c.execute("SELECT 1 FROM timer_views WHERE slug=?", (view[5:],)).fetchone())
+        return view[5:] in RETIRED_SLUGS or bool(c.execute("SELECT 1 FROM timer_views WHERE slug=?", (view[5:],)).fetchone())
     return False
 
 
@@ -802,8 +802,8 @@ def _install_view(name: str, filename: str, data: bytes, p: Principal) -> dict:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40]
     if not SLUG.match(slug or ""):
         raise HTTPException(400, "Give the view a name with letters or numbers")
-    if slug in RESERVED_SLUGS:
-        raise HTTPException(400, f"{BUILTIN_VIEWS[slug]} is built in. Give your view another name.")
+    if slug in RETIRED_SLUGS:
+        raise HTTPException(400, "That name is taken. Give your view another name.")
     target = views_dir() / slug
     tmp = views_dir() / f".{slug}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
@@ -842,31 +842,6 @@ def _install_view(name: str, filename: str, data: bytes, p: Principal) -> dict:
     return {"id": f"view:{slug}", "slug": slug, "url": f"/room/<room>/external/{slug}/"}
 
 
-# Ready-to-import views shipped with AT-SUITE (docs/views/, copied next to the app in the image).
-SAMPLE_VIEWS = {"bdng": "BDNG"}
-
-
-def _sample_file(name: str) -> Path:
-    for d in (Path(__file__).resolve().parents[1] / "views-samples", Path(__file__).resolve().parents[3] / "docs" / "views"):
-        f = d / f"{name}.html"
-        if name in SAMPLE_VIEWS and f.is_file():
-            return f
-    raise HTTPException(404, "No such ready-made view")
-
-
-@router.get("/api/timers-views/samples/{name}.html")
-def sample_view(name: str):
-    """Download a ready-made view (e.g. BDNG) to import, or to keep."""
-    return FileResponse(_sample_file(name), media_type="text/html", filename=f"{name}.html")
-
-
-@router.post("/api/timers-views/samples/{name}/import")
-def import_sample_view(name: str, p: Principal = Depends(require_admin)):
-    """Ready-made views are built in now: there is nothing to import. Kept for older consoles."""
-    _sample_file(name)
-    return {"id": name, "slug": name, "builtin": True}
-
-
 @router.delete("/api/timers-views/{slug}")
 def delete_view(slug: str, p: Principal = Depends(require_admin)):
     if not SLUG.match(slug):
@@ -879,11 +854,10 @@ def delete_view(slug: str, p: Principal = Depends(require_admin)):
 
 
 # -------------------------------------------- branded and console-built views --
-# Standard (id hcc) shows a logo uploaded for it, or the site's logo; BDNG reads its
-# two logos and bottom text from here. Views made in the console's layout designer
+# Standard (id hcc) shows a logo uploaded for it, or the site's logo. Views made in the console's layout designer
 # (Timers → Layout designer) keep their look as JSON and are drawn by timer.html
 # with timerlayout.js. Any change is sent to every screen and app at once.
-LOGO_SLOTS = {"hcc": ("top",), "bdng": ("top", "bottom")}
+LOGO_SLOTS = {"hcc": ("top",)}
 DESIGN_SLOTS = ("logo", "bg")  # a designed view's logo and background picture
 # A designed view's Picture parts each show a picture uploaded for that view, kept as
 # built-<slug>-pic-<id>.<ext>. A part names its picture by the id, so a copied part
@@ -891,18 +865,18 @@ DESIGN_SLOTS = ("logo", "bg")  # a designed view's logo and background picture
 PIC_ID = re.compile(r"^[0-9a-f]{10}$")
 MAX_PICTURES = 40
 LOGO_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp"}
-LOOK_DEFAULTS = {"hcc": {}, "bdng": {"bottom_text": "BDNG Official Timekeeping Sponsor"}}
+LOOK_DEFAULTS = {"hcc": {}}
 # The Ontime-style status bar along the bottom (time of day, state, cue, start
-# and end): on for the full-screen views, off for the minimal and overlay ones, and
-# for BDNG, which has its own layout. Uploaded views get it as a strip over their
-# bottom edge, off unless switched on.
-STATUS_BAR_DEFAULT = {"stage": True, "minimal": False, "clock": False, "backstage": True, "preview": False, "hcc": True, "overlay": False,
-                      "bdng": False}
+# and end): on for the full-screen views, off for the minimal and overlay ones.
+# Uploaded views get it as a strip over their bottom edge, off unless switched on.
+STATUS_BAR_DEFAULT = {"stage": True, "minimal": False, "clock": False, "backstage": True, "preview": False, "hcc": True, "overlay": False}
 
 
 def _look_key(view: str) -> str:
-    # BDNG was an uploaded view (view:bdng) before it was built in: both are the same view.
-    return view[5:] if view.startswith("view:") and view[5:] in RESERVED_SLUGS else view
+    # An old name for a view (stage, bdng, view:bdng) gets the look of the view it shows now.
+    if view.startswith("view:") and view[5:] in RETIRED_SLUGS:
+        view = view[5:]
+    return LEGACY_VIEWS.get(view, view)
 
 
 def _look_options(c, view: str) -> dict:
@@ -982,15 +956,14 @@ def get_look(view: str):
 
 
 class LookIn(BaseModel):
-    bottom_text: str | None = Field(default=None, max_length=120)
     status_bar: bool | None = None
 
 
 @router.put("/api/timers-views/look/{view}")
 async def set_look(view: str, body: LookIn, p: Principal = Depends(require_admin)):
-    """A view's options: the status bar for the built-in and uploaded views, and
-    BDNG's bottom text."""
-    view = _look_key(view)
+    """A view's options: the status bar for the built-in and uploaded views."""
+    if _look_key(view) != view:  # an old name (stage, bdng) is set under the view it shows now
+        raise HTTPException(404, "No such view")
     with db.tx() as c:
         if not (view in BUILTIN_VIEWS or view in LOOK_DEFAULTS or (view.startswith("view:") and view_known(c, view))):
             raise HTTPException(404, "No such view")
@@ -1117,7 +1090,7 @@ class Design(BaseModel):
 def _design_slug(c, name: str) -> str:
     base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:36] or "view"
     slug, n = base, 2
-    while c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone() or (slug in RESERVED_SLUGS):
+    while c.execute("SELECT 1 FROM timer_designs WHERE slug=?", (slug,)).fetchone():
         slug, n = f"{base}-{n}", n + 1
     return slug
 
@@ -1220,6 +1193,8 @@ def view_slash(request: Request, slug: str, room_id: int | None = None):
 def serve_room_view(room_id: int, slug: str, path: str = ""):
     """A custom view for one room. The room is in the path, as each room had
     its own Ontime server, so a view's own ?room=... setting still works."""
+    if slug in RETIRED_SLUGS:  # a screen still set to BDNG shows the Standard view
+        return RedirectResponse(f"/timer/{room_id}", status_code=307)
     return serve_view(slug, path)
 
 
@@ -1229,19 +1204,14 @@ def serve_view(slug: str, path: str = ""):
     points their Ontime websocket at the room (from /room/<id>/..., or ?room=)."""
     if not SLUG.match(slug):
         raise HTTPException(404)
-    if slug in RESERVED_SLUGS:
-        # A built-in view shipped as one HTML file (BDNG): always the shipped one, so every
-        # server shows the same thing. Its logos come from Timers, not files next to it.
-        if path not in ("", "index.html"):
-            raise HTTPException(404)
-        f = _sample_file(slug)
-    else:
-        root = (views_dir() / slug).resolve()
-        f = (root / (path or "index.html")).resolve()
-        if f.is_dir():
-            f = f / "index.html"
-        if not str(f).startswith(str(root) + os.sep) or not f.is_file():
-            raise HTTPException(404)
+    if slug in RETIRED_SLUGS:
+        raise HTTPException(404)
+    root = (views_dir() / slug).resolve()
+    f = (root / (path or "index.html")).resolve()
+    if f.is_dir():
+        f = f / "index.html"
+    if not str(f).startswith(str(root) + os.sep) or not f.is_file():
+        raise HTTPException(404)
     if f.suffix.lower() in (".html", ".htm"):
         html = f.read_text(errors="replace")
         m = re.search(r"<head[^>]*>", html, re.I)

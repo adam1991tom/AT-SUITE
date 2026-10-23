@@ -15,7 +15,7 @@ Any screen can show the room's timer, captions or a test pattern. A screen that 
 2. On your tech laptop, find the **Add a screen** window, next to the timer. (If it's closed, open it from the **Layout** menu.)
 3. Type the code from the screen.
 4. Pick **What it shows**:
-    - any timer view: Standard, Minimal, Clock, Backstage, Speaker preview, BDNG, or one your venue made in the [layout designer](/docs/layout-designer);
+    - any timer view: Standard, Minimal, Clock, Backstage, Speaker preview, or one your venue made in the [layout designer](/docs/layout-designer);
     - captions: the audience screen, a transparent overlay or a subtitle bar;
     - a test pattern;
     - *A web page…* for any address.

@@ -12,7 +12,7 @@ keywords: layout designer, design view, custom view, timer layout, drag, templat
 ## Start a layout
 
 1. Open **Timers → Layout designer**.
-2. **Start from…** a ready-made layout: Standard, BDNG style, Speaker, Timer and clock, Lower third, or Blank.
+2. **Start from…** a ready-made layout: Standard, Speaker, Timer and clock, Lower third, or Blank.
 3. Give it a **Name** under **View settings**, like *Client blue*.
 
 ## Add and place parts

@@ -266,14 +266,6 @@ const TimerLayout = (() => {
       ["progress", 0, 96, 100, 4],
       ["message", 5, 20, 90, 60],
     ]) } },
-    bdng: { name: "BDNG style", background: "#f5f5f5", text: "#1a1a1a", layout: { font: "arial", over: "#fa5656", danger: "#fa5656", elements: mk([
-      ["logo", 11, 3, 78, 22],
-      ["timer", 8, 30, 84, 34, { size: 92 }],
-      ["secondary", 15, 64, 70, 9],
-      ["text", 10, 76, 80, 6, { text: "Official Timekeeping Sponsor", size: 70, upper: true }],
-      ["progress", 0, 97, 100, 3],
-      ["message", 5, 20, 90, 60],
-    ]) } },
     speaker: { name: "Speaker", background: "#0b1020", text: "#ffffff", layout: { font: "saira", elements: mk([
       ["title", 4, 4, 70, 9, { align: "left" }],
       ["clock", 74, 4, 22, 9, { align: "right" }],

@@ -7,11 +7,12 @@ keywords: new, release, version, changes, changelog, update, latest, 1.25, 1.24,
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
 
-## 1.25.0: logos and pictures in the layout designer
+## 1.25.0: logos and pictures in the layout designer, BDNG is gone
 
 - Upload a **logo** and a **background picture** for a view straight away: no need to save the view first. The Logo part has its own **Upload…** button too.
 - A new **Picture** part for sponsors' logos, photos and show graphics: as many as you like, each with its own picture. Drop picture files onto the screen to add them. See [Logos and pictures](/docs/layout-designer#logos-and-pictures).
 - **Save as new** copies a view's pictures.
+- The **BDNG sponsor clock** is no longer a built-in timer view, and **BDNG style** is no longer a ready-made layout in the layout designer. A screen or link still set to it shows the [Standard view](/docs/timer-views) instead. Layouts you already made from BDNG style are yours and stay.
 
 ## 1.24.0: the knowledge base and the manual
 
@@ -34,7 +35,7 @@ The latest changes, newest first. Your server updates itself (see [Updates](/doc
 ## 1.21.0: the layout designer
 
 - Make your own timer views by placing the timer, title, clock, message, logo and more on a 16:9 screen. See [The layout designer](/docs/layout-designer).
-- **BDNG sponsor clock** is built in. The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
+- The Timers page has five tabs: Live, Screens, Quick messages, Views and Layout designer.
 
 ## 1.20.9: Messenger-style chat
 
