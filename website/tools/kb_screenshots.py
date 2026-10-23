@@ -309,11 +309,41 @@ CONSOLE = [
     ("settings-general", "settings/general", ADMIN[0]), ("settings-look", "settings/appearance", ADMIN[0]),
     ("settings-chat", "settings/chat", ADMIN[0]), ("settings-ai", "settings/ai", ADMIN[0]), ("settings-keys", "settings/keys", ADMIN[0]),
     ("settings-updates", "settings/updates", ADMIN[0]), ("settings-about", "settings/info", ADMIN[0]),
-    ("console-bugs", "bugs", ADMIN[0]), ("console-licence", "licence", ADMIN[0]), ("console-backups", "backups", ADMIN[0]),
+    ("console-bugs", "bugs", ADMIN[0]), ("console-backups", "backups", ADMIN[0]),
     ("console-audit", "audit", ADMIN[0]), ("console-manager-sidebar", "dashboard", "mia"),
 ]
 for _name, _hash, _who in CONSOLE:
     shot(_name)(lambda demo, n=_name, h=_hash, w=_who: console(demo, h, n, w, wait=1500))
+
+# Every picture of a licence key shows this made-up one, never a key that was signed for real.
+DUMMY_KEY = "XXXX-DEMO-XXXX-XXXX-XXXX-DEMO"
+
+
+@shot("console-licence")
+async def _licence(demo: Demo):
+    """The Licence page as a customer's server shows it: the dummy key, the real vendor key's fingerprint, /data."""
+    import base64
+    import hashlib
+
+    raw = (ROOT / "server" / "atsuit" / "vendor_pubkey.txt").read_text().strip()
+    vendor = hashlib.sha256(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))).hexdigest()[:16]
+    page = await page_as(demo, ADMIN[0])
+    await page.goto(f"{demo.url}/#/licence")
+    await page.locator("#raw").wait_for()
+    await page.evaluate("""([key, vendor]) => {
+      const raw = document.getElementById("raw");
+      raw.value = raw.textContent = key;
+      for (const el of document.querySelectorAll("#main span")) {
+        if (el.textContent === "test vendor key") {
+          el.textContent = "vendor_pubkey.txt";
+          el.previousElementSibling.textContent = vendor;
+        } else if (el.textContent.endsWith("atsuit.db")) {
+          el.textContent = "Settings table (licence_key) in /data/atsuit.db";
+        }
+      }
+    }""", [DUMMY_KEY, vendor])
+    await save(page, "console-licence")
+    await page.context.close()
 
 
 def demo_pictures(folder: Path) -> dict[str, Path]:

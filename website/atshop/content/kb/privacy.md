@@ -5,7 +5,7 @@ keywords: privacy, gdpr, nda, data, where is data, encryption, transcripts delet
 ---
 # Privacy and data
 
-AT SUITE runs on your own server (or one sealed server per venue with [managed hosting](/docs/managed-hosting)). The laptops, stage screens and caption sources talk to that server and nothing else. Nothing about a show, a room or a person is sent to the AT SUITE team.
+AT SUITE runs on your own server (or, with [managed hosting](/docs/managed-hosting), its own sealed container on our servers in the UK). The laptops, stage screens and caption sources talk to that server and nothing else. Nothing about a show, a room or a person is sent to the AT SUITE team.
 
 ## What leaves your network
 

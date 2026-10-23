@@ -773,7 +773,7 @@ test("a laptop whose server is gone moves to another server, but only when an ad
   await expect(setup.locator("#username")).toBeVisible();
 
   // Cancel leaves the laptop where it was.
-  await setup.click("#cancel");
+  await setup.click("#cancel").catch(() => {}); // the window closes under the click; checked below
   for (let i = 0; i < 25 && app.windows().some((w) => w.url().includes("setup.html")); i++) await new Promise((r) => setTimeout(r, 200));
   expect(app.windows().some((w) => w.url().includes("setup.html"))).toBeFalsy();
   expect(JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8")).server).toBe(old.server);
@@ -835,7 +835,10 @@ test("a laptop whose server is gone moves to another server, but only when an ad
   await ws.click("#switchSrvStart");
   setup = await setupPage(app);
   await expect(setup.locator("#current")).toHaveText(env.base);
-  await setup.click("#cancel");
+  await setup.click("#cancel").catch(() => {}); // the window closes under the click
+  for (let i = 0; i < 25 && app.windows().some((w) => w.url().includes("setup.html")); i++) await new Promise((r) => setTimeout(r, 200));
+  expect(app.windows().some((w) => w.url().includes("setup.html"))).toBeFalsy();
+  expect(JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8")).server).toBe(env.base);
 });
 
 test("the set-up window lets an admin sign in instead of typing the enrolment code", async () => {

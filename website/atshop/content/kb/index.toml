@@ -6,7 +6,7 @@
 #
 # version: the AT SUITE release these pages describe. Every release updates the pages for what
 # changed, then sets this to the new VERSION; CI fails while it's behind (see CONTRIBUTING.md).
-version = "1.25.2"
+version = "1.25.3"
 
 [[section]]
 slug = "start"

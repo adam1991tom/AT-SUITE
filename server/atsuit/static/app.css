@@ -249,6 +249,8 @@ body:has(> .center:not(.hidden):not(#boot), > #shell:not(.hidden), > #ws:not(.hi
     linear-gradient(rgba(56,189,248,.035) 1px, transparent 1px) 0 0 / 100% 28px, var(--bg);
 }
 :root[data-theme="futuristic"] .panel { backdrop-filter: blur(8px); }
+/* windows, menus and pop-ups sit over other things, so they are solid: the same colours as a panel on the page, no see-through */
+:root[data-theme="futuristic"] :is(.dk-win, .dk-menu, .dropdown, .toast, dialog) { --panel: #09101e; --panel2: #101b30; }
 :root[data-theme="futuristic"] h1, :root[data-theme="futuristic"] h2 { text-transform: uppercase; letter-spacing: .08em; }
 :root[data-theme="futuristic"] button:hover, :root[data-theme="futuristic"] .btn:hover { box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent); }
 :root[data-theme="futuristic"] .clock, :root[data-theme="futuristic"] .bigclock { font-family: var(--num-font); }

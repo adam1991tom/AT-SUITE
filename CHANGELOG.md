@@ -5,7 +5,7 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
-## 1.25.2
+## 1.25.3
 
 Move a Windows laptop to a different server without reinstalling, behind an admin's sign-in (adam), and the silent-install file where the console says it is.
 
@@ -16,7 +16,15 @@ Move a Windows laptop to a different server without reinstalling, behind an admi
 - The silent-install preset is read from `C:\ProgramData\AT-SUITE\node.json`, where the console, ADMIN.md and the knowledge base say to put it; the app only looked in `C:\ProgramData\AT-SUIT\node.json`, which still works. A missing or broken settings file opens the set-up window.
 
 **Docs**
-- Knowledge base: The laptop app has "Move a laptop to a different server" and the admin sign-in; Move to a new server points to it; What's new has 1.25.2. The console's Add laptops page and ADMIN.md mention both.
+- Knowledge base: The laptop app has "Move a laptop to a different server" and the admin sign-in; Move to a new server points to it; What's new has 1.25.3. The console's Add laptops page and ADMIN.md mention both.
+
+## 1.25.2
+
+Solid windows in the Futuristic look (adam).
+
+**App**
+- With the **Futuristic** look, windows in the tech workspace (the AI helper, chat, timer and the rest), the workspace menu, drop-down lists, pop-up messages and dialogs were see-through, so whatever was behind them showed through the text. They now have solid backgrounds in the same dark blue. Panels on the page keep their look.
+- Knowledge base: What's new has 1.25.2.
 
 ## 1.25.1
 

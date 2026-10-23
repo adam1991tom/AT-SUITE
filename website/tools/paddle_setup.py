@@ -30,7 +30,7 @@ from atshop.paddle import Paddle  # noqa: E402
 
 PRODUCT_TEXT = {
     "plan": "AT SUITE licence for {name}: the show-room toolkit for event technicians.",
-    "addon": "We run your AT SUITE server for you: one sealed server per venue, backups and updates.",
+    "addon": "We run your AT SUITE server for you: sealed off from other venues, in the UK, with backups and updates.",
     "pass": "A one-off AT SUITE licence for a single show or hire.",
 }
 

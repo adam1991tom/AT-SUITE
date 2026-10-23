@@ -85,7 +85,8 @@ Everything below uses Paddle's **sandbox** (test cards, no real money) until liv
 7. **Run it**: `docker compose up -d --build`, with Caddy in front ([deploy/Caddyfile](deploy/Caddyfile))
    and Cloudflare in front of that. Nightly database copies: [deploy/backup.sh](deploy/backup.sh).
 8. **Admin**: sign in with an `ADMIN_EMAILS` address, open `/admin`, and scan the code into an
-   authenticator app (Google Authenticator, Microsoft Authenticator, 1Password...).
+   authenticator app (Google Authenticator, Microsoft Authenticator, 1Password...). To sign in to
+   the same account from another address too, add it to `EMAIL_ALIASES` (`other=account`).
 9. **Test a purchase** in sandbox with Paddle's test card `4242 4242 4242 4242`, any future date, any CVC.
 10. **Live** (https://vendors.paddle.com). This changes settings only; the code is the same in both.
     Nothing below deletes or replaces anything already in the live account.

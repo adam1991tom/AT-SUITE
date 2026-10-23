@@ -259,15 +259,9 @@ def test_companion_module_calls_real_routes():
              ["secondary_control", {"cmd": "hide"}], ["secondary_add", {"minutes": 1}]]
     js = f"const {{request}}=require({json.dumps(str(lib))});console.log(JSON.stringify({json.dumps(cases)}.map(([a,o])=>[a,request(a,o,3)])))"
     out = json.loads(subprocess.check_output([node, "-e", js]))
-    def walk(rs, prefix=""):
-        # FastAPI 0.140+ keeps an included router as one entry: look inside it.
-        for r in rs:
-            inc = getattr(r, "include_context", None)
-            if inc is not None:
-                yield from walk(r.original_router.routes, prefix + (inc.prefix or ""))
-            elif hasattr(r, "methods"):
-                yield from ((prefix + r.path, m) for m in r.methods)
-    routes = list(walk(app.routes))
+    from starlette.routing import Match
     for action, (path, _body, *meth) in out:
         method = meth[0] if meth else "POST"
-        assert any(m == method and re.fullmatch(re.sub(r"\{[^}]+\}", "[^/]+", p), path) for p, m in routes), (action, path)
+        # The routes' own matching: FastAPI 0.142+ keeps included routers whole in app.routes
+        scope = {"type": "http", "path": path, "method": method, "root_path": "", "headers": [], "query_string": b""}
+        assert any(r.matches(scope)[0] == Match.FULL for r in app.routes), (action, path)

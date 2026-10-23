@@ -32,7 +32,7 @@ We don't sell personal data, and we don't use it for advertising profiles.
 ## Who we share it with
 
 - **Paddle** (Paddle.com Market Limited) sells AT SUITE as our reseller and takes payments. Paddle is a separate controller for payment data, see [Paddle's privacy notice](https://www.paddle.com/legal/privacy).
-- **Hetzner Online GmbH** hosts our servers and backups in [Germany / Finland].
+- **Hostinger** ([Hostinger UK Limited: check the company name on your Hostinger invoice]) hosts our servers and backups in its data centre in Manchester, UK.
 - **Cloudflare, Inc.** protects and delivers our website and hosted service.
 - **[Email provider]** for our email.
 - **Our accountant, insurer and professional advisers**, when needed.
@@ -40,7 +40,7 @@ We don't sell personal data, and we don't use it for advertising profiles.
 
 ## Data sent outside the UK
 
-Our servers are in the European Economic Area, which UK law treats as giving adequate protection. Cloudflare is based in the United States and relies on the UK Extension to the EU-US Data Privacy Framework, with the ICO's international data transfer addendum as a fallback.
+We store all personal data in the UK. Our servers and backups are in Manchester. Cloudflare, which carries traffic to and from them, is based in the United States and relies on the UK Extension to the EU-US Data Privacy Framework, with the ICO's international data transfer addendum as a fallback.
 
 ## How long we keep it
 
@@ -66,7 +66,7 @@ Our website and AT SUITE only use cookies needed to make them work, such as keep
 
 ## Security
 
-Each venue's hosted server is kept separate from every other venue's. Connections are encrypted, transcripts and handover notes are encrypted at rest, passwords are stored only as hashes, and backups are encrypted. More detail is in our [Data Processing Agreement](/legal/dpa).
+Hosted venues share a server in the UK, but each runs in its own sealed container with its own data, accounts and private network. Venues share only the server's processing power and memory, and no venue can see another's data. Connections are encrypted, transcripts and handover notes are encrypted at rest, passwords are stored only as hashes, and backups are encrypted. More detail is in our [Data Processing Agreement](/legal/dpa).
 
 ## Changes
 
