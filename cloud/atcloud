@@ -20,6 +20,9 @@ sends each address to its venue; Cloudflare sits in front of it.
                                             back to the old version if it isn't healthy. Never
                                             while a show is on, unless --force
                                             The Windows tech app of that release comes too
+  atcloud autoupdate                        when ATCLOUD_AUTOUPDATE=yes (hourly, by timer): a newer release
+                                            is fetched (or built from ATCLOUD_SOURCE) and every venue
+                                            updated as above; a venue with a show on waits an hour
   atcloud app [--release v1.11.0 | --dir DIR]
                                             the Windows tech app laptops update from, for every venue
   atcloud models                            fetch the speech model laptops caption with, once for all
@@ -81,6 +84,8 @@ DEFAULTS = {
     "ATCLOUD_AI": "0",
     "ATCLOUD_AI_MODEL": "llama3.2:3b",
     "ATCLOUD_EDGE_NETWORKS": "",  # other sites' docker networks the front door joins (extra/*.caddy)
+    "ATCLOUD_AUTOUPDATE": "no",  # yes: atcloud-autoupdate.timer installs each new release by itself
+    "ATCLOUD_SOURCE": "",  # a git clone of AT-SUITE to build the image from when it can't be pulled
     "RESTIC_REPOSITORY": "",
     "RESTIC_KEEP": "--keep-daily 7 --keep-weekly 4",
 }
@@ -645,6 +650,71 @@ def cmd_app(a) -> None:
             say(f"{t['slug']}: {'published' if ok else 'FAILED'}")
 
 
+def vtuple(v: str) -> tuple:
+    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)$", v or "")
+    return tuple(int(x) for x in m.groups()) if m else (0,)
+
+
+def latest_release() -> str:
+    """The newest release's version (1.25.2), from the first repository that has releases. GitHub sends
+    /releases/latest on to /releases/tag/<tag> (no API, so no rate limit)."""
+    for repo in RELEASE_REPOS:
+        req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", method="HEAD",
+                                     headers={"User-Agent": "atcloud"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                tag = r.geturl().rstrip("/").rsplit("/tag/", 1)[-1] if "/tag/" in r.geturl() else ""
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                continue
+            raise Fail(f"GitHub answered {exc.code} for the latest release of {repo}")
+        if vtuple(tag) > (0,):
+            return tag.lstrip("v")
+    raise Fail("No release found on GitHub")
+
+
+def get_image(c: dict, version: str) -> None:
+    """The image for a version: already here, pulled, or built from the release's code in ATCLOUD_SOURCE."""
+    img = image(c, version)
+    for probe in (["docker", "image", "inspect", img], ["docker", "pull", "-q", img]):
+        if subprocess.run(probe, capture_output=True).returncode == 0:
+            return
+    src = c["ATCLOUD_SOURCE"]
+    if not src:
+        raise Fail(f"Can't pull {img}, and ATCLOUD_SOURCE (a git clone to build it from) isn't set")
+    say(f"Building {img} from {src} at v{version}…")
+    run("git", "-C", src, "fetch", "-q", "--tags", "origin")
+    build = ROOT / "build"
+    shutil.rmtree(build, ignore_errors=True)
+    build.mkdir()
+    try:  # the release's own files, without touching the clone's working tree
+        run("sh", "-c", f'git -C "{src}" archive "v{version}" | tar -x -C "{build}"')
+        commit = run("git", "-C", src, "rev-parse", "--short", f"v{version}^{{commit}}").strip()
+        run("docker", "build", "-q", "-t", img, "--build-arg", f"VERSION=v{version}", "--build-arg", f"COMMIT={commit}",
+            "--build-arg", f"BUILD_DATE={now()}", str(build))
+    finally:
+        shutil.rmtree(build, ignore_errors=True)
+
+
+def cmd_autoupdate(a) -> None:
+    c = conf()
+    need_init(c)
+    if c["ATCLOUD_AUTOUPDATE"] != "yes" and not a.now:
+        return  # the timer runs every hour; it does nothing until this is switched on
+    version = latest_release()
+    behind = [t for t in tenants() if t["status"] == "active" and vtuple(t["version"]) < vtuple(version)]
+    if vtuple(c["ATCLOUD_VERSION"]) >= vtuple(version) and not behind:
+        say(f"Up to date ({version}).")
+        return
+    say(f"New release {version}.")
+    get_image(c, version)
+    if c["ATCLOUD_VERSION"] != "latest" and vtuple(c["ATCLOUD_VERSION"]) < vtuple(version):
+        save_conf({"ATCLOUD_VERSION": version})  # new venues get it too
+    if behind:
+        cmd_update(argparse.Namespace(venues=[t["slug"] for t in behind], all=False, version=version,
+                                      force=False, no_pull=True))
+
+
 def cmd_models(a) -> None:
     c = conf()
     need_init(c)
@@ -874,6 +944,10 @@ def main(argv: list[str]) -> int:
     s.add_argument("--force", action="store_true", help="even while a show is on")
     s.add_argument("--no-pull", action="store_true")
     s.set_defaults(fn=cmd_update)
+
+    s = sub.add_parser("autoupdate", help="install a newer release by itself (atcloud-autoupdate.timer)")
+    s.add_argument("--now", action="store_true", help="even when ATCLOUD_AUTOUPDATE isn't yes")
+    s.set_defaults(fn=cmd_autoupdate)
 
     s = sub.add_parser("app", help="the Windows tech app for every venue")
     g = s.add_mutually_exclusive_group()

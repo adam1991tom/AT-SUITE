@@ -30,8 +30,9 @@ Strict-NDA venues can still run AT-SUITE on their own server, as before (docs/IN
 - **Hosted mode** (`ATSUIT_HOSTED=1`, set by atcloud):
   - A new venue can only be set up from its **setup link**, which holds a one-time code. A stranger
     who finds the address can't claim it.
-  - The venue's admins see "Updates are looked after by your AT-SUITE provider". Nothing updates
-    by itself; you move venues to a new version with `atcloud update`, which never happens during a show.
+  - The venue's admins see "Updates are looked after by your AT-SUITE provider". You move venues
+    to a new version with `atcloud update`, which never happens during a show, or let the server do
+    it by itself (see **Updating by itself** below).
   - The server never makes captions (`ATSUIT_ASR=0`): laptops do, with a speech model they fetch
     from their venue once (`ATSUIT_LAPTOP_MODELS=1`). There is one shared, read-only copy of that
     model on the server. New venues start with private captions on, so captions stay on the
@@ -150,6 +151,24 @@ atcloud remove grandhall --yes     # last backup, then the venue and its data ar
 atcloud check                      # exit 1 if a venue isn't healthy (for monitoring)
 atcloud logs grandhall
 ```
+
+### Updating by itself
+
+With `ATCLOUD_AUTOUPDATE=yes` in `/srv/atcloud/atcloud.env`, `atcloud-autoupdate.timer` looks for a
+new GitHub release every hour (bootstrap.sh installs the timer; it does nothing until this is on).
+When there is one it:
+
+1. pulls the image, or, when it can't (the package is private), builds it from the release's
+   tag in `ATCLOUD_SOURCE`, a git clone of AT-SUITE (for example `/root/AT-SUITE`). The clone's
+   working tree isn't touched;
+2. sets `ATCLOUD_VERSION`, so new venues get it too;
+3. runs `atcloud update` for every venue on an older version: copy first, health check, rolled
+   back if not healthy, with the release's Windows app. A venue with a show on is left until a
+   later hour.
+
+`atcloud autoupdate --now` does the same once, even when it's off. `journalctl -u atcloud-autoupdate`
+shows what it did. A server set up before this timer existed: `cp /opt/atcloud/systemd/atcloud-autoupdate.*
+/etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now atcloud-autoupdate.timer`.
 
 Licence keys are made as before with `tools/licence.py` on your own computer; the venue's
 laptop limit comes from its key.
