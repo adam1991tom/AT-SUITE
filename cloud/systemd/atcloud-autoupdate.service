@@ -1,0 +1,9 @@
+[Unit]
+Description=AT-SUITE cloud: install a new release when there is one (ATCLOUD_AUTOUPDATE=yes)
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/atcloud autoupdate
+Nice=10
