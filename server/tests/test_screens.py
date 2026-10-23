@@ -259,7 +259,9 @@ def test_companion_module_calls_real_routes():
              ["secondary_control", {"cmd": "hide"}], ["secondary_add", {"minutes": 1}]]
     js = f"const {{request}}=require({json.dumps(str(lib))});console.log(JSON.stringify({json.dumps(cases)}.map(([a,o])=>[a,request(a,o,3)])))"
     out = json.loads(subprocess.check_output([node, "-e", js]))
-    routes = [(r.path, m) for r in app.routes if hasattr(r, "methods") for m in r.methods]
+    from starlette.routing import Match
     for action, (path, _body, *meth) in out:
         method = meth[0] if meth else "POST"
-        assert any(m == method and re.fullmatch(re.sub(r"\{[^}]+\}", "[^/]+", p), path) for p, m in routes), (action, path)
+        # The routes' own matching: FastAPI 0.142+ keeps included routers whole in app.routes
+        scope = {"type": "http", "path": path, "method": method, "root_path": "", "headers": [], "query_string": b""}
+        assert any(r.matches(scope)[0] == Match.FULL for r in app.routes), (action, path)
