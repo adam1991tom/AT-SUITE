@@ -7,12 +7,15 @@ the GitHub release).
 
 ## 1.25.0
 
-The BDNG sponsor clock is taken out (adam).
+The BDNG sponsor clock is taken out (adam), and automatic updates no longer stop at line 56.
 
 **Timer views**
 - The **BDNG sponsor clock** is no longer a built-in view: it's gone from Timers → Views (with its top logo, bottom logo and bottom text), from every screen's view list and from the layout designer's **Start from…** list (**BDNG style**). The shipped `docs/views/bdng.html` and the **Download bdng.html** link are gone too.
 - Screens and links still set to it (`view=bdng`, or `view:bdng` from when it was imported) show the Standard view; `/room/<room>/external/bdng/` sends them to `/timer/<room>`. A copy imported before 1.21.0 stays hidden and isn't served. Layouts already made from BDNG style are kept.
 - The view-look API drops `bottom_text`, and `/api/timers-views/samples/...` is removed.
+
+**Updates**
+- Automatic updates no longer stop with "update.sh stopped at line 56" on a server with a lot of backups (about 120 or more in `backups/`). Finding the newest backup could fail by chance, so the update gave up before installing anything and tried again ten minutes later, leaving another backup behind each time.
 
 ## 1.24.0
 
