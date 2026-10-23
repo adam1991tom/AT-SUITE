@@ -5,6 +5,19 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.25.2
+
+Move a Windows laptop to a different server without reinstalling, behind an admin's sign-in (adam), and the silent-install file where the console says it is.
+
+**Windows app (AT-SUIT Node)**
+- **Connect to a different server**: in the tray menu, under the workspace's sign-in and start screens (in the app only), and on the "Can't reach the AT-SUITE server" page. It asks for the new server's address, the laptop's name and an **admin of the new server**'s username and password; a code alone isn't enough, so a tech can't take a laptop off the venue by accident. The laptop stays on its old server until the new one accepts it, and **Cancel, stay on this server** changes nothing. Before, an enrolled laptop could only be moved by deleting its settings by hand, and reinstalling didn't help (the settings outlive the uninstaller).
+- The set-up window has **Admin sign-in** next to the enrolment code: an admin signs in and the app fetches the site's code itself (a site picker when the server has more than one). The app signs in in a private session of its own with a short sign-in, signs out straight after, and the admin's sign-in never reaches the workspace. It only uses the console's own sign-in and Add laptops calls, so it works with servers already running.
+- Moving to another server clears the kept offline copy of the old server's workspace and the old room's overlay.
+- The silent-install preset is read from `C:\ProgramData\AT-SUITE\node.json`, where the console, ADMIN.md and the knowledge base say to put it; the app only looked in `C:\ProgramData\AT-SUIT\node.json`, which still works. A missing or broken settings file opens the set-up window.
+
+**Docs**
+- Knowledge base: The laptop app has "Move a laptop to a different server" and the admin sign-in; Move to a new server points to it; What's new has 1.25.2. The console's Add laptops page and ADMIN.md mention both.
+
 ## 1.25.1
 
 The real AT SUITE email addresses on atsuite.tech in the website, the app and the docs (adam).

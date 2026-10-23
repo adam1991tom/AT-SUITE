@@ -197,6 +197,12 @@ bar, in This laptop and in the tray menu. For a silent roll-out, put
 `C:\ProgramData\AT-SUITE\node.json` and run the installer with `/S`; the
 app enrols itself under the PC's name on first start. The installer isn't
 code-signed yet, so Windows SmartScreen asks once ("More info → Run anyway").
+Instead of the enrolment code, an admin can sign in on the set-up window
+(**Admin sign-in**). To move an enrolled laptop to another server (a new
+address, or managed hosting), use **Connect to a different server** in the
+tray menu, on the workspace's sign-in and start screens or on the "can't reach
+the server" page: an admin of the new server signs in, and the laptop stays on
+the old server until that works.
 
 **Node agent (Python).**
 

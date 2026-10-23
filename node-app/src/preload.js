@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("atsuitApp", {
   // Maximise the app's window (after a tech signs in).
   maximise: () => ipcRenderer.invoke("app:maximise"),
   reEnrol: () => ipcRenderer.invoke("app:re-enrol"),
+  // Opens "Connect to a different server" (an admin of the new server has to sign in there).
+  switchServer: () => ipcRenderer.invoke("app:switch-server"),
   // The click-through overlay: overlay({ on, url, position, size, display, opacity, room_id })
   // changes any of them and resolves to the new state; overlayState() just reads it.
   overlay: (cfg) => ipcRenderer.invoke("app:overlay", cfg),

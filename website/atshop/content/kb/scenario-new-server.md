@@ -34,7 +34,7 @@ On the new server: **Backups → Restore**, choose the backup file, type **RESTO
 
 ## If the address changed
 
-Each laptop app has to be enrolled again with the new address and the enrolment code (see [The laptop app](/docs/laptop-app)), which is why keeping the same address is so much easier. Screens need their pairing page opened at the new address. The [Linux screen agent](/docs/linux-screens) has its own setting.
+Each laptop app has to be moved to the new address: on each laptop, **Connect to a different server** in the tray menu, then an admin of the new server signs in (see [Move a laptop to a different server](/docs/laptop-app#move-a-laptop-to-a-different-server)). Keeping the same address saves doing that on every laptop. Screens need their pairing page opened at the new address. The [Linux screen agent](/docs/linux-screens) has its own setting.
 
 ## Managed hosting
 

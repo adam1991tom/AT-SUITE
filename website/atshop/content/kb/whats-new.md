@@ -1,11 +1,17 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25.2, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.2: move a laptop to a different server
+
+- The Windows app has **Connect to a different server**: in the tray menu, under the workspace's sign-in and start screens, and on the "Can't reach the AT-SUITE server" page. An admin of the new server signs in to allow it, so nobody moves a laptop by accident, and nothing needs reinstalling. See [Move a laptop to a different server](/docs/laptop-app#move-a-laptop-to-a-different-server).
+- Setting up a new laptop, an admin can sign in instead of typing the enrolment code.
+- The silent install file now works where the console says to put it, `C:\ProgramData\AT-SUITE\node.json` (the app looked in `AT-SUIT` before).
 
 ## 1.25.1: our real email addresses
 

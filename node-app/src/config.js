@@ -1,7 +1,10 @@
 // This laptop's settings: which AT-SUITE server it belongs to, its node token
 // (encrypted with Windows DPAPI via safeStorage) and whether pop-ups are on.
 // IT can pre-set the server and enrolment code for a silent roll-out in
-// %ProgramData%\AT-SUIT\node.json (the folder keeps its old name): {"server": "http://10.100.70.101:8180", "enrol_code": "ABCD-1234-EF56"}
+// %ProgramData%\AT-SUITE\node.json: {"server": "http://10.100.70.101:8180", "enrol_code": "ABCD-1234-EF56"}
+// (%ProgramData%\AT-SUIT\node.json, the folder's old name, still works).
+// This laptop's own settings are in %APPDATA%\AT-SUIT Node\node.json; it is fine for that file
+// to be missing (a new install, or deleted by hand): the app then opens the set-up window.
 const fs = require("fs");
 const path = require("path");
 const { app, safeStorage } = require("electron");
@@ -17,9 +20,11 @@ function file() {
   return path.join(app.getPath("userData"), "node.json");
 }
 
-function presetFile() {
-  if (process.env.ATSUIT_NODE_PRESET) return process.env.ATSUIT_NODE_PRESET;
-  return path.join(process.env.ProgramData || "C:\\ProgramData", "AT-SUIT", "node.json");
+function presetFiles() {
+  if (process.env.ATSUIT_NODE_PRESET) return [process.env.ATSUIT_NODE_PRESET];
+  const base = process.env.ProgramData || "C:\\ProgramData";
+  // The console and the guide say AT-SUITE; the first laptops were set up with AT-SUIT.
+  return [path.join(base, "AT-SUITE", "node.json"), path.join(base, "AT-SUIT", "node.json")];
 }
 
 function readJson(f) {
@@ -27,7 +32,8 @@ function readJson(f) {
 }
 
 function load() {
-  return { ...DEFAULTS, ...(readJson(file()) || {}) };
+  const saved = readJson(file());
+  return { ...DEFAULTS, ...(saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {}) };
 }
 
 function save(conf) {
@@ -38,7 +44,7 @@ function save(conf) {
 }
 
 function preset() {
-  const p = readJson(presetFile()) || {};
+  const p = presetFiles().map(readJson).find((j) => j && typeof j === "object") || {};
   return { server: normServer(p.server || ""), enrol_code: String(p.enrol_code || "").trim().toUpperCase(), name: String(p.name || "") };
 }
 
