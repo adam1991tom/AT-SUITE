@@ -1,11 +1,17 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.0: logos and pictures in the layout designer
+
+- Upload a **logo** and a **background picture** for a view straight away: no need to save the view first. The Logo part has its own **Upload…** button too.
+- A new **Picture** part for sponsors' logos, photos and show graphics: as many as you like, each with its own picture. Drop picture files onto the screen to add them. See [Logos and pictures](/docs/layout-designer#logos-and-pictures).
+- **Save as new** copies a view's pictures.
 
 ## 1.24.0: the knowledge base and the manual
 

@@ -5,6 +5,20 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.25.0
+
+Logos and pictures in the layout designer.
+
+**Timers → Layout designer**
+- **Logo** and **Background picture** have **Upload…** buttons that work on a new layout too: adding the first picture saves the view (give it a name first). Before, the Pictures section said to save the view first.
+- Pick a **Logo** part and upload its logo from the part's own settings. **Fit the picture** shows it all, fills the box or stretches it.
+- A new **Picture** part for sponsors' logos, photos and show graphics, as many as you like, each with its own picture (PNG, JPG, SVG or WebP, up to 5 MB). Add one and the file picker opens, or drop picture files onto the screen. **Replace…** and **Remove** on the part.
+- **Save as new** copies the view's logo, background and pictures to the copy.
+- A picture no part shows any more is removed from the server when the view is saved. Removing a view removes all its pictures.
+
+**Knowledge base**
+- The layout designer page has a new "Logos and pictures" section with a fresh picture, and What's new has 1.25.0.
+
 ## 1.24.0
 
 A full knowledge base: the website's help centre and the manual inside AT SUITE are now one set of pages, and the AI helper answers "how do I..." questions from it.

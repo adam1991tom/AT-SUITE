@@ -1,5 +1,7 @@
 import io
 import json
+import os
+import re
 import time
 import zipfile
 
@@ -485,6 +487,37 @@ def test_layout_designer_views(admin, client):
     page = client.get(f"/timer/{rid}?view=built:stage-left").text
     assert "/static/timerlayout.js" in page and "TimerLayout.mount" in page
     assert client.get("/static/timerlayout.js").status_code == 200 and client.get("/static/layoutdesigner.js").status_code == 200
-    # Removing it takes its pictures too.
+    # Picture parts: any number of pictures uploaded for the view, each part naming one by its id.
+    assert look["pictures"] == {}
+    r = admin.post("/api/timers-designs/stage-left/pictures", files={"file": ("sponsor.png", png)})
+    assert r.status_code == 200
+    pid, url = r.json()["id"], r.json()["url"]
+    assert re.match(r"^[0-9a-f]{10}$", pid) and url.startswith(f"/api/timers-views/logo/built-stage-left-pic-{pid}.png")
+    assert client.get(url).status_code == 200
+    assert admin.post("/api/timers-designs/stage-left/pictures", files={"file": ("x.exe", b"MZ")}).status_code == 400
+    assert admin.post("/api/timers-designs/nope/pictures", files={"file": ("x.png", png)}).status_code == 404
+    layout["elements"].append({"id": "p1", "type": "image", "x": 70, "y": 5, "w": 20, "h": 20, "src": pid, "fit": "cover"})
+    assert admin.put("/api/timers-designs/stage-left", json={"name": "Stage left", "layout": layout}).status_code == 200
+    look = client.get("/api/timers-views/look/built:stage-left").json()
+    assert look["pictures"] == {pid: url} and look["design"]["layout"]["elements"][-1]["src"] == pid
+    for bad in ({"src": "../x"}, {"fit": "tile"}):
+        e = {**layout["elements"][-1], **bad}
+        assert admin.put("/api/timers-designs/stage-left", json={"name": "Stage left", "layout": {"elements": [e]}}).status_code == 422
+    # Save as new brings the logo, background and pictures with it.
+    copy = admin.post("/api/timers-designs?copy_from=stage-left", json={"name": "Stage left copy", "layout": layout}).json()
+    got = client.get(f"/api/timers-views/look/{copy['id']}").json()
+    assert set(got["pictures"]) == {pid} and got["logos"]["bg"].startswith("/api/timers-views/logo/built-stage-left-copy-bg.png")
+    assert admin.post("/api/timers-designs?copy_from=nope", json={"name": "X"}).status_code == 404
+    # A picture no part shows any more goes when the view is saved (once it's over an hour old).
+    old = config.cfg.data / "view-logos" / f"built-stage-left-pic-{pid}.png"
+    os.utime(old, (time.time() - 7200, time.time() - 7200))
+    layout["elements"].pop()
+    assert admin.put("/api/timers-designs/stage-left", json={"name": "Stage left", "layout": layout}).status_code == 200
+    assert not old.exists() and client.get("/api/timers-views/look/built:stage-left").json()["pictures"] == {}
+    assert admin.delete("/api/timers-designs/%2A").status_code == 404
+    # Removing it takes its pictures too, and leaves the copy's alone.
     assert admin.delete("/api/timers-designs/stage-left").status_code == 200
+    assert not list((config.cfg.data / "view-logos").glob("built-stage-left-[!c]*"))
+    assert client.get(got["pictures"][pid]).status_code == 200
+    assert admin.delete("/api/timers-designs/stage-left-copy").status_code == 200
     assert not list((config.cfg.data / "view-logos").glob("built-stage-left-*"))
