@@ -521,7 +521,8 @@ def cmd_update(a) -> None:
         try:
             if fetch_app(f"v{version}"):
                 say(f"Windows tech app {version} fetched; each venue publishes it once it's on {version}.")
-        except Fail as exc:
+        except (Fail, OSError) as exc:  # OSError: GitHub unreachable, a timeout, a full disk
+            shutil.rmtree(ROOT / "app.new", ignore_errors=True)
             say(f"Couldn't fetch the Windows tech app for {version} ({exc}); laptops stay on the one they have. `atcloud app` tries again.")
     failed = []
     for t in pick(a):
