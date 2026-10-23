@@ -1,11 +1,15 @@
 ---
 summary: The newest AT SUITE releases and what they changed, newest first.
 audience: everyone
-keywords: new, release, version, changes, changelog, update, latest, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
+keywords: new, release, version, changes, changelog, update, latest, 1.25.2, 1.25.1, 1.25, 1.24, 1.23, 1.22, 1.21, 1.20
 ---
 # What's new
 
 The latest changes, newest first. Your server updates itself (see [Updates](/docs/updates)); **Settings → About** shows which version it runs.
+
+## 1.25.2: solid windows in the Futuristic look
+
+- With the **Futuristic** look, windows in the workspace (like the AI helper), menus, drop-down lists and pop-ups no longer show what is behind them. Pick a look in [Settings → Look](/docs/settings#look).
 
 ## 1.25.1: our real email addresses
 

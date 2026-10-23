@@ -5,6 +5,14 @@ Versions follow [semantic versioning](https://semver.org). To release, set
 publish that release on GitHub); the release workflow publishes the image and
 the GitHub release).
 
+## 1.25.2
+
+Solid windows in the Futuristic look (adam).
+
+**App**
+- With the **Futuristic** look, windows in the tech workspace (the AI helper, chat, timer and the rest), the workspace menu, drop-down lists, pop-up messages and dialogs were see-through, so whatever was behind them showed through the text. They now have solid backgrounds in the same dark blue. Panels on the page keep their look.
+- Knowledge base: What's new has 1.25.2.
+
 ## 1.25.1
 
 The real AT SUITE email addresses on atsuite.tech in the website, the app and the docs (adam).

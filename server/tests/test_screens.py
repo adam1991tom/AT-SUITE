@@ -244,7 +244,7 @@ def test_companion_guide_is_served(client):
 
 def test_companion_module_calls_real_routes():
     """Every request the Companion module can build must match a route on the server."""
-    import json, shutil, subprocess
+    import json, re, shutil, subprocess
     from pathlib import Path
     from atsuit.main import app
     node = shutil.which("node")
@@ -262,6 +262,6 @@ def test_companion_module_calls_real_routes():
     from starlette.routing import Match
     for action, (path, _body, *meth) in out:
         method = meth[0] if meth else "POST"
-        # Ask each route itself: FastAPI 0.142 keeps included routers as one entry in app.routes.
+        # The routes' own matching: FastAPI 0.142+ keeps included routers whole in app.routes
         scope = {"type": "http", "path": path, "method": method, "root_path": "", "headers": [], "query_string": b""}
         assert any(r.matches(scope)[0] == Match.FULL for r in app.routes), (action, path)

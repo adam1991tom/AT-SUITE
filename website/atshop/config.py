@@ -44,6 +44,9 @@ class Settings:
     # The vendor private key that signs AT SUITE licence keys (a file, mode 600, never in git).
     signing_key_file: str = ""
     admin_emails: set[str] = field(default_factory=set)
+    # Other addresses that sign in to an existing account: {other: account's email}. The link goes to the
+    # address typed; the account (and so admin rights, which follow its email) is the same.
+    email_aliases: dict[str, str] = field(default_factory=dict)
     # Email. With no SMTP_HOST, mail is kept in the outbox (admin → Emails) and logged, not sent.
     smtp_host: str = ""
     smtp_port: int = 587
@@ -121,6 +124,8 @@ def load() -> Settings:
         allow_live=_bool(e("SHOP_ALLOW_LIVE")),
         signing_key_file=e("LICENCE_SIGNING_KEY_FILE", ""),
         admin_emails={a.strip().lower() for a in e("ADMIN_EMAILS", "").split(",") if a.strip()},
+        email_aliases={k.strip().lower(): v.strip().lower() for k, v in
+                       (a.split("=", 1) for a in e("EMAIL_ALIASES", "").split(",") if "=" in a)},
         smtp_host=e("SMTP_HOST", ""),
         smtp_port=int(e("SMTP_PORT", "587") or 587),
         smtp_user=e("SMTP_USER", ""),
