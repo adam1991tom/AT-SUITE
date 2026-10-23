@@ -7,6 +7,8 @@ keywords: bug, report a bug, problem, fault, issue, broken, screenshot, support,
 
 Something not working as it should? Report it from where you are. Reports go to your own admins on the **Bug reports** page. Nothing is emailed.
 
+To tell the AT SUITE team, or for anything urgent, email [support@atsuite.tech](mailto:support@atsuite.tech) with the version from **Settings → About**. **Settings → About** shows the address too.
+
 ![The Report a bug form: What went wrong, What were you doing and what did you expect, an optional screenshot, What else is sent, Cancel and Send report](/static/kb/workspace-bug-report.jpg "The Report a bug form.")
 
 ## Send a report

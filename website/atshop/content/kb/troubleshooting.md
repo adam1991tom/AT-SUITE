@@ -72,4 +72,4 @@ Find what you see, then try the fixes in order. Still stuck? Ask the AI helper (
 
 ## Still stuck
 
-Note the version from **Settings → About**, what you did and what you saw, and [report a bug](/docs/bug-reports). For your subscription, see [Billing and your account](/docs/billing) or [contact us](/contact).
+Note the version from **Settings → About**, what you did and what you saw, and [report a bug](/docs/bug-reports), or email [support@atsuite.tech](mailto:support@atsuite.tech). For your subscription, see [Billing and your account](/docs/billing) or [contact us](/contact).
