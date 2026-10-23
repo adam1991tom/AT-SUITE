@@ -4,66 +4,197 @@
 <p class="eyebrow">Features</p>
 <h1>Everything a show day needs</h1>
 <p class="lead">Every plan includes every feature. Plans differ only by how many laptops can connect.</p>
+<nav class="jump" aria-label="Features on this page"><ul>
+  <li><a href="#timers">Show timers</a></li><li><a href="#screens">Stage screens</a></li><li><a href="#captions">Live captions</a></li>
+  <li><a href="#crew">Crew chat and help</a></li><li><a href="#ai">AI helper</a></li><li><a href="#presenters">Presenters</a></li>
+  <li><a href="#laptops">Laptops</a></li><li><a href="#venue">Running the venue</a></li><li><a href="#more">And more</a></li>
+  <li><a href="#coming-soon">Coming soon</a></li>
+</ul></nav>
 
-<section style="padding-top:32px">
+<section id="timers" style="padding-top:40px">
 <div class="grid2">
   <div>
     <h2>Show timers</h2>
     <ul class="ticks">
       <li>Room timers with GO, pause, next and previous, plus or minus a minute, blink and blackout</li>
+      <li>The colour changes as time runs out: amber with five minutes left, red for the last minute, then it counts up in overtime with a flashing border</li>
       <li>A cue list with times, notes, overtime rules, and import from Ontime</li>
-      <li>One-tap quick timers and messages to the stage</li>
-      <li>Views for stage, minimal, clock, backstage, speaker preview and a transparent overlay for OBS or vMix, plus your own uploaded views</li>
+      <li>One-tap quick timers, and quick messages to the stage that admins can edit</li>
+      <li>A second line under the timer for a second countdown or a short note</li>
+      <li>The time of day between sessions, and a blackout when the screen should go dark</li>
       <li>The timer keeps running on the laptop if the network drops</li>
     </ul>
   </div>
-  <img class="shot" src="/static/img/shot-stage-timer.jpg" alt="Stage timer view" loading="lazy" width="1280" height="720">
+  <div class="slider" data-slider role="region" aria-roledescription="carousel" aria-label="The stage timer through a session">
+    <div class="slides">
+      {% for img, name, text in [
+        ('timer-running', 'Running', 'The keynote counting down on the stage screen, with the running order along the bottom.'),
+        ('timer-warning', 'Warning', 'Five minutes to go: the timer turns amber.'),
+        ('timer-danger', 'Danger', 'The last minute: the timer turns red, and can flash too.'),
+        ('timer-overtime', 'Overtime', 'Over time: it counts up and the border flashes, so the speaker can\'t miss it.'),
+        ('timer-message', 'Message', 'A message to the speaker, sent from the tech\'s laptop or a quick-message button.'),
+        ('timer-clock', 'Clock', 'Between sessions: the time of day, with what\'s next along the bottom.')] %}
+      <figure class="slide{% if loop.first %} on{% endif %}" role="group" aria-roledescription="slide" aria-label="{{ loop.index }} of {{ loop.length }}: {{ name }}">
+        <img class="shot" src="/static/img/{{ img }}.jpg" alt="Stage timer, {{ name|lower }} stage" width="1280" height="720" loading="lazy">
+        <figcaption><b>{{ name }}.</b> {{ text }}</figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    <div class="slider-bar">
+      <button class="btn small ghost" type="button" data-slide-play hidden>Pause</button>
+      <div class="stages" role="group" aria-label="Show a stage">
+        {% for name, tone in [('Running', 'run'), ('Warning', 'warn'), ('Danger', 'bad'), ('Overtime', 'bad'), ('Message', 'msg'), ('Clock', 'clock')] %}
+        <button type="button" class="stage-btn {{ tone }}" data-slide-to="{{ loop.index0 }}" aria-pressed="{{ 'true' if loop.first else 'false' }}" hidden><span class="dot" aria-hidden="true"></span>{{ name }}</button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 </div>
 </section>
 
-<section class="alt"><div class="grid2">
+<section id="screens" class="alt"><div class="grid2">
+  <img class="shot" src="/static/kb/timers-designer-pictures.jpg" alt="The layout designer: a timer view with a client's logo, a background picture and a sponsor's logo" loading="lazy" width="1440" height="900">
+  <div>
+    <h2>Stage screens, your way</h2>
+    <ul class="ticks">
+      <li>Views for stage, minimal, clock, backstage and speaker preview, plus a transparent overlay for OBS or vMix</li>
+      <li>A layout designer: place the timer, title, clock, message, progress bar, logos and sponsors' pictures on a 16:9 screen</li>
+      <li>Pair any screen by typing the six-digit code it shows, then choose what it shows from the workspace</li>
+      <li>Turn a Linux laptop or all-in-one into a stage screen with one command, with remote restart and update</li>
+      <li>Test patterns for setting up: colour bars, gradients, LED tile map, sharpness and overscan</li>
+      <li>The timer over a laptop's own screen with AT Overlay, and control of AT LiveOverlay graphics laptops</li>
+    </ul>
+  </div>
+</div></section>
+
+<section id="captions"><div class="grid2">
+  <div>
+    <h2>Live captions, kept private</h2>
+    <ul class="ticks">
+      <li>Speech recognition runs on the tech's laptop, offline, from its microphone. Audio and text never go to the cloud</li>
+      <li>A vocabulary list for names and jargon, plus live corrections while it runs</li>
+      <li>A full-screen audience caption screen, a subtitle bar, and a transparent overlay for streams</li>
+      <li>Mic gain and EQ, fonts, sizes and colours set per room, with a live preview</li>
+      <li>Transcripts are encrypted, export as text, SRT or VTT, and are deleted after 12 hours by default</li>
+      <li>The laptop can feed the room's caption screens itself, so they keep going if the server can't be reached</li>
+    </ul>
+    <p class="small muted">Captions are automatic and can be wrong. For a deaf attendee who relies on them, book a professional captioner as well.</p>
+  </div>
+  <div class="capdemo" data-captions>
+    <div class="capscreen" aria-hidden="true">
+      <div class="caplines">
+        <div class="capline">Good morning everyone and welcome to Riverside.</div>
+        <div class="capline">Over the next ten years the way we build events will change.</div>
+      </div>
+    </div>
+    <p class="sr-only">An animation of the full-screen audience caption screen: the speaker's words appear in large white text on black as they talk, and older lines fade away.</p>
+    <div class="capdemo-bar">
+      <span class="small muted">The audience caption screen, full screen</span>
+      <button class="btn small ghost" type="button" data-cap-play hidden>Pause</button>
+    </div>
+  </div>
+</div></section>
+
+<section id="crew" class="alt"><div class="grid2">
   <img class="shot" src="/static/img/shot-workspace.jpg" alt="Tech workspace with chat and help" loading="lazy" width="1280" height="720">
   <div>
     <h2>Crew chat, help and handovers</h2>
     <ul class="ticks">
-      <li>Chat for all crew and for each room, with files, emoji and priority messages</li>
-      <li>A Help button that rings the right people, then escalates if nobody answers</li>
-      <li>Handover notes so the next shift knows what happened</li>
-      <li>Tech passwords set by admins, with a forced change at first sign-in</li>
-      <li>An AI tech guide with show-day fixes, which can run privately on your own server</li>
+      <li>Messenger-style chat for all crew and for each room, with files, emoji, priority messages, and "Seen by"</li>
+      <li>A Help button that calls the right people, then goes out to the whole crew if nobody answers</li>
+      <li>A help desk in the console: on my way, reply, resolved</li>
+      <li>Handover notes so the next shift knows what happened, with pinned notes for the whole run</li>
+      <li>A bell that counts what's new, while the Main PC stays clean for the show</li>
+      <li>Links to Companion buttons, camera control or a floor plan, on the dashboard or in a room</li>
     </ul>
   </div>
 </div></section>
 
-<section><div class="grid2">
+<section id="ai"><div class="grid2">
   <div>
-    <h2>Live captions, kept private</h2>
+    <h2>An AI helper for show-day faults</h2>
     <ul class="ticks">
-      <li>Speech recognition runs on the tech's laptop, offline, from its microphone</li>
-      <li>A vocabulary list for names and jargon, plus live corrections</li>
-      <li>Audience caption screens, a subtitle bar, and a transparent overlay for streams</li>
-      <li>Transcripts are encrypted, exportable and deleted after 12 hours by default</li>
+      <li>Say what's wrong and keep talking until it's fixed: it asks questions to narrow the fault down</li>
+      <li>It learns from how your crew fixed things before, and from your venue's own notes</li>
+      <li>It answers "how do I…" questions from the AT SUITE manual, step by step</li>
+      <li>One tap turns the chat into a help call when it needs a person</li>
+      <li>Admins choose where it runs, including privately on your own server</li>
     </ul>
-    <p class="small muted">Captions are automatic and can be wrong. For a deaf attendee who relies on them, book a professional captioner as well.</p>
   </div>
-  <img class="shot" src="/static/img/shot-captions.jpg" alt="Caption subtitle bar on a screen" loading="lazy" width="1280" height="720">
+  <img class="shot" src="/static/kb/workspace-ai.jpg" alt="The AI helper in the tech workspace, working through a microphone fault" loading="lazy" width="1440" height="900">
 </div></section>
 
-<section class="alt"><div class="grid2">
-  <img class="shot" src="/static/img/shot-laptops.jpg" alt="The laptops list in the AT SUITE console" loading="lazy" width="1280" height="800">
+<section id="presenters" class="alt"><div class="grid2">
+  <img class="shot" src="/static/kb/presenters-session.jpg" alt="A presenters event in the console, with sessions, presenters and their slides" loading="lazy" width="1440" height="900">
   <div>
-    <h2>Laptops, screens and the venue</h2>
+    <h2>Presenters and their slides</h2>
     <ul class="ticks">
-      <li>The Windows tech app: each tech's workspace, with layouts they can arrange</li>
+      <li>Events with sessions and presenters for each room</li>
+      <li>A private page for each presenter to upload slides and check in, with no account needed</li>
+      <li>Review and approve files before they reach the room</li>
+      <li>Room sync keeps the presentation laptop's folder in step with every approved deck</li>
+    </ul>
+  </div>
+</div></section>
+
+<section id="laptops"><div class="grid2">
+  <div>
+    <h2>Every laptop in view</h2>
+    <ul class="ticks">
+      <li>The Windows tech app: each tech's own workspace, with windows they can arrange, dock and pop out</li>
+      <li>Techs sign in and pick their room; Main PC and Backup PC modes keep the show screen clean</li>
       <li>Laptop health and what each one is showing (off by default; never saved)</li>
-      <li>Screens paired by code, with test patterns: colour bars, gradients, LED tile map, sharpness and overscan</li>
-      <li>A venue dashboard, a pre-show health check, and PDF show reports</li>
-      <li>Presenter pages for slides, review notes and check-in, with no account needed</li>
-      <li>Bitfocus Companion module and a REST API for automation</li>
-      <li>Backups, room locks, roles for admins, managers and techs, and an audit log</li>
+      <li>Roll the app out silently, and it updates itself from your server</li>
+      <li>The workspace opens even if the server can't be reached</li>
+    </ul>
+  </div>
+  <img class="shot" src="/static/img/shot-laptops.jpg" alt="The laptops list in the AT SUITE console" loading="lazy" width="1280" height="800">
+</div></section>
+
+<section id="venue" class="alt"><div class="grid2">
+  <img class="shot" src="/static/kb/manager-view.jpg" alt="The manager view: every room's timer, help requests, the pre-show check and chat" loading="lazy" width="1440" height="900">
+  <div>
+    <h2>Running the venue</h2>
+    <ul class="ticks">
+      <li>A venue dashboard, and a manager view with every room's timer, help calls and chat in one place</li>
+      <li>A pre-show check that shows which laptops, screens and caption mics are ready</li>
+      <li>Show reports as PDF, for one room or the whole venue side by side</li>
+      <li>The venue's weather on the dashboard, for load-ins and outdoor shows</li>
+      <li>Rooms, sites and room locks, with roles for admins, managers and techs</li>
+      <li>Nightly backups of the whole server, and a move to new hardware is a download and an upload</li>
+      <li>An audit log of who did what, exportable as PDF</li>
     </ul>
   </div>
 </div></section>
+
+<section id="more">
+  <h2>And everything around it</h2>
+  <div class="grid3" style="margin-top:24px">
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">🔒</span>Secure by design</h3><p class="muted">Tech passwords set by admins, with a forced change at first sign-in. No passwords or keys in web addresses. Captions stay on the laptop, for NDA and GDPR peace of mind.</p></div>
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">⚙</span>Automation</h3><p class="muted">A Bitfocus Companion module and a REST API with API keys: timers, messages, overlays, captions and screens from a button.</p></div>
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">☁</span>Your server or ours</h3><p class="muted">Run AT SUITE on your own server, or let us host it and just install the laptop app. Updates install themselves, never during a show.</p></div>
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">?</span>Help built in</h3><p class="muted">A full manual inside the app that works with no internet, the same pages on our <a href="/docs">help centre</a>, and step-by-step show-day scenarios.</p></div>
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">🔑</span>Licences that never stop a show</h3><p class="muted">Keys renew themselves. An expired licence gets 14 days of grace, and any lock waits until no show is on.</p></div>
+    <div class="card"><h3 class="h3"><span class="icon" aria-hidden="true">🐞</span>Report a bug</h3><p class="muted">Report a bug from any laptop or the console, with what you were doing and a screenshot. Your admins see every report and can pass it on to us.</p></div>
+  </div>
+</section>
+
+<section id="coming-soon" class="alt soon">
+  <p class="eyebrow">Coming soon</p>
+  <h2>What we're building next</h2>
+  <p class="lead">These are on our roadmap. They aren't in AT SUITE yet, we don't promise dates, and plans can change.</p>
+  <div class="grid3" style="margin-top:24px">
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Caption translation</h3><p class="muted">Live captions in a second language, on their own screen or overlay.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Show day planner</h3><p class="muted">The whole day on one page: rooms, crews, running orders and who's where.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Speaker check-in desk</h3><p class="muted">A front-of-house desk where speakers check in, and the room's tech is told they've arrived.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Spare kit tracker</h3><p class="muted">What spare kit you have, where it is, and who took it.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Countdown to doors</h3><p class="muted">A countdown to doors opening on the screens and in every workspace.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Remote screen pairing</h3><p class="muted">Pair and manage stage screens from anywhere, not only from the room.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">A timer that knows the schedule</h3><p class="muted">Ahead or behind at a glance, the expected end of the show, and planned against actual times in the show report.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Cues that run themselves</h3><p class="muted">Start cues at a time of day, and fire Companion buttons or other kit when a cue starts or ends.</p></div>
+    <div class="card"><span class="badge grey">Planned</span><h3 class="h3" style="margin-top:12px">Running orders from a spreadsheet</h3><p class="muted">Bring a running order straight in from Excel or a CSV file.</p></div>
+  </div>
+</section>
 <div class="actions" style="margin-top:32px"><a class="btn primary" href="/pricing">See pricing</a><a class="btn" href="/register?next=/account">Start a free trial</a></div>
 </div></div>
 {% endblock %}
