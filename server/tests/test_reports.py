@@ -46,17 +46,20 @@ def test_show_report(admin, client, tmp_path):
     lst = admin.get("/api/reports").json()["reports"]
     assert [x["id"] for x in lst] == [saved["id"]]
     assert admin.get(f"/api/reports/saved/{saved['id']}.pdf").content[:4] == b"%PDF"
+    from atsuit import db
     from atsuit.modules import reports
-    made = reports.save_due(time.time() + 86400)  # HD is already kept; the full venue report is made
+    with db.tx() as c:  # an hour after today's show day ends (not "now + 24h", which falls short when the clocks go back)
+        morning = reports.window(c, 1, reports.show_day(c, 1))[1] + 3600
+    made = reports.save_due(morning)  # HD is already kept; the full venue report is made
     assert [(x.get("room_id"), x.get("site_id")) for x in made] == [(None, 1)]
-    assert reports.save_due(time.time() + 86400) == []
+    assert reports.save_due(morning) == []
     for x in admin.get("/api/reports").json()["reports"]:
         assert admin.delete(f"/api/reports/saved/{x['id']}").status_code == 200
     assert admin.get("/api/reports").json()["reports"] == []
-    auto = reports.save_due(time.time() + 86400)  # the next morning: only HD had a show, so the venue did too
+    auto = reports.save_due(morning)  # the next morning: only HD had a show, so the venue did too
     assert [x.get("room_id") for x in auto] == [hd, None]
     assert [x["room_name"] for x in admin.get("/api/reports").json()["reports"]] == ["Full venue", "HD"]
-    assert reports.save_due(time.time() + 86400) == []
+    assert reports.save_due(morning) == []
 
     # Techs can't read reports.
     admin.post("/api/admin/accounts", json={"username": "tom", "password": "tom-password", "display_name": "Tom", "role": "tech"})
