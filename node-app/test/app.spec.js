@@ -193,6 +193,7 @@ test("a workspace window pops out into a window of its own, stays on top if aske
   app = await launch();
   const page = await mainPage(app);
   await expect(page.locator(".dk-win:has(#chat)")).toBeVisible(); // the desk lays the windows out once the page has loaded
+  await expect(page.locator("#chat .compose")).toBeVisible(); // and the chat has loaded into its window, so pop out a working chat
   const gid = await page.evaluate(() => ATDesk.tree.groupOf(ATDesk.layout(), "chat").id);
   const [pop] = await Promise.all([app.waitForEvent("window"), page.click(`[data-gid="${gid}"] [aria-label="Pop out"]`)]);
   await expect(pop.locator(".dk-popmain #chat")).toBeVisible();
