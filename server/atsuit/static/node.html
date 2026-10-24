@@ -119,7 +119,7 @@
     <label>Username</label><input name="username" autocomplete="username" required>
     <label>Password</label><input name="password" type="password" autocomplete="current-password" required>
     <p id="loginErr" class="muted" style="color:#fecaca"></p>
-    <div class="row" style="justify-content:flex-end"><button class="primary">Sign in</button></div>
+    <div class="row" style="justify-content:space-between"><a href="#" id="switchSrvLogin" class="small hidden">Connect to a different server</a><button class="primary" style="margin-left:auto">Sign in</button></div>
   </form>
 </div>
 
@@ -141,7 +141,7 @@
       <label class="opt"><input type="radio" name="mode" value="backup"><b>Backup PC</b><span>Pop-ups on top for chat and help. Never any sound.</span></label>
     </div>
     <p id="startErr" class="muted" style="color:#fecaca"></p>
-    <div class="row" style="justify-content:flex-end"><button class="primary">Start</button></div>
+    <div class="row" style="justify-content:space-between"><a href="#" id="switchSrvStart" class="small hidden">Connect to a different server</a><button class="primary" style="margin-left:auto">Start</button></div>
   </form>
 </div>
 
@@ -276,6 +276,14 @@
   if (APP) nodeToken = await APP.nodeToken();
   else try { nodeToken = localStorage.getItem("atsuit_node_token"); } catch (_) {}
   const nodeHdr = () => (nodeToken ? { Authorization: `Node ${nodeToken}` } : {});
+  // In the Windows app: move this laptop to another AT-SUITE server. The app asks for an admin
+  // of the new server, so a tech can't take a laptop off the venue by accident.
+  for (const id of ["switchSrvLogin", "switchSrvStart"]) {
+    const a = document.getElementById(id);
+    if (!a || !APP?.switchServer) continue;
+    a.classList.remove("hidden");
+    a.onclick = (e) => { e.preventDefault(); APP.switchServer(); };
+  }
   await AT.branding();
 
   // ---------------------------------------------------------------- node --

@@ -203,22 +203,36 @@ function keepToServer(win) {
 }
 
 let setupPrefill = {};
-function openSetup(message = "") {
-  if (setupWin && !setupWin.isDestroyed()) { setupWin.show(); setupWin.focus(); return; }
+// mode "enrol": the first set-up (an enrolment code, or an admin signs in).
+// mode "switch": move an enrolled laptop to another AT-SUITE server. Only an admin of the new
+// server can do that, so a tech can't move a laptop off the venue by accident; until it works
+// the laptop stays on the server it has.
+function openSetup(message = "", mode = "enrol") {
+  if (setupWin && !setupWin.isDestroyed()) {
+    if (setupPrefill.mode === mode) { setupWin.show(); setupWin.focus(); return; }
+    setupWin.destroy();
+  }
   setupWin = new BrowserWindow({
     width: 560,
-    height: 640,
+    height: 720,
     resizable: false,
-    title: "Set up AT-SUITE Node",
+    title: mode === "switch" ? "Connect to a different server" : "Set up AT-SUITE Node",
     icon: iconPath(),
     backgroundColor: "#0e1116",
     webPreferences: { preload: path.join(__dirname, "setup-preload.js"), contextIsolation: true, sandbox: true },
   });
   silence(setupWin);
-  setupWin.on("closed", () => { setupWin = null; });
+  const win = setupWin;
+  win.on("closed", () => {
+    if (setupWin === win) setupWin = null;
+    // Closing the switch window keeps the laptop where it was.
+    if (mode === "switch" && conf.server && config.getToken(conf) && !quitting) openMain();
+  });
   const pre = config.preset();
   // Handed over by IPC, not in the page address: the enrolment code is a key.
-  setupPrefill = { server: conf.server || pre.server, code: pre.enrol_code, name: conf.name || pre.name || os.hostname(), message };
+  setupPrefill = mode === "switch"
+    ? { mode, current: conf.server, server: "", name: conf.name || os.hostname(), message }
+    : { mode, server: conf.server || pre.server, code: pre.enrol_code, name: conf.name || pre.name || os.hostname(), message };
   setupWin.loadFile(path.join(__dirname, "setup.html"));
 }
 
@@ -588,8 +602,75 @@ function ipc() {
     openMain();
   });
   ipcMain.on("popup:dismiss", (e) => closePopup(BrowserWindow.fromWebContents(e.sender)));
-  ipcMain.handle("setup:prefill", (e) => (setupWin && e.sender === setupWin.webContents ? setupPrefill : {}));
-  ipcMain.handle("setup:enrol", (e, form) => (setupWin && e.sender === setupWin.webContents ? enrol(form || {}) : { ok: false }));
+  // "Connect to a different server", from the workspace's sign-in and start screens or the
+  // "can't reach the server" page (ours, not the server's, so any page in the main window).
+  ipcMain.handle("app:switch-server", (e) => {
+    if (!mainWin || mainWin.isDestroyed() || e.sender !== mainWin.webContents) return false;
+    openSwitch();
+    return true;
+  });
+  const fromSetup = (e) => setupWin && !setupWin.isDestroyed() && e.sender === setupWin.webContents;
+  ipcMain.handle("setup:prefill", (e) => (fromSetup(e) ? setupPrefill : {}));
+  ipcMain.handle("setup:enrol", (e, form) => {
+    if (!fromSetup(e)) return { ok: false };
+    // Moving to another server always needs an admin of that server, never just a code.
+    if (setupPrefill.mode === "switch") return { ok: false, error: "Sign in as an admin of the new server." };
+    return enrol(form || {});
+  });
+  ipcMain.handle("setup:enrol-admin", (e, form) => (fromSetup(e) ? enrolAsAdmin(form || {}) : { ok: false }));
+  ipcMain.handle("setup:cancel", (e) => { if (fromSetup(e)) setupWin.close(); return true; });
+}
+
+function openSwitch() {
+  // Not enrolled anywhere yet: that's the normal set-up.
+  if (conf.server && config.getToken(conf)) openSetup("", "switch");
+  else openSetup();
+}
+
+// An admin of the server signs in instead of typing the enrolment code: the app signs in in a
+// session of its own (so the admin's sign-in never reaches the workspace), reads the site's code,
+// enrols with it and signs out again. Works with any AT-SUITE server from 1.0 on: it only uses
+// the console's own sign-in and Add laptops calls.
+async function enrolAsAdmin({ server, username, password, site_id, name }) {
+  const base = config.normServer(server);
+  if (!base) return { ok: false, error: "Enter the server address, like https://venue.atsuite.tech or http://10.100.70.101:8180" };
+  if (!username || !password) return { ok: false, error: "Enter an admin's username and password for that server." };
+  const ses = session.fromPartition(`atsuit-admin-${Date.now()}`); // in memory only, never saved
+  const call = async (method, p, body, token, asCookie) => {
+    const headers = { Accept: "application/json" };
+    if (body) headers["Content-Type"] = "application/json";
+    // Signing out goes by the cookie, everything else by the header.
+    if (token) headers[asCookie ? "Cookie" : "Authorization"] = asCookie ? `atsuit_session=${token}` : `Bearer ${token}`;
+    const res = await ses.fetch(`${base}${p}`, { method, headers, body: body ? JSON.stringify(body) : undefined, bypassCustomProtocolHandlers: true });
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    return { status: res.status, ok: res.ok, data };
+  };
+  let token = "";
+  try {
+    let r;
+    try {
+      // shared: a short sign-in, gone in minutes even if signing out fails
+      r = await call("POST", "/api/auth/login", { username: String(username).trim(), password: String(password), shared: true });
+    } catch (_) {
+      return { ok: false, error: `Can't reach ${base}. Check the address and that this laptop is online.` };
+    }
+    if (r.status === 428) return { ok: false, error: "That account has to choose a new password first. Sign in to the console in a browser once, then try again." };
+    if (r.status === 404) return { ok: false, error: `${base} doesn't look like an AT-SUITE server. Check the address.` };
+    if (!r.ok || !r.data.token) return { ok: false, error: r.data.detail || `The server said ${r.status}` };
+    token = r.data.token;
+    const me = await call("GET", "/api/auth/me", null, token);
+    if (!me.ok || me.data.role !== "admin") return { ok: false, error: "Only an admin can add this laptop or move it to another server. Ask an admin to sign in here." };
+    const sites = await call("GET", "/api/fleet/enrolment", null, token);
+    const list = Array.isArray(sites.data) ? sites.data : [];
+    if (!sites.ok || !list.length) return { ok: false, error: sites.data.detail || "That server has no site to add laptops to yet. Finish its set-up first." };
+    let site = list.find((x) => x.id === +site_id) || list.find((x) => x.id === me.data.site_id) || (list.length === 1 ? list[0] : null);
+    if (!site) return { ok: false, sites: list.map((x) => ({ id: x.id, name: x.name })), error: "Pick which site this laptop belongs to." };
+    return await enrol({ server: base, code: site.enrol_code, name });
+  } finally {
+    if (token) await call("POST", "/api/auth/logout", null, token, true).catch(() => {});
+    ses.clearStorageData().catch(() => {});
+  }
 }
 
 async function enrol({ server, code, name }) {
@@ -608,6 +689,11 @@ async function enrol({ server, code, name }) {
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) return { ok: false, error: data.detail || `The server said ${res.status}` };
+  if (base !== conf.server) {
+    // A different server: the kept copy of the old workspace and the old room's overlay don't belong here.
+    offlineCopy.clear();
+    conf.overlay = null;
+  }
   conf.server = base;
   conf.name = data.name || name;
   config.setToken(conf, data.token);
@@ -639,6 +725,7 @@ function makeTray() {
     : { label: "Check for updates", enabled: !!updater, click: () => checkUpdates() };
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Open workspace", click: () => openMain() },
+    { label: "Connect to a different server…", click: () => openSwitch() },
     { type: "separator" },
     { label: `AT-SUITE Node ${app.getVersion()}`, enabled: false },
     upItem,

@@ -13,7 +13,10 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   h1 { font-family: "Saira", system-ui, sans-serif; font-weight: 800; font-size: 24px; margin: 18px 0 6px; }
   p { color: #9aa3b5; margin: 0 0 8px; }
-  code { color: #FFB27A; }
+  code { color: #FFB27A; overflow-wrap: anywhere; }
+  button { margin-top: 18px; padding: 10px 16px; border-radius: 8px; border: 1px solid #2a3242; background: #161b24; color: #e8eaf0; font: inherit; font-weight: 600; cursor: pointer; }
+  button:focus-visible { outline: 2px solid #FF7A1A; outline-offset: 2px; }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -22,6 +25,7 @@
   <h1>Can't reach the AT-SUITE server</h1>
   <p id="where"></p>
   <p>Trying again every few seconds. Check the laptop is on the venue network.</p>
+  <button type="button" id="switch" hidden>Connect to a different server</button>
 </main>
 <script src="offline.js"></script>
 </body>

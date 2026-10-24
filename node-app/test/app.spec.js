@@ -745,3 +745,131 @@ test("with the server down the app shows its own branded page, not a browser err
   await expect(page.locator("#where")).toContainText("http://127.0.0.1:9");
   expect(await page.locator("img").evaluate((i) => i.naturalWidth)).toBeGreaterThan(0); // the gear loads
 });
+
+// The window the app opens for "Connect to a different server" (setup.html in its switch mode).
+async function setupPage(a) {
+  for (let i = 0; i < 50; i++) {
+    const w = a.windows().find((x) => x.url().includes("setup.html"));
+    if (w) return w;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error("the set-up window never opened");
+}
+
+test("a laptop whose server is gone moves to another server, but only when an admin of that server signs in", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "atsuit-node-move-"));
+  const old = { server: "http://127.0.0.1:9", name: "MOVE-TEST", token_plain: "old-token", overlay: { on: false, room_id: 3 } };
+  fs.writeFileSync(path.join(dir, "node.json"), JSON.stringify(old));
+  const args = [path.join(__dirname, "..")];
+  if (process.platform === "linux") args.push("--no-sandbox");
+  const env2 = { ...process.env, ATSUIT_NODE_USERDATA: dir, ATSUIT_NODE_PRESET: path.join(dir, "none.json"), ATSUIT_NODE_NO_UPDATES: "1" };
+  app = await electron.launch({ args, env: env2 });
+  let page = null;
+  for (let i = 0; i < 50 && !page; i++) {
+    page = app.windows().find((w) => w.url().includes("offline.html")) || null;
+    if (!page) await new Promise((r) => setTimeout(r, 200));
+  }
+  expect(page).toBeTruthy();
+  await page.click("#switch");
+  let setup = await setupPage(app);
+  await expect(setup.locator("#title")).toHaveText("Connect to a different server");
+  await expect(setup.locator("#current")).toHaveText("http://127.0.0.1:9");
+  await expect(setup.locator("#howRow")).toBeHidden(); // no enrolment-code route when moving
+  await expect(setup.locator("#username")).toBeVisible();
+
+  // Cancel leaves the laptop where it was.
+  await setup.click("#cancel").catch(() => {}); // the window closes under the click; checked below
+  for (let i = 0; i < 25 && app.windows().some((w) => w.url().includes("setup.html")); i++) await new Promise((r) => setTimeout(r, 200));
+  expect(app.windows().some((w) => w.url().includes("setup.html"))).toBeFalsy();
+  expect(JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8")).server).toBe(old.server);
+
+  // Opening it again (the tray item and the workspace links call the same thing).
+  await app.evaluate(({ BrowserWindow }) => {
+    const w = BrowserWindow.getAllWindows().find((x) => x.webContents.getURL().includes("offline.html"));
+    return w.webContents.executeJavaScript("window.atsuitApp.switchServer()");
+  });
+  setup = await setupPage(app);
+  await setup.fill("#server", env.base);
+  await setup.fill("#name", "MOVED-LAP");
+  // A tech can't move it, and nor can a wrong password.
+  await setup.fill("#username", "ben");
+  await setup.fill("#password", "ben-password-1");
+  await setup.click("#go");
+  await expect(setup.locator("#err")).toContainText("Only an admin");
+  await setup.fill("#username", "admin");
+  await setup.fill("#password", "wrong-password");
+  await setup.click("#go");
+  await expect(setup.locator("#err")).toContainText("Wrong username or password");
+  expect(JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8")).server).toBe(old.server);
+
+  // An admin of the new server: the app moves there and restarts, and signs the admin out again.
+  const adminSessions = () => Number(execFileSync(process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"), ["-c",
+    "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute(\"SELECT COUNT(*) FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE a.username='admin'\").fetchone()[0])",
+    path.join(env.data, "atsuit.db")]).toString().trim());
+  const before = adminSessions();
+  const exited = new Promise((r) => app.process().once("exit", r));
+  await setup.fill("#password", "correct-horse");
+  await setup.click("#go");
+  await exited;
+  app = null;
+  const moved = JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8"));
+  expect(moved.server).toBe(env.base);
+  expect(moved.name).toBe("MOVED-LAP");
+  expect(moved.token_enc || moved.token_plain).toBeTruthy();
+  expect(moved.token_plain).not.toBe("old-token");
+  expect(moved.overlay).toBeNull(); // the old server's room means nothing here
+  expect(adminSessions()).toBe(before);
+  await new Promise((r) => setTimeout(r, 1500));
+  try { execFileSync(process.platform === "win32" ? "taskkill" : "pkill", process.platform === "win32" ? ["/F", "/IM", "electron.exe"] : ["-f", `electron.*${path.join(__dirname, "..")}`]); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // The server knows the laptop, and nobody was left signed in to the workspace as the admin.
+  const login = await fetch(`${env.base}/api/auth/login`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "admin", password: "correct-horse" }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const nodes = await (await fetch(`${env.base}/api/fleet/nodes`, { headers: { Cookie: cookie } })).json();
+  expect(nodes.some((n) => n.name === "MOVED-LAP")).toBeTruthy();
+
+  app = await electron.launch({ args, env: env2 });
+  const ws = await mainPage(app);
+  await expect(ws.locator("#start")).toBeVisible();
+  await expect(ws.locator("#startNode")).toHaveText("MOVED-LAP");
+  // The start screen offers the move too (only inside the app).
+  await expect(ws.locator("#switchSrvStart")).toBeVisible();
+  await ws.click("#switchSrvStart");
+  setup = await setupPage(app);
+  await expect(setup.locator("#current")).toHaveText(env.base);
+  await setup.click("#cancel").catch(() => {}); // the window closes under the click
+  for (let i = 0; i < 25 && app.windows().some((w) => w.url().includes("setup.html")); i++) await new Promise((r) => setTimeout(r, 200));
+  expect(app.windows().some((w) => w.url().includes("setup.html"))).toBeFalsy();
+  expect(JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8")).server).toBe(env.base);
+});
+
+test("the set-up window lets an admin sign in instead of typing the enrolment code", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "atsuit-node-new-"));
+  const args = [path.join(__dirname, "..")];
+  if (process.platform === "linux") args.push("--no-sandbox");
+  // No settings file at all (a new laptop, or someone deleted it): the set-up window, no error.
+  app = await electron.launch({ args, env: { ...process.env, ATSUIT_NODE_USERDATA: dir, ATSUIT_NODE_PRESET: path.join(dir, "none.json"), ATSUIT_NODE_NO_UPDATES: "1" } });
+  const setup = await setupPage(app);
+  await expect(setup.locator("#title")).toHaveText("Add this laptop to AT-SUITE");
+  await expect(setup.locator("#codeBox")).toBeVisible();
+  await expect(setup.locator("#cancel")).toBeHidden();
+  await setup.click("#useAdmin");
+  await expect(setup.locator("#codeBox")).toBeHidden();
+  await setup.fill("#server", env.base);
+  await setup.fill("#name", "ADMIN-ENROL");
+  await setup.fill("#username", "admin");
+  await setup.fill("#password", "correct-horse");
+  const exited = new Promise((r) => app.process().once("exit", r));
+  await setup.click("#go");
+  await exited;
+  app = null;
+  const c = JSON.parse(fs.readFileSync(path.join(dir, "node.json"), "utf8"));
+  expect(c.server).toBe(env.base);
+  expect(c.name).toBe("ADMIN-ENROL");
+  await new Promise((r) => setTimeout(r, 1500));
+  try { execFileSync(process.platform === "win32" ? "taskkill" : "pkill", process.platform === "win32" ? ["/F", "/IM", "electron.exe"] : ["-f", `electron.*${path.join(__dirname, "..")}`]); } catch (_) {}
+  await new Promise((r) => setTimeout(r, 1000));
+});
