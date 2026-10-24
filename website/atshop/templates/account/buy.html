@@ -33,7 +33,7 @@
   {% endif %}
   <p class="small muted">Your licence will be made out to <strong>{{ acc.organisation or acc.name or acc.email }}</strong>. <a href="/account/details">Change</a></p>
   <div><button class="btn primary" type="submit" {% if active or not billing_ready %}disabled{% endif %}>Continue to payment</button></div>
-  <p class="small muted">{{ cat.vat_note }} Payment is taken by Paddle.com, our reseller. Renews automatically; cancel any time from your account. By paying you agree to the <a href="/legal/terms">terms</a>.</p>
+  <p class="small muted">{{ cat.vat_note }} Payment is taken securely by Stripe. Renews automatically; cancel any time from your account. By paying you agree to the <a href="/legal/terms">terms</a>.</p>
 </form>
 </div>
 <div class="card" style="align-self:start">

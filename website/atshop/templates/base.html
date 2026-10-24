@@ -16,7 +16,7 @@
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-{% if s.paddle_env == 'sandbox' and s.billing_ready %}<div class="sandbox-bar" role="region" aria-label="Test mode">Test mode: payments use Paddle's sandbox, no real money is taken.</div>{% endif %}
+{% if s.stripe_mode == 'test' and s.billing_ready %}<div class="sandbox-bar" role="region" aria-label="Test mode">Test mode: payments use Stripe's test mode, no real money is taken.</div>{% endif %}
 <header class="top">
   <div class="wrap">
     <a class="logo" href="/" aria-label="AT SUITE home"><img src="/static/img/wordmark-640.png" alt="AT SUITE" width="90" height="34"></a>
@@ -44,7 +44,7 @@
       <div>
         <img src="/static/img/wordmark-640.png" alt="AT SUITE" width="110" height="42" style="margin-bottom:12px">
         <p>Show control for live events: timers, crew chat, captions, screens and laptops in one place.</p>
-        <p class="small">AT SUITE is sold by our reseller Paddle.com, who handle payment, invoices and VAT.</p>
+        <p class="small">AT SUITE is sold by {{ s.company_name }}. Card payments are handled securely by Stripe.</p>
       </div>
       <nav aria-label="Product"><h2 class="foot-h">Product</h2><ul>
         <li><a href="/features">Features</a></li><li><a href="/how-it-works">How it works</a></li>

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from atshop import auth, hosting
 
-from conftest import ADMIN, Harness, sub_data, txn_data
+from conftest import ADMIN, Harness, invoice_data, session_data, sub_data
 from test_journey import server_licence  # noqa: F401 (a fixture)
 
 
@@ -144,15 +144,17 @@ def _hosted_customer(h):
                                 "venue_slug": "admin", "venue_name": "Grand Hall"}).status_code == 400  # reserved
     r = c.post("/buy", data={"csrf": csrf, "kind": "subscription", "plan": "venue", "cycle": "year", "hosting": "1",
                              "venue_slug": "grand-hall", "venue_name": "Grand Hall"})
-    assert r.status_code == 200
+    assert r.status_code == 303
     order = h.shop.db.one("SELECT * FROM orders ORDER BY id DESC")
     prices = [h.price[("plan", "venue", "year")], h.price[("addon", "hosting", "year")]]
-    assert [i["price_id"] for i in h.paddle.transactions[order["paddle_transaction_id"]]["items"]] == prices
+    sent = h.session_of(order)
+    assert [sent["line_items[0][price]"], sent["line_items[1][price]"]] == prices
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
-    cd = {"account_id": str(acc["id"]), "order_ref": order["ref"]}
-    h.send(h.event("subscription.created", {**sub_data("sub_h", acc["paddle_customer_id"], prices), "custom_data": cd}))
-    h.send(h.event("transaction.completed", txn_data(order["paddle_transaction_id"], acc["paddle_customer_id"], prices,
-                                                     sub_id="sub_h", custom_data=cd)))
+    md = {"account_id": str(acc["id"]), "order_ref": order["ref"]}
+    h.send(h.event("customer.subscription.created", sub_data("sub_h", acc["stripe_customer_id"], prices, metadata=md)))
+    h.send(h.event("checkout.session.completed", session_data(order["stripe_session_id"], acc["stripe_customer_id"],
+                                                              metadata=md)))
+    h.send(h.event("invoice.paid", invoice_data("in_1", acc["stripe_customer_id"], prices, sub_id="sub_h", metadata=md)))
     return c, acc, prices
 
 
@@ -189,8 +191,9 @@ def test_hosting_ssh_mode_runs_atcloud_with_the_key_on_stdin(tmp_path, vendor):
     venue = h.shop.db.one("SELECT * FROM hosting WHERE slug='grand-hall'")
     assert venue["status"] == "active" and "setup#code=ABC123" in venue["setup_link"]
     # A renewal sends the new key to the venue.
-    h.send(h.event("transaction.completed", txn_data("txn_2", acc["paddle_customer_id"], prices, sub_id="sub_h",
-                                                     start="2027-10-15T12:00:00Z", end="2028-10-15T12:00:00Z")))
+    h.send(h.event("invoice.paid", invoice_data("in_2", acc["stripe_customer_id"], prices, sub_id="sub_h",
+                                                start="2027-10-15T12:00:00Z", end="2028-10-15T12:00:00Z",
+                                                billing_reason="subscription_cycle")))
     assert hosting.run_pending(h.shop.db, h.s, h.hosting) == 1
     argv, stdin = h.hosting.runs[1]
     new = h.shop.db.one("SELECT * FROM licences WHERE subscription_id='sub_h' AND replaced_by IS NULL")
@@ -206,7 +209,7 @@ def test_hosting_ssh_mode_runs_atcloud_with_the_key_on_stdin(tmp_path, vendor):
 
 def test_cancelled_hosted_venue_is_not_removed(h):
     c, acc, prices = _hosted_customer(h)
-    h.send(h.event("subscription.canceled", sub_data("sub_h", acc["paddle_customer_id"], prices, status="canceled")))
+    h.send(h.event("customer.subscription.deleted", sub_data("sub_h", acc["stripe_customer_id"], prices, status="canceled")))
     assert h.shop.db.one("SELECT status FROM hosting WHERE slug='grand-hall'")["status"] == "pending"
     assert not h.shop.db.one("SELECT 1 FROM hosting_jobs WHERE action IN ('suspend')")
     subjects = [r["subject"] for r in h.shop.db.all("SELECT subject FROM emails WHERE to_addr=?", ADMIN)]

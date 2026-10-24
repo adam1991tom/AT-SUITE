@@ -10,7 +10,7 @@ import pytest
 
 from atshop.licensing import period_expiry
 
-from conftest import sub_data, txn_data
+from conftest import invoice_data, session_data, sub_data
 
 SERVER = Path(__file__).resolve().parents[2] / "server"
 
@@ -32,23 +32,23 @@ def buy(h, c, plan="venue", cycle="year", hosting=False, slug=""):
     if hosting:
         form.update(hosting="1", venue_slug=slug, venue_name="Grand Hall")
     r = c.post("/buy", data=form)
-    assert r.status_code == 200, r.text
-    assert 'id="checkout"' in r.text and "cdn.paddle.com" in r.text
+    # Straight on to Stripe's own checkout page.
+    assert r.status_code == 303 and r.headers["location"].startswith("https://checkout.stripe.com/"), r.text
     order = h.shop.db.one("SELECT * FROM orders ORDER BY id DESC LIMIT 1")
-    # Paddle Retain is given the customer's Paddle id (ctm_...), not our account id or email.
-    cust = h.shop.db.one("SELECT paddle_customer_id FROM accounts WHERE id=?", order["account_id"])["paddle_customer_id"]
-    assert cust.startswith("ctm_") and f'data-customer="{cust}"' in r.text
+    cust = h.shop.db.one("SELECT stripe_customer_id FROM accounts WHERE id=?", order["account_id"])["stripe_customer_id"]
+    assert cust.startswith("cus_") and h.session_of(order)["customer"] == cust
     return order
 
 
 def pay(h, order, sub_id, prices, start="2026-10-15T12:00:00Z", end="2027-10-15T12:00:00Z"):
-    """What Paddle sends after a successful checkout: the subscription, then the paid transaction."""
+    """What Stripe sends after a successful checkout: the subscription, the checkout, then the paid invoice."""
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
-    cust = acc["paddle_customer_id"]
-    cd = {"account_id": str(acc["id"]), "order_ref": order["ref"]}
-    h.send(h.event("subscription.created", {**sub_data(sub_id, cust, prices, start=start, end=end), "custom_data": cd}))
-    r = h.send(h.event("transaction.completed", txn_data(order["paddle_transaction_id"], cust, prices, sub_id=sub_id,
-                                                         start=start, end=end, custom_data=cd)))
+    cust = acc["stripe_customer_id"]
+    md = {"account_id": str(acc["id"]), "order_ref": order["ref"]}
+    h.send(h.event("customer.subscription.created", sub_data(sub_id, cust, prices, start=start, end=end, metadata=md)))
+    h.send(h.event("checkout.session.completed", session_data(order["stripe_session_id"], cust, metadata=md)))
+    r = h.send(h.event("invoice.paid", invoice_data(f"in_{sub_id}", cust, prices, sub_id=sub_id, start=start, end=end,
+                                                    metadata=md)))
     assert r.status_code == 200, r.text
 
 
@@ -56,9 +56,14 @@ def test_full_purchase_gives_a_key_the_server_accepts(h, server_licence):
     c = h.sign_in("ops@grandhall.example", name="Ops Team", organisation="Grand Hall")
     order = buy(h, c)
     # The server, not the browser, chose the price and recorded who it's for.
-    sent = h.paddle.transactions[order["paddle_transaction_id"]]
-    assert [i["price_id"] for i in sent["items"]] == [h.price[("plan", "venue", "year")]]
-    assert sent["custom_data"] == {"account_id": str(order["account_id"]), "order_ref": order["ref"]}
+    sent = h.session_of(order)
+    assert sent["mode"] == "subscription" and sent["line_items[0][price]"] == h.price[("plan", "venue", "year")]
+    assert "line_items[1][price]" not in sent
+    assert sent["metadata[account_id]"] == str(order["account_id"]) and sent["metadata[order_ref]"] == order["ref"]
+    assert sent["subscription_data[metadata][order_ref]"] == order["ref"]
+    assert sent["success_url"] == f"http://testserver/account/thanks?order={order['ref']}"
+    assert sent["automatic_tax[enabled]"] == "false" and sent["tax_id_collection[enabled]"] == "true"
+    assert sent["idempotency_key"] == f"checkout-{order['ref']}"
 
     assert c.get(f"/account/order/{order['ref']}").json() == {"status": "open", "licence": False}
     pay(h, order, "sub_1", [h.price[("plan", "venue", "year")]])
@@ -100,12 +105,12 @@ def test_monthly_renewal_gives_a_new_key_and_replaces_the_old(h, server_licence)
     first = h.shop.db.one("SELECT * FROM licences WHERE subscription_id='sub_m'")
     assert first["expires"] == period_expiry("2026-11-15T12:00:00Z", 7)
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
-    # Next month: Paddle renews; the subscription moves on, then the renewal payment completes.
-    h.send(h.event("subscription.updated", sub_data("sub_m", acc["paddle_customer_id"], [month],
-                                                    start="2026-11-15T12:00:00Z", end="2026-12-15T12:00:00Z")))
-    h.send(h.event("transaction.completed", txn_data("txn_renew", acc["paddle_customer_id"], [month], sub_id="sub_m",
-                                                     start="2026-11-15T12:00:00Z", end="2026-12-15T12:00:00Z",
-                                                     origin="subscription_recurring")))
+    # Next month: Stripe renews; the subscription moves on, then the renewal invoice is paid.
+    h.send(h.event("customer.subscription.updated", sub_data("sub_m", acc["stripe_customer_id"], [month],
+                                                             start="2026-11-15T12:00:00Z", end="2026-12-15T12:00:00Z")))
+    h.send(h.event("invoice.paid", invoice_data("in_renew", acc["stripe_customer_id"], [month], sub_id="sub_m",
+                                                start="2026-11-15T12:00:00Z", end="2026-12-15T12:00:00Z",
+                                                billing_reason="subscription_cycle")))
     keys = h.shop.db.all("SELECT * FROM licences WHERE subscription_id='sub_m' ORDER BY id")
     assert len(keys) == 2
     assert keys[0]["replaced_by"] == keys[1]["serial"]
@@ -130,20 +135,31 @@ def test_upgrade_and_downgrade(h, server_licence):
     pay(h, order, "sub_u", [small])
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
 
+    h.stripe.subscriptions["sub_u"] = [small]
     r = c.post("/account/plan", data={"csrf": h.csrf(c, "/account/plan"), "plan": "large", "cycle": "year"})
     assert r.status_code == 200
-    assert h.paddle.patches[-1] == {"id": "sub_u", "items": [{"price_id": large, "quantity": 1}],
-                                    "proration_billing_mode": "prorated_immediately"}
-    # Paddle confirms the change: a new key with the bigger laptop limit, same end date.
-    h.send(h.event("subscription.updated", sub_data("sub_u", acc["paddle_customer_id"], [large])))
+    # The old item goes, the new price comes in, and the difference is charged now.
+    assert h.stripe.updates[-1] == {"id": "sub_u", "items[0][id]": "si_0", "items[0][deleted]": "true",
+                                    "items[1][price]": large, "items[1][quantity]": "1",
+                                    "proration_behavior": "always_invoice"}
+    # Stripe confirms the change: a new key with the bigger laptop limit, same end date.
+    h.send(h.event("customer.subscription.updated", sub_data("sub_u", acc["stripe_customer_id"], [large])))
     cur = h.shop.db.one("SELECT * FROM licences WHERE subscription_id='sub_u' AND replaced_by IS NULL")
     p = server_licence.parse(cur["key"])
     assert p.max_nodes == 75 and p.edition == "large"
     assert p.expires == period_expiry("2027-10-15T12:00:00Z", 7)
 
-    # Going down is credited at the next bill, not charged now.
+    # The upgrade's invoice (a credit for the old plan, a charge for the new) doesn't undo it.
+    h.send(h.event("invoice.paid", invoice_data("in_up", acc["stripe_customer_id"], [large], sub_id="sub_u",
+                                                billing_reason="subscription_update", credit=small)))
+    assert server_licence.parse(h.shop.db.one("SELECT key FROM licences WHERE subscription_id='sub_u' AND replaced_by IS NULL")
+                                ["key"]).max_nodes == 75
+
+    # Going down is credited at the next bill, not charged now. Hosting already on stays on.
+    h.stripe.subscriptions["sub_u"] = [large]
     c.post("/account/plan", data={"csrf": h.csrf(c, "/account/plan"), "plan": "small", "cycle": "year"})
-    assert h.paddle.patches[-1]["proration_billing_mode"] == "prorated_next_billing_period"
+    assert h.stripe.updates[-1]["proration_behavior"] == "create_prorations"
+    assert h.stripe.updates[-1]["items[1][price]"] == small
 
 
 def test_payment_trouble_and_cancelling(h):
@@ -152,30 +168,34 @@ def test_payment_trouble_and_cancelling(h):
     order = buy(h, c)
     pay(h, order, "sub_c", [venue])
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
-    cust = acc["paddle_customer_id"]
+    cust = acc["stripe_customer_id"]
     key_before = h.shop.db.one("SELECT * FROM licences WHERE subscription_id='sub_c'")
 
-    h.send(h.event("transaction.payment_failed", {"id": "txn_f", "customer_id": cust, "subscription_id": "sub_c"}))
-    h.send(h.event("subscription.past_due", sub_data("sub_c", cust, [venue], status="past_due")))
-    h.send(h.event("subscription.updated", sub_data("sub_c", cust, [venue], status="past_due")))  # again: no 2nd email
+    h.send(h.event("invoice.payment_failed", {**invoice_data("in_f", cust, [venue], sub_id="sub_c"), "status": "open"}))
+    h.send(h.event("customer.subscription.updated", sub_data("sub_c", cust, [venue], status="past_due")))
+    h.send(h.event("customer.subscription.updated", sub_data("sub_c", cust, [venue], status="past_due")))  # no 2nd email
     mails = h.shop.db.all("SELECT subject FROM emails WHERE to_addr='ops@grandhall.example' AND kind!='login'")
     assert sum("payment" in m["subject"].lower() for m in mails) >= 1
     assert h.shop.db.one("SELECT status FROM subscriptions WHERE id='sub_c'")["status"] == "past_due"
     # The key they have keeps working: nothing is revoked or shortened for a late payment.
     assert h.shop.db.one("SELECT * FROM licences WHERE id=?", key_before["id"])["revoked_at"] is None
 
-    sched = {"action": "cancel", "effective_at": "2027-10-15T12:00:00Z", "resume_at": None}
-    h.send(h.event("subscription.updated", sub_data("sub_c", cust, [venue], scheduled_change=sched)))
-    h.send(h.event("subscription.updated", sub_data("sub_c", cust, [venue], scheduled_change=sched)))
-    h.send(h.event("subscription.canceled", sub_data("sub_c", cust, [venue], status="canceled")))
+    # Cancelled in the portal: it runs to the end of the period, then Stripe deletes it.
+    h.send(h.event("customer.subscription.updated", sub_data("sub_c", cust, [venue], cancel_at_period_end=True)))
+    h.send(h.event("customer.subscription.updated", sub_data("sub_c", cust, [venue], cancel_at_period_end=True)))
+    sub = h.shop.db.one("SELECT * FROM subscriptions WHERE id='sub_c'")
+    assert '"effective_at": "2027-10-15T12:00:00Z"' in sub["scheduled_change"] and sub["next_billed_at"] is None
+    h.send(h.event("customer.subscription.deleted", sub_data("sub_c", cust, [venue], status="canceled")))
     subjects = [m["subject"] for m in h.shop.db.all("SELECT subject FROM emails WHERE to_addr='ops@grandhall.example'")]
     assert subjects.count("Your AT SUITE subscription will end") == 1
     assert subjects.count("Your AT SUITE subscription has ended") == 1
     assert h.shop.db.one("SELECT * FROM licences WHERE id=?", key_before["id"])["revoked_at"] is None
 
-    # Card update and cancel go to Paddle's own portal.
+    # Card update and cancel go to Stripe's own portal.
     r = c.post("/account/billing/portal", data={"csrf": h.csrf(c, "/account/billing"), "go": "card"})
-    assert r.status_code == 303 and r.headers["location"].startswith("https://sandbox-customer-portal.paddle.com/")
+    assert r.status_code == 303 and r.headers["location"].startswith("https://billing.stripe.com/")
+    assert h.stripe.portal[-1] == {"customer": cust, "return_url": "http://testserver/account/billing",
+                                   "flow_data[type]": "payment_method_update"}
 
 
 def test_cannot_buy_twice_or_with_a_bad_cycle(h):
@@ -192,14 +212,27 @@ def test_event_pass(h, server_licence):
     c = h.sign_in("hire@example.com", organisation="Hire Co")
     start = date.today().isoformat()
     r = c.post("/buy", data={"csrf": h.csrf(c, "/buy/event"), "kind": "event", "event_start": start})
-    assert r.status_code == 200
+    assert r.status_code == 303
     order = h.shop.db.one("SELECT * FROM orders ORDER BY id DESC")
+    sent = h.session_of(order)
+    assert sent["mode"] == "payment" and sent["line_items[0][price]"] == h.price[("pass", "event", "")]
+    assert sent["invoice_creation[enabled]"] == "true" and sent["payment_intent_data[metadata][order_ref]"] == order["ref"]
     acc = h.shop.db.one("SELECT * FROM accounts WHERE id=?", order["account_id"])
-    ev = h.price[("pass", "event", "")]
-    h.send(h.event("transaction.completed", txn_data(order["paddle_transaction_id"], acc["paddle_customer_id"], [ev],
-                                                     custom_data={"account_id": str(acc["id"]), "order_ref": order["ref"]},
-                                                     total="14900")))
+    md = {"account_id": str(acc["id"]), "order_ref": order["ref"]}
+    cust = acc["stripe_customer_id"]
+    # A bank payment that hasn't cleared yet issues nothing; once it clears, the pass is issued once.
+    h.send(h.event("checkout.session.completed", session_data(order["stripe_session_id"], cust, mode="payment",
+                                                              metadata=md, payment_status="unpaid")))
+    assert not h.shop.db.one("SELECT 1 FROM licences WHERE account_id=?", acc["id"])
+    for etype in ("checkout.session.async_payment_succeeded", "checkout.session.completed"):
+        h.send(h.event(etype, session_data(order["stripe_session_id"], cust, mode="payment", metadata=md,
+                                           invoice="in_event")))
+    h.send(h.event("invoice.paid", invoice_data("in_event", cust, [h.price[("pass", "event", "")]], metadata=md,
+                                                total=14900)))
+    assert h.shop.db.one("SELECT COUNT(*) n FROM licences WHERE account_id=?", acc["id"])["n"] == 1
+    assert c.get(f"/account/order/{order['ref']}").json() == {"status": "paid", "licence": True}
     lic = h.shop.db.one("SELECT * FROM licences WHERE account_id=?", acc["id"])
+    assert lic["transaction_id"] == "in_event"
     p = server_licence.parse(lic["key"])
     assert p.valid and p.edition == "event" and p.max_nodes == 10
     from atshop.licensing import days_expiry
@@ -223,29 +256,30 @@ def test_checkout_waits_for_prices(h):
     c = h.sign_in("ops@grandhall.example")
     r = c.post("/buy", data={"csrf": h.csrf(c), "kind": "subscription", "plan": "venue", "cycle": "year"})
     assert r.status_code == 400 and "switched on yet" in r.text
-    assert not h.paddle.transactions
+    assert not h.stripe.sessions
 
 
-def test_paddle_errors_are_shown_kindly(h):
+def test_stripe_errors_are_shown_kindly(h):
     c = h.sign_in("ops@grandhall.example")
-    h.paddle.fail_next = (500, "internal_error")
+    h.stripe.fail_next = (500, "api_error")
     r = c.post("/buy", data={"csrf": h.csrf(c), "kind": "subscription", "plan": "venue", "cycle": "year"})
     assert r.status_code == 400 and "Our payment provider said" in r.text
     assert h.shop.db.one("SELECT COUNT(*) n FROM orders")["n"] == 0
 
 
-def test_existing_paddle_customer_is_reused(h):
-    h.paddle.customers["ops@grandhall.example"] = "ctm_existing"
+def test_existing_stripe_customer_is_reused(h):
+    h.stripe.customers["ops@grandhall.example"] = "cus_existing"
     c = h.sign_in("ops@grandhall.example")
     buy(h, c)
-    assert h.shop.db.one("SELECT paddle_customer_id FROM accounts")["paddle_customer_id"] == "ctm_existing"
+    assert h.shop.db.one("SELECT stripe_customer_id FROM accounts")["stripe_customer_id"] == "cus_existing"
+    assert not [x for x in h.stripe.calls if x[:2] == ("POST", "/v1/customers")]
 
 
 def test_invoice_only_for_own_transactions(h):
     c = h.sign_in("ops@grandhall.example")
     order = buy(h, c)
     pay(h, order, "sub_1", [h.price[("plan", "venue", "year")]])
-    r = c.get(f"/account/invoice/{order['paddle_transaction_id']}")
-    assert r.status_code == 303 and r.headers["location"].startswith("https://sandbox-invoices.paddle.com/")
+    r = c.get("/account/invoice/in_sub_1")
+    assert r.status_code == 303 and r.headers["location"] == "https://invoice.stripe.com/i/in_sub_1"
     other = h.sign_in("nosy@example.com")
-    assert other.get(f"/account/invoice/{order['paddle_transaction_id']}").status_code == 404
+    assert other.get("/account/invoice/in_sub_1").status_code == 404

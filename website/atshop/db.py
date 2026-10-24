@@ -56,7 +56,7 @@ MIGRATIONS = [
         created_at INTEGER NOT NULL
     );
     CREATE TABLE subscriptions (
-        id TEXT PRIMARY KEY,           -- Paddle sub_…
+        id TEXT PRIMARY KEY,           -- sub_… (was Paddle, now Stripe)
         account_id INTEGER REFERENCES accounts(id),
         paddle_customer_id TEXT,
         status TEXT NOT NULL,          -- active | trialing | past_due | paused | canceled
@@ -71,7 +71,7 @@ MIGRATIONS = [
         updated_at INTEGER NOT NULL
     );
     CREATE TABLE transactions (
-        id TEXT PRIMARY KEY,           -- Paddle txn_…
+        id TEXT PRIMARY KEY,           -- txn_… (was Paddle), in_… (Stripe invoice)
         account_id INTEGER REFERENCES accounts(id),
         subscription_id TEXT,
         status TEXT NOT NULL,
@@ -184,6 +184,14 @@ MIGRATIONS = [
         window INTEGER NOT NULL,
         count INTEGER NOT NULL
     );
+    """,
+    # 2: Stripe instead of Paddle. Only Paddle sandbox ids were ever stored, and they mean nothing to
+    # Stripe, so they are cleared; customers get a Stripe customer at their next checkout.
+    """
+    ALTER TABLE accounts RENAME COLUMN paddle_customer_id TO stripe_customer_id;
+    UPDATE accounts SET stripe_customer_id = NULL;
+    ALTER TABLE subscriptions RENAME COLUMN paddle_customer_id TO stripe_customer_id;
+    ALTER TABLE orders RENAME COLUMN paddle_transaction_id TO stripe_session_id;
     """,
 ]
 

@@ -1,8 +1,8 @@
-"""The plans and prices (catalogue.toml), and which Paddle price is which (paddle-prices.<env>.json).
+"""The plans and prices (catalogue.toml), and which Stripe price is which (stripe-prices.<mode>.json).
 
-Paddle prices can't be changed once customers are on them, so a price change makes a new Paddle
-price. The prices file keeps every price ever made, mapped to its plan, so renewals of an old price
-still get the right licence key.
+Stripe prices can't be changed once made, so a price change makes a new Stripe price. The prices
+file keeps every price ever made, mapped to its plan, so renewals of an old price still get the
+right licence key.
 """
 from __future__ import annotations
 
@@ -44,17 +44,17 @@ class Catalogue:
     event: dict
     trial: dict
     enterprise: dict
-    prices: dict = field(default_factory=dict)  # Paddle price id → what it is
-    products: dict = field(default_factory=dict)  # "plan:small" → Paddle product id
+    prices: dict = field(default_factory=dict)  # Stripe price id → what it is
+    products: dict = field(default_factory=dict)  # "plan:small" → Stripe product id
     prices_file: Path | None = None
 
     @property
     def plan_list(self) -> list[Plan]:
         return sorted(self.plans.values(), key=lambda p: p.order)
 
-    # ----------------------------------------------------- Paddle price ids --
+    # ----------------------------------------------------- Stripe price ids --
     def price_id(self, kind: str, key: str, cycle: str = "") -> str | None:
-        """The Paddle price to sell now for this item: the one at today's catalogue amount."""
+        """The Stripe price to sell now for this item: the one at today's catalogue amount."""
         want = self.amount_of(kind, key, cycle)
         for pid, p in self.prices.items():
             if p["kind"] == kind and p["key"] == key and p.get("cycle", "") == cycle and p["amount"] == want * 100 \

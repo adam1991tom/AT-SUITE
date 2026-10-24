@@ -41,7 +41,7 @@ def end_of(d: date) -> int:
 
 
 def period_expiry(period_end: str | datetime, spare_days: int) -> int:
-    """A paid period ending at `period_end` (Paddle's ends_at): its last day plus spare days."""
+    """A paid period ending at `period_end` (Stripe's current_period_end): its last day plus spare days."""
     if isinstance(period_end, str):
         period_end = datetime.fromisoformat(period_end.replace("Z", "+00:00"))
     last = period_end.astimezone(timezone.utc).date()

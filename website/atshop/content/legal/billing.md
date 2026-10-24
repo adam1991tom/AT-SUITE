@@ -2,11 +2,11 @@
 
 ## Who you pay
 
-AT SUITE is sold by our reseller, Paddle.com Market Limited, which acts as merchant of record. Paddle takes the payment, issues your invoice and handles VAT and other sales taxes. Your card statement will show Paddle. Paddle's [buyer terms](https://www.paddle.com/legal/checkout-buyer-terms) also apply to your purchase.
+You buy AT SUITE from us, [COMPANY NAME] Ltd. Card payments are taken for us by Stripe Payments UK Limited, so your card details go to Stripe and never reach us. Your invoices come from us, and your card statement will show [STATEMENT DESCRIPTOR].
 
 ## Prices and VAT
 
-Prices on our website are in pounds sterling and exclude VAT. VAT is added at checkout where it applies. Business customers can enter a VAT number at checkout or in the billing overview.
+Prices on our website are in pounds sterling and exclude VAT. [We are not registered for VAT, so no VAT is charged. / VAT is added at checkout where it applies.] Business customers can enter a VAT number at checkout or in the billing overview, and it is shown on their invoices.
 
 ## Renewals
 
@@ -21,7 +21,7 @@ You can change plan from your account at any time:
 
 ## Failed payments
 
-If a payment fails, we and Paddle will email you, and Paddle will try again over the following days. Please update your card from your account. Your current licence key has 7 spare days after the paid period. After it ends, AT SUITE gives 14 days of grace before it locks, and it never locks during a show.
+If a payment fails, we will email you and try your card again over the following days. Please update your card from your account. Your current licence key has 7 spare days after the paid period. After it ends, AT SUITE gives 14 days of grace before it locks, and it never locks during a show.
 
 ## Cancelling
 
@@ -39,7 +39,7 @@ The only times we pay money back are the ones our [terms](/legal/terms) promise:
 - **We stop offering AT SUITE.** We refund what you prepaid for the time after it stops (clause 16.3).
 - **You object to a new sub-processor** and we can't resolve it. You can end the affected plan and get back what you prepaid for the unused period (clause 2.2 of the [Data Processing Agreement](/legal/dpa)).
 
-Any refund that is due is paid by Paddle, to the card or account you paid with.
+Any refund that is due is paid back through Stripe, to the card or account you paid with.
 
 Event passes and trials aren't subscriptions and don't renew, so there's nothing to cancel.
 

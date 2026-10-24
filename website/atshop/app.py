@@ -20,7 +20,7 @@ from . import catalogue as catmod
 from . import config, jobs
 from .db import DB
 from .licensing import Signer
-from .paddle import Paddle
+from .stripe import Stripe
 
 HERE = Path(__file__).resolve().parent
 VERSION = "2.0.1"
@@ -30,13 +30,13 @@ log = logging.getLogger("atshop")
 class Shop:
     """Everything a request needs, on app.state.shop."""
 
-    def __init__(self, settings: config.Settings, paddle_transport=None, hosting_runner=None, health_transport=None):
+    def __init__(self, settings: config.Settings, stripe_transport=None, hosting_runner=None, health_transport=None):
         settings.check()
         self.s = settings
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         self.db = DB(settings.data_dir / "shop.db")
         self.signer = Signer(settings.signing_key_file)
-        self.paddle = Paddle(settings, transport=paddle_transport)
+        self.stripe = Stripe(settings, transport=stripe_transport)
         self.hosting_runner = hosting_runner
         self.health_transport = health_transport
         self.reload_catalogue()
@@ -76,9 +76,9 @@ def content(kind: str, slug: str) -> tuple[str, str] | None:
     return title, _markdown(text)
 
 
-def create_app(settings: config.Settings | None = None, *, paddle_transport=None, hosting_runner=None,
+def create_app(settings: config.Settings | None = None, *, stripe_transport=None, hosting_runner=None,
                health_transport=None, background: bool = True) -> FastAPI:
-    shop = Shop(settings or config.load(), paddle_transport, hosting_runner, health_transport)
+    shop = Shop(settings or config.load(), stripe_transport, hosting_runner, health_transport)
     stop = threading.Event()
 
     @asynccontextmanager
@@ -106,10 +106,12 @@ def create_app(settings: config.Settings | None = None, *, paddle_transport=None
         h.setdefault("X-Frame-Options", "DENY")
         h.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         h.setdefault("Content-Security-Policy",
-                     "default-src 'self'; script-src 'self' https://cdn.paddle.com; "
-                     "style-src 'self' 'unsafe-inline' https://cdn.paddle.com; img-src 'self' data: https://*.paddle.com; "
-                     "frame-src https://*.paddle.com; connect-src 'self' https://*.paddle.com; "
-                     "font-src 'self'; form-action 'self' https://*.paddle.com; frame-ancestors 'none'; base-uri 'self'")
+                     # Checkout and the billing portal are Stripe's own pages: a form posts here, then
+                     # is sent on to them, so form-action has to allow them.
+                     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                     "connect-src 'self'; font-src 'self'; "
+                     "form-action 'self' https://checkout.stripe.com https://billing.stripe.com; "
+                     "frame-ancestors 'none'; base-uri 'self'")
         if shop.s.secure_cookies:
             h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.url.path.startswith(("/account", "/admin", "/login", "/buy")):

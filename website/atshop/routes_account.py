@@ -13,7 +13,7 @@ from . import mailer, notify
 from .billing import Ctx, classify, issue, latest_licence
 from .db import audit, now
 from .licensing import days_expiry
-from .paddle import PaddleError
+from .stripe import StripeError
 from .web import form, ip, need_login, redirect, render, shop
 
 router = APIRouter()
@@ -115,7 +115,7 @@ def _checkout_error(request, msg: str, back: str):
 
 @router.post("/buy")
 async def buy_start(request: Request):
-    """Make the order and a Paddle transaction for it on the server, then open Paddle's checkout on it."""
+    """Make the order and a Stripe Checkout page for it on the server, then send the customer there."""
     sess = need_login(request)
     data = await form(request)
     sh = shop(request)
@@ -158,22 +158,26 @@ async def buy_start(request: Request):
     if not (acc["organisation"] or acc["name"]):
         return _checkout_error(request, "Please add your name or organisation in your details first; it goes on your "
                                         "licence.", "/account/details")
+    site = sh.s.site_url
+    meta = {"account_id": str(acc["id"]), "order_ref": ref}
     try:
-        cust = acc["paddle_customer_id"] or sh.paddle.find_or_create_customer(acc["email"], acc["name"])
-        txn = sh.paddle.create_transaction(cust, prices, {"account_id": str(acc["id"]), "order_ref": ref})
-    except PaddleError as e:
+        cust = acc["stripe_customer_id"] or sh.stripe.find_or_create_customer(acc["email"], acc["name"], acc["id"])
+        session = sh.stripe.create_checkout(
+            customer_id=cust, price_ids=prices, mode="subscription" if order["kind"] == "subscription" else "payment",
+            metadata=meta, success_url=f"{site}/account/thanks?order={ref}", cancel_url=f"{site}{back}",
+            idempotency_key=f"checkout-{ref}")
+    except StripeError as e:
         return _checkout_error(request, f"Our payment provider said: {e}. Please try again in a minute.", back)
     with sh.db.tx() as c:
-        if not acc["paddle_customer_id"]:
-            c.execute("UPDATE accounts SET paddle_customer_id=? WHERE id=? AND paddle_customer_id IS NULL", (cust, acc["id"]))
+        if not acc["stripe_customer_id"]:
+            c.execute("UPDATE accounts SET stripe_customer_id=? WHERE id=? AND stripe_customer_id IS NULL", (cust, acc["id"]))
         c.execute("INSERT INTO orders (ref, account_id, kind, plan, cycle, hosting, venue_slug, venue_name, event_start,"
-                  " paddle_transaction_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                  " stripe_session_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                   (ref, acc["id"], order["kind"], order.get("plan"), order.get("cycle"), order.get("hosting", 0),
-                   order.get("venue_slug"), order.get("venue_name"), order.get("event_start"), txn["id"], now()))
-        audit(c, acc["email"], "checkout.start", ref, {**order, "transaction": txn["id"]}, ip(request))
-    return render(request, "account/checkout.html", {"title": "Checkout", "txn": txn["id"], "ref": ref,
-                                                     "client_token": sh.s.paddle_client_token, "customer": cust,
-                                                     "sandbox": sh.s.paddle_env == "sandbox", "email": acc["email"]})
+                   order.get("venue_slug"), order.get("venue_name"), order.get("event_start"), session["id"], now()))
+        audit(c, acc["email"], "checkout.start", ref, {**order, "session": session["id"]}, ip(request))
+    # Stripe's own checkout page takes the payment, then comes back to /account/thanks.
+    return redirect(session["url"])
 
 
 @router.get("/account/thanks")
@@ -189,9 +193,9 @@ def order_status(request: Request, ref: str):
     o = sh.db.one("SELECT * FROM orders WHERE ref=? AND account_id=?", ref, sess["account_id"])
     if not o:
         raise HTTPException(404)
-    lic = sh.db.one("SELECT l.serial FROM licences l LEFT JOIN transactions t ON t.subscription_id = l.subscription_id "
-                    "WHERE l.account_id=? AND (l.transaction_id=? OR t.id=?) LIMIT 1",
-                    sess["account_id"], o["paddle_transaction_id"], o["paddle_transaction_id"])
+    # A key issued for this account since the order was made is the one it paid for.
+    lic = sh.db.one("SELECT serial FROM licences WHERE account_id=? AND source IN ('subscription','event') AND issued>=? "
+                    "LIMIT 1", sess["account_id"], o["created_at"] - 60) if o["status"] == "paid" else None
     return JSONResponse({"status": o["status"], "licence": bool(lic)})
 
 
@@ -202,10 +206,10 @@ def billing(request: Request):
     sh = shop(request)
     acc = _account(sh, sess)
     txns, error = [], ""
-    if acc["paddle_customer_id"] and sh.s.billing_ready:
+    if acc["stripe_customer_id"] and sh.s.billing_ready:
         try:
-            txns = sh.paddle.transactions(acc["paddle_customer_id"])
-        except PaddleError as e:
+            txns = sh.stripe.invoices(acc["stripe_customer_id"])
+        except StripeError as e:
             error = str(e)
     local = sh.db.all("SELECT * FROM transactions WHERE account_id=? ORDER BY billed_at DESC", acc["id"])
     return render(request, "account/billing.html", {"title": "Billing", "acc": acc, "txns": txns, "local": local,
@@ -214,25 +218,21 @@ def billing(request: Request):
 
 @router.post("/account/billing/portal")
 async def billing_portal(request: Request):
-    """Paddle's own pages to update the card, cancel or see invoices. Links are made fresh each time."""
+    """Stripe's own pages to update the card, cancel or see invoices. Links are made fresh each time."""
     sess = need_login(request)
     data = await form(request)
     sh = shop(request)
     acc = _account(sh, sess)
-    if not acc["paddle_customer_id"]:
+    if not acc["stripe_customer_id"]:
         return redirect("/account/billing")
-    subs = [r["id"] for r in sh.db.all("SELECT id FROM subscriptions WHERE account_id=? AND status!='canceled'", acc["id"])]
-    try:
-        urls = sh.paddle.portal_session(acc["paddle_customer_id"], subs)
-    except PaddleError as e:
-        return _checkout_error(request, f"Our payment provider said: {e}.", "/account/billing")
-    target = urls["general"]["overview"]
     want = data.get("go", "")
-    for s in urls.get("subscriptions") or []:
-        if want == "cancel" and s.get("cancel_subscription"):
-            target = s["cancel_subscription"]
-        elif want == "card" and s.get("update_subscription_payment_method"):
-            target = s["update_subscription_payment_method"]
+    sub = sh.db.one("SELECT id FROM subscriptions WHERE account_id=? AND status IN ('active','trialing','past_due','unpaid',"
+                    "'paused') ORDER BY created_at DESC", acc["id"])
+    try:
+        target = sh.stripe.portal_session(acc["stripe_customer_id"], f"{sh.s.site_url}/account/billing", want,
+                                          sub["id"] if sub else "")
+    except StripeError as e:
+        return _checkout_error(request, f"Our payment provider said: {e}.", "/account/billing")
     with sh.db.tx() as c:
         audit(c, acc["email"], "billing.portal", want or "overview", ip=ip(request))
     return redirect(target)
@@ -244,16 +244,16 @@ def invoice(request: Request, txn_id: str):
     sh = shop(request)
     acc = _account(sh, sess)
     owned = sh.db.one("SELECT 1 FROM transactions WHERE id=? AND account_id=?", txn_id, acc["id"])
-    if not owned and acc["paddle_customer_id"]:
+    if not owned and acc["stripe_customer_id"]:
         try:
-            owned = any(t["id"] == txn_id for t in sh.paddle.transactions(acc["paddle_customer_id"]))
-        except PaddleError:
+            owned = any(t["id"] == txn_id for t in sh.stripe.invoices(acc["stripe_customer_id"]))
+        except StripeError:
             owned = False
     if not owned:
         raise HTTPException(404)
     try:
-        return redirect(sh.paddle.invoice_url(txn_id))
-    except PaddleError as e:
+        return redirect(sh.stripe.invoice_url(txn_id))
+    except StripeError as e:
         return _checkout_error(request, f"The invoice isn't ready yet ({e}).", "/account/billing")
 
 
@@ -303,10 +303,10 @@ async def plan_change(request: Request):
     old = sh.cat.plans.get(sub["plan"])
     bigger = old is None or sh.cat.plans[plan].laptops > old.laptops or add_hosting or cycle != sub["cycle"]
     # More laptops or hosting: charged now for the rest of the period. Fewer: credited at the next bill.
-    proration = "prorated_immediately" if bigger else "prorated_next_billing_period"
+    proration = "always_invoice" if bigger else "create_prorations"
     try:
-        sh.paddle.change_items(sub["id"], prices, proration)
-    except PaddleError as e:
+        sh.stripe.change_items(sub["id"], prices, proration)
+    except StripeError as e:
         return _checkout_error(request, f"Our payment provider said: {e}.", "/account/plan")
     with sh.db.tx() as c:
         if slug:
