@@ -1,7 +1,5 @@
 # Billing, cancellation and refunds
 
-Words in [square brackets] are still to be decided.
-
 ## Who you pay
 
 You buy AT SUITE from us, [COMPANY NAME] Ltd. Card payments are taken for us by Stripe Payments UK Limited, so your card details go to Stripe and never reach us. Your invoices come from us, and your card statement will show [STATEMENT DESCRIPTOR].
@@ -31,9 +29,19 @@ You can cancel any time from your account (Billing → Cancel subscription). Can
 
 ## Refunds
 
-[Decide the policy. A common choice for business software: no refunds for part periods after cancelling, but a full refund if you ask within 14 days of your first payment.] If AT SUITE doesn't substantially match its description and we can't fix it, you can end your plan and get back what you paid for the unused period (see clause 14 of the [terms](/legal/terms)).
+We don't give refunds. Every payment issues a licence key for the period you've paid for, and the key works as soon as it's issued, so a licence can't be handed back once you have it. That includes the rest of a period after you cancel, a plan you've stopped using, and an event pass whose show was moved or cancelled.
 
-Event passes and trials aren't subscriptions and don't renew.
+Please try AT SUITE before you buy. The free [trial](/pricing) has every feature for 30 days, so you can check it works at your venue first.
+
+The only times we pay money back are the ones our [terms](/legal/terms) promise:
+
+- **AT SUITE doesn't do what we say.** If it doesn't substantially match its description and we can't fix it within a reasonable time, you can end your plan and get back what you paid for the unused period (clause 14).
+- **We stop offering AT SUITE.** We refund what you prepaid for the time after it stops (clause 16.3).
+- **You object to a new sub-processor** and we can't resolve it. You can end the affected plan and get back what you prepaid for the unused period (clause 2.2 of the [Data Processing Agreement](/legal/dpa)).
+
+Any refund that is due is paid back through Stripe, to the card or account you paid with.
+
+Event passes and trials aren't subscriptions and don't renew, so there's nothing to cancel.
 
 ## Questions
 

@@ -23,7 +23,7 @@ from .licensing import Signer
 from .stripe import Stripe
 
 HERE = Path(__file__).resolve().parent
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 log = logging.getLogger("atshop")
 
 

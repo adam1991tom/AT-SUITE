@@ -17,27 +17,59 @@
   small { color: #9aa3b5; }
   button { margin-top: 22px; width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #FF7A1A; color: #0B1020; font: inherit; font-weight: 700; }
   button:disabled { opacity: .6; }
+  button:focus-visible, select:focus { outline: 2px solid #FF7A1A; outline-offset: 2px; }
+  button.plain { background: transparent; color: #e8eaf0; border: 1px solid #2a3242; margin-top: 10px; font-weight: 600; }
+  select { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a3242; background: #161b24; color: #e8eaf0; font: inherit; }
+  .how { display: flex; gap: 6px; margin: 4px 0 0; }
+  .how button { margin: 0; padding: 8px; background: #161b24; color: #e8eaf0; border: 1px solid #2a3242; font-weight: 600; }
+  .how button[aria-pressed="true"] { background: #FF7A1A; color: #0B1020; border-color: #FF7A1A; }
+  .now { background: #161b24; border: 1px solid #2a3242; border-radius: 8px; padding: 8px 12px; color: #e8eaf0; }
+  .now code { color: #FFB27A; overflow-wrap: anywhere; }
+  [hidden] { display: none !important; }
   #err { color: #fecaca; min-height: 1.4em; margin-top: 14px; }
   #msg { color: #fde68a; }
+  #msg:empty { display: none; }
 </style>
 </head>
 <body>
 <main>
   <img class="logo" src="brand/stacked-320.png" alt="AT-SUITE">
-  <h1>Add this laptop to AT-SUITE</h1>
-  <p>You only do this once. After that the app opens straight into the workspace, and the tech picks their room each day.</p>
+  <h1 id="title">Add this laptop to AT-SUITE</h1>
+  <p id="intro">You only do this once. After that the app opens straight into the workspace, and the tech picks their room each day.</p>
+  <p class="now" id="now" hidden>Now on <code id="current"></code>. It stays there until the new server accepts it.</p>
   <p id="msg"></p>
   <form id="f" method="post">
     <label for="server">Server address</label>
-    <input id="server" required placeholder="http://10.100.70.101:8180">
-    <small>The AT-SUITE server's http address and port.</small>
-    <label for="code">Enrolment code</label>
-    <input id="code" required placeholder="ABCD-1234-EF56" style="text-transform:uppercase">
-    <small>An admin finds it in Laptops & screens → Add laptops.</small>
+    <input id="server" required placeholder="https://venue.atsuite.tech">
+    <small>The AT-SUITE server's address, like https://venue.atsuite.tech or http://10.100.70.101:8180.</small>
+    <div id="howRow">
+      <label id="howLabel">How to add it</label>
+      <div class="how" role="group" aria-labelledby="howLabel">
+        <button type="button" id="useCode" aria-pressed="true">Enrolment code</button>
+        <button type="button" id="useAdmin" aria-pressed="false">Admin sign-in</button>
+      </div>
+    </div>
+    <div id="codeBox">
+      <label for="code">Enrolment code</label>
+      <input id="code" placeholder="ABCD-1234-EF56" style="text-transform:uppercase" autocomplete="off">
+      <small>An admin finds it in Laptops & screens → Add laptops.</small>
+    </div>
+    <div id="adminBox" hidden>
+      <label for="username">Admin username</label>
+      <input id="username" autocomplete="username" maxlength="64">
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" maxlength="256">
+      <small>An admin account on that server. This only adds the laptop: nobody stays signed in.</small>
+      <div id="siteBox" hidden>
+        <label for="site">Site</label>
+        <select id="site"></select>
+      </div>
+    </div>
     <label for="name">Laptop name</label>
     <input id="name" required maxlength="64">
-    <div id="err"></div>
+    <div id="err" role="alert"></div>
     <button id="go">Add this laptop</button>
+    <button type="button" class="plain" id="cancel" hidden>Cancel, stay on this server</button>
   </form>
 </main>
 <script src="setup.js"></script>

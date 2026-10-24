@@ -26,7 +26,7 @@ This agreement is between the customer (the **controller**) and [COMPANY NAME] L
 
 ## 3. Transfers outside the UK
 
-We will only transfer personal data outside the UK where UK law allows it. That means to a country with adequacy regulations (such as the EEA), under the UK Extension to the EU-US Data Privacy Framework, or under the ICO's International Data Transfer Agreement or Addendum.
+We store the customer's personal data in the UK, on servers and backup storage in Manchester. We will only transfer personal data outside the UK where UK law allows it. That means to a country with adequacy regulations (such as the EEA), under the UK Extension to the EU-US Data Privacy Framework, or under the ICO's International Data Transfer Agreement or Addendum.
 
 ## 4. Personal data breaches
 
@@ -59,13 +59,13 @@ Each party's liability under this agreement is subject to the limits in the Term
 
 ## Annex 2: Security measures
 
-- Each venue runs in its own sealed container with its own data volume and private network. Containers are read-only, don't run as root, and have memory and CPU limits.
+- Several venues share one physical server. Each venue runs in its own sealed container with its own data volume and private network, so no venue can see or reach another's data. Venues share only the server's processing power and memory, and each container has its own memory and CPU limits. Containers are read-only and don't run as root.
 - The server only accepts web traffic through Cloudflare, encrypted end to end (TLS, "Full (strict)").
 - A new venue can only be claimed with its one-time setup code.
 - Server sign-in is by SSH key only. A firewall allows only the ports needed, and security updates install automatically.
 - Passwords are stored as hashes. New accounts must change the default password at first sign-in. Every sign-in, failed sign-in, reset and settings change is logged.
 - Transcripts and handover notes are encrypted at rest. Transcripts are deleted automatically after 12 hours by default (1 to 168 hours, set by the customer) and are never backed up.
-- Backups are encrypted, run nightly to a Hetzner Storage Box in the same EU region, and kept for 7 daily and 4 weekly copies.
+- Backups are encrypted, run nightly to separate storage in the UK, and kept for 7 daily and 4 weekly copies.
 - Only [adam / named staff] can reach the servers, using two-factor sign-in for every provider account.
 - [Cyber Essentials certificate number and date, once certified.]
 
@@ -73,6 +73,6 @@ Each party's liability under this agreement is subject to the limits in the Term
 
 | Sub-processor | What it does | Where |
 |---|---|---|
-| Hetzner Online GmbH | Cloud servers and encrypted backups | [Germany or Finland] (EEA) |
+| Hostinger ([Hostinger UK Limited: check the company name on the Hostinger invoice]) | Cloud servers and encrypted backups | Manchester, United Kingdom |
 | Cloudflare, Inc. | Network security, encryption and delivery of traffic to the hosted service | United States and global network (UK Extension to the EU-US Data Privacy Framework, with ICO addendum fallback) |
 | [Email provider, if service emails carry customer personal data] | [Sending account and alert emails] | [Location] |

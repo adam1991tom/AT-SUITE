@@ -24,7 +24,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -53,7 +53,7 @@ jobs:
       # and laptops update from (so this one can be private). Without it, releases go here only.
       RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Image name
         id: img
         run: |
@@ -61,13 +61,13 @@ jobs:
           echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ steps.img.outputs.name }}
           tags: |
@@ -77,7 +77,7 @@ jobs:
       - name: Check the tag matches VERSION
         if: startsWith(github.ref, 'refs/tags/v')
         run: test "v$(cat VERSION)" = "${GITHUB_REF_NAME}" || { echo "Tag ${GITHUB_REF_NAME} doesn't match VERSION $(cat VERSION)"; exit 1; }
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: true

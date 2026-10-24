@@ -47,8 +47,8 @@ order = 3
 name = "Enterprise"
 for = "More than 75 laptops, several sites or special terms"
 
-# Managed hosting: we run the AT SUITE server for the venue (one sealed server per venue,
-# nightly encrypted backups, updates outside show times). Added on top of any plan.
+# Managed hosting: we run the AT SUITE server for the venue (a sealed server per venue on our
+# UK server, nightly encrypted backups, updates outside show times). Added on top of any plan.
 [addons.hosting]
 name = "Managed hosting"
 monthly = 39

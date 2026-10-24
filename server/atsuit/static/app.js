@@ -1168,9 +1168,10 @@ Keywords: lectern, gooseneck, mic dead
       windows: `<h2>AT-SUITE Node for Windows</h2><p class="small muted">The tech workspace app for the laptops in each room: timer, cue list, chat, help calls and pop-ups.</p>
         <div class="row" style="margin:.6rem 0">${winApp.ready ? dl(`/api/nodes/app/${encodeURIComponent(winApp.file)}`, `Download AT-SUITE Node ${esc(winApp.version)} (.exe)`, true) : '<span class="pill warn">No Windows app published yet</span> <span class="small muted">Upload one below.</span>'}</div>
         <h3>Install</h3><ol class="small"><li>Download and run the installer on the laptop. It isn't code-signed yet, so Windows asks once: <b>More info → Run anyway</b>.</li>
-          <li>Enter this server's address <code>${esc(origin)}</code>, the enrolment code above and a laptop name. This is a one-off; the laptop stays enrolled.</li>
+          <li>Enter this server's address <code>${esc(origin)}</code>, the enrolment code above (or press <b>Admin sign-in</b> and sign in as an admin) and a laptop name. This is a one-off; the laptop stays enrolled.</li>
           <li>Each day a tech types their name, picks the room and chooses <b>Main PC</b> or <b>Backup PC</b>. It resets every morning.</li>
-          <li>Pop-ups only show on the backup PC. They're silent and sit on top of everything.</li></ol>
+          <li>Pop-ups only show on the backup PC. They're silent and sit on top of everything.</li>
+          <li>Moving a laptop from another AT-SUITE server: on the laptop, <b>Connect to a different server</b> in the tray menu, then an admin of this server signs in.</li></ol>
         <h3>Silent install (IT)</h3><p class="small muted">Put this in <code>C:\\ProgramData\\AT-SUITE\\node.json</code>, then run the installer with <code>/S</code>. The app enrols under the PC's name on first start.</p>
         <pre class="small">${esc(nodeJson)}</pre><div class="row"><button class="small" id="dlJson">Download node.json</button><button class="small" data-copy="${esc(nodeJson)}">Copy</button></div>
         <h3>Publish a new version</h3><p class="small muted">The .exe, .blockmap and latest.yml from the GitHub release. Laptops update as their app starts, when the tech presses Update now, or when the app closes; never by themselves during a show.</p>

@@ -35,7 +35,7 @@ from atshop.stripe import Stripe  # noqa: E402
 
 PRODUCT_TEXT = {
     "plan": "{name} licence: the show-room toolkit for event technicians.",
-    "addon": "We run your AT SUITE server for you: one sealed server per venue, backups and updates.",
+    "addon": "We run your AT SUITE server for you: sealed off from other venues, in the UK, with backups and updates.",
     "pass": "A one-off AT SUITE licence for a single show or hire.",
 }
 

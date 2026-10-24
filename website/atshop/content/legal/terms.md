@@ -16,7 +16,7 @@ Last updated: [date]
 
 2.1 AT SUITE is software for running live events. It includes:
 
-- **the hosted service:** an AT SUITE server we run for your venue in the cloud, holding crew chat, help requests, accounts, licences, the help library and the AI helper;
+- **the hosted service:** an AT SUITE server we run for your venue on our servers in the UK, holding crew chat, help requests, accounts, licences, the help library and the AI helper;
 - **the laptop app:** a Windows app your technicians install, which runs show timers and live captions on the laptop itself; and
 - **on-site edition** (where agreed): the AT SUITE server installed on your own hardware.
 
@@ -95,7 +95,7 @@ You must not use AT SUITE to break the law or anyone's rights, upload malware, a
 
 ## 11. Third-party parts
 
-AT SUITE includes open-source software, speech and AI models, and fonts made by others, which come with their own licences. They are listed in the app's About tab. We use providers such as Hetzner and Cloudflare to run the hosted service.
+AT SUITE includes open-source software, speech and AI models, and fonts made by others, which come with their own licences. They are listed in the app's About tab. We use providers such as Hostinger and Cloudflare to run the hosted service.
 
 ## 12. Ownership and feedback
 
@@ -127,7 +127,7 @@ Each of us will keep the other's confidential information secret and only use it
 
 ## 16. Ending your plan
 
-16.1 You can cancel at any time in your account (Billing). Cancelling stops the next renewal, and your plan runs to the end of the period you've paid for. [Refunds for part periods: decide policy.]
+16.1 You can cancel at any time in your account (Billing). Cancelling stops the next renewal, and your plan runs to the end of the period you've paid for. We don't refund part periods or unused time, except as clauses 14.2 and 16.3 say. See [billing, cancellation and refunds](/legal/billing).
 
 16.2 We can suspend or end your plan if you don't pay (after clause 5.4), if you seriously break these terms and don't fix it within 14 days of our notice, or at once for a breach of clause 3.2 or 10 that puts our systems or others at risk.
 

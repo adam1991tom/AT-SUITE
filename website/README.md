@@ -106,7 +106,8 @@ Everything below uses Stripe's **test mode** (test cards, no real money) until l
 7. **Run it**: `docker compose up -d --build`, with Caddy in front ([deploy/Caddyfile](deploy/Caddyfile))
    and Cloudflare in front of that. Nightly database copies: [deploy/backup.sh](deploy/backup.sh).
 8. **Admin**: sign in with an `ADMIN_EMAILS` address, open `/admin`, and scan the code into an
-   authenticator app (Google Authenticator, Microsoft Authenticator, 1Password...).
+   authenticator app (Google Authenticator, Microsoft Authenticator, 1Password...). To sign in to
+   the same account from another address too, add it to `EMAIL_ALIASES` (`other=account`).
 9. **Test a purchase** in test mode with Stripe's test card `4242 4242 4242 4242`, any future date, any CVC.
    `4000 0000 0000 0341` attaches but fails at renewal, to try the failed-payment path.
 10. **Live**. This changes settings only; the code is the same in both. Nothing below deletes or
@@ -167,7 +168,7 @@ internet: it never checks in, so it can't be revoked early or renew itself.
 
 ## What's done and what isn't
 
-Done and tested (`pytest`, 59 tests, a fake Stripe and a throwaway key):
+Done and tested (`pytest`, 60 tests, a fake Stripe and a throwaway key):
 
 - signed webhooks (bad, missing or old signatures refused), duplicates applied once, out-of-order
   subscription events skipped, a failed event recorded and retried
