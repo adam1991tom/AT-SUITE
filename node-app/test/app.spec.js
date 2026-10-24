@@ -193,6 +193,7 @@ test("a workspace window pops out into a window of its own, stays on top if aske
   app = await launch();
   const page = await mainPage(app);
   await expect(page.locator(".dk-win:has(#chat)")).toBeVisible(); // the desk lays the windows out once the page has loaded
+  await expect(page.locator("#chat .compose")).toBeVisible(); // and the chat has loaded into its window, so pop out a working chat
   const gid = await page.evaluate(() => ATDesk.tree.groupOf(ATDesk.layout(), "chat").id);
   const [pop] = await Promise.all([app.waitForEvent("window"), page.click(`[data-gid="${gid}"] [aria-label="Pop out"]`)]);
   await expect(pop.locator(".dk-popmain #chat")).toBeVisible();
@@ -504,7 +505,6 @@ test("the backup PC: pop-ups are silent, on top and never take focus", async () 
 
   await benSays("Speaker for HD is in the lobby");
   await expect.poll(async () => (await popupWindows(app)).length, { timeout: 10000 }).toBe(1);
-  await expect(page.locator("#bellCount")).toHaveText("1"); // and in the window's notifications
   await new Promise((r) => setTimeout(r, 800));
   const [p] = await popupWindows(app);
   expect(p.url).toContain("Speaker for HD is in the lobby");
@@ -514,6 +514,11 @@ test("the backup PC: pop-ups are silent, on top and never take focus", async () 
   expect(p.focused).toBe(false);
   const after = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getFocusedWindow()?.id ?? null);
   expect(after).toBe(before); // the pop-up did not take focus from the slides
+  // It's in the window's notifications too. (The red count can already be cleared: with the chat
+  // window open on screen, the workspace marks chat notifications read within a second.)
+  await page.evaluate(() => document.getElementById("bellBtn").click()); // a DOM click, so the window doesn't take focus
+  await expect(page.locator("#bellBox")).toContainText("Speaker for HD is in the lobby");
+  await page.evaluate(() => document.getElementById("bellBtn").click());
   if (process.env.ATSUIT_SHOTS) {
     const shot = await app.evaluate(async ({ BrowserWindow }) =>
       (await BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes("popup.html")).webContents.capturePage()).toPNG().toString("base64"));
